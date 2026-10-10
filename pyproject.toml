@@ -1,0 +1,113 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyflashgui"
+# From __version__ in pyflashgui/__init__.py, the one copy -- read without
+# importing the package. The installer takes it from there too.
+dynamic = ["version"]
+description = "Graphical flash programming tool for Arm Cortex-M targets, with any debug probe pyOCD supports"
+# The page shown on PyPI: shorter than the README, which is written for
+# GitHub, and with every link absolute, since PyPI has no repository behind it.
+readme = "PYPI.md"
+# Every file says so in its SPDX line, and tests/test_headers.py keeps it that
+# way.
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+requires-python = ">=3.12"
+authors = [{ name = "davhodg" }]
+# What PyPI shows as tags, and searches on.
+keywords = [
+    "flash", "programmer", "debug probe", "SWD", "CMSIS-DAP", "ST-Link", "J-Link", "pyOCD",
+    "Cortex-M", "microcontroller", "embedded", "firmware", "Qt",
+]
+# Checked against the official list by tests/test_readme.py: PyPI refuses an
+# upload with a classifier it does not know, which is the last step of a
+# release. No licence classifier: the licence expression above replaces them,
+# and setuptools refuses both.
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Natural Language :: English",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Software Development :: Embedded Systems",
+    "Topic :: System :: Hardware",
+]
+dependencies = [
+    # Essentials, not the full PySide6: the "addons" wheel is the rest of Qt
+    # (3D, Charts, Multimedia, WebEngine), which pyflashgui never imports, and
+    # the GPL-only modules live there too. 6.8 for choosing light or dark
+    # (QStyleHints.setColorScheme).
+    "PySide6-Essentials>=6.8",
+    # Probes, targets and flash algorithms. 0.45 is the first to say it
+    # supports Python 3.14, and has the RP2350 as a built-in target.
+    "pyocd>=0.45",
+    # Intel HEX, Motorola S-record and raw binary. pyOCD reads HEX and binary
+    # itself and not S-record, and the memory map wants all three read one way.
+    "bincopy>=20.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/davhodg/pyflashgui"
+Documentation = "https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/manual.md"
+Repository = "https://github.com/davhodg/pyflashgui"
+Issues = "https://github.com/davhodg/pyflashgui/issues"
+Discussions = "https://github.com/davhodg/pyflashgui/discussions"
+Releases = "https://github.com/davhodg/pyflashgui/releases"
+Changelog = "https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/changelog.md"
+
+[project.optional-dependencies]
+# Pinned ruff: a new one must not break the build.
+dev = [
+    "pytest",
+    "pytest-xdist",
+    "ruff==0.16.*",
+    "trove-classifiers",
+]
+
+# gui-scripts, not scripts: on Windows the launcher pip makes for a script is a
+# console program, so the window would open with a console behind it. Elsewhere
+# the two are the same. `python -m pyflashgui` is still there for a console.
+[project.gui-scripts]
+pyflashgui = "pyflashgui.__main__:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "pyflashgui.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["pyflashgui*"]
+
+# Without this a wheel carries only the .py files: setuptools ships modules and
+# drops everything else, so `pip install pyflashgui` would produce a tool with
+# no icon and no manual. The launchers install editable, which reads the source
+# tree, and the frozen build copies these folders explicitly in
+# build/pyflashgui.spec, so neither would notice.
+#
+# Whole folders rather than a list of extensions: resources and help exist to
+# hold files that are not code, so the next thing put in one should ship
+# without anyone having to remember this. tests/test_packaging.py checks that
+# every non-Python file under pyflashgui/ is covered by a pattern here.
+[tool.setuptools.package-data]
+"pyflashgui.resources" = ["*"]
+"pyflashgui.help" = ["*"]
+
+[tool.ruff]
+line-length = 100
+# Matches requires-python: ruff formats to the newest syntax the floor allows,
+# and the code must stay parseable on the oldest Python we support.
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "N", "RUF"]
+ignore = [
+    "N802",   # Qt overrides must be camelCase (rowCount, closeEvent, ...)
+    "B008",   # QModelIndex() as a default argument is the standard Qt signature
+]

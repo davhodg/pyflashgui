@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<!-- SPDX-FileCopyrightText: 2026 davhodg -->
+<!-- pyflashgui icon, 24 px and below: pyflashgui.svg with two heavy pins a
+     side where the large drawing has four, a heavier outline and a larger
+     flash, which is what survives at this size. -->
+<rect x="0" y="0" width="256" height="256" rx="40" fill="#151b1d"/>
+<g stroke="#2FD9C4" stroke-width="22" stroke-linecap="round">
+<line x1="30" y1="100" x2="62" y2="100"/>
+<line x1="30" y1="156" x2="62" y2="156"/>
+<line x1="194" y1="100" x2="226" y2="100"/>
+<line x1="194" y1="156" x2="226" y2="156"/>
+<line x1="100" y1="30" x2="100" y2="62"/>
+<line x1="156" y1="30" x2="156" y2="62"/>
+<line x1="100" y1="194" x2="100" y2="226"/>
+<line x1="156" y1="194" x2="156" y2="226"/>
+</g>
+<rect x="60" y="60" width="136" height="136" rx="14" fill="#151b1d" stroke="#EDEAE2" stroke-width="18"/>
+<path d="M146,78 L94,136 H124 L110,180 L164,118 H133 Z" fill="#F2924B"/>
+</svg>
