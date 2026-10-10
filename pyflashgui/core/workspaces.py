@@ -1,0 +1,250 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 davhodg
+"""Named workspaces: one per product, and one called ``default`` nobody need meet.
+
+A workspace is everything about *what you are working on*: the target, the
+probe and its speed, the files to program and the dock layout. One folder, so
+it can be copied, backed up or sent to someone else whole. What stays outside
+it is everything about *this machine*: where the window sits on the screen.
+
+The design constraint is that somebody with one product must never have to
+know the word exists. On first run there is a workspace called ``default``,
+created silently, and pyflashgui behaves exactly as it would with no
+workspaces at all. The name appears in the title bar only when it is *not* ``default``.
+
+There is no Save, and therefore no unsaved changes: a workspace saves
+continuously, which is what ``settings.json`` has always done. The whole
+surface is *Save as...* (fork what is on screen into a new name), *Switch
+to*, and *Manage*.
+
+One is active at a time, and that is not a simplification. The most
+load-bearing thing a workspace holds is which probe and which target, and a
+probe is connected to one target: two workspaces open at once would either
+share the probe, in which case they are not independent, or each want it for
+a different target, which is a contradiction rather than a feature.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+from pathlib import Path
+
+from pyflashgui.core import paths
+
+#: The one every installation has. Created silently, never deleted, and never
+#: named in the window title -- somebody who only ever has this one should not
+#: be able to tell that workspaces were built.
+DEFAULT = "default"
+
+#: Under the user folder: the workspaces themselves, and the note saying which
+#: of them is in use. The pointer is the only thing here that is not inside a
+#: workspace, because it is the one question asked before there is one.
+ROOT = "workspaces"
+POINTER = "workspaces.json"
+
+MAX_NAME = 64
+#: A workspace name is a folder name, so it has to survive being one. Letters,
+#: digits, space, dot, dash and underscore, starting with a letter or a digit.
+_ALLOWED = re.compile(r"^[A-Za-z0-9][A-Za-z0-9 ._-]*$")
+
+#: The workspace ``--workspace`` named, for this run only. Kept out of the
+#: pointer so that a shortcut made for one product does not change what
+#: pyflashgui opens the next time it is started without one.
+_this_run = ""
+#: Windows refuses these as filenames whatever the extension, and has since
+#: DOS. A workspace called "con" would be created, apparently, and then be
+#: unopenable.
+_RESERVED = frozenset(
+    {"con", "prn", "aux", "nul"}
+    | {f"com{i}" for i in range(1, 10)}
+    | {f"lpt{i}" for i in range(1, 10)}
+)
+
+
+# --- where things are -------------------------------------------------------------------
+def root() -> Path:
+    return paths.user_dir() / ROOT
+
+
+def dir_for(name: str) -> Path:
+    return root() / name
+
+
+def _pointer() -> Path:
+    return paths.user_dir() / POINTER
+
+
+def _ensure() -> None:
+    """Make sure there is somewhere to work."""
+    paths.made(dir_for(DEFAULT))
+
+
+def names() -> list[str]:
+    """Every workspace, ``default`` first and the rest by name."""
+    _ensure()
+    found = sorted(p.name for p in root().iterdir() if p.is_dir())
+    return [DEFAULT, *(n for n in found if n != DEFAULT)]
+
+
+def exists(name: str) -> bool:
+    return bool(name) and dir_for(name).is_dir()
+
+
+def active() -> str:
+    """Which workspace is in use. ``default`` when nothing says otherwise."""
+    _ensure()
+    if _this_run and exists(_this_run):
+        return _this_run
+    try:
+        chosen = json.loads(_pointer().read_text(encoding="utf-8")).get("active")
+    except (OSError, ValueError, AttributeError):
+        return DEFAULT
+    # A workspace deleted by hand, or a pointer typed wrong, is not a reason
+    # to start with nothing: fall back to the one that is always there.
+    return chosen if isinstance(chosen, str) and exists(chosen) else DEFAULT
+
+
+def use(name: str) -> None:
+    """Work in this workspace this time, leaving the one opened next time alone."""
+    global _this_run
+    _this_run = name
+
+
+def set_active(name: str) -> None:
+    use("")  # a workspace chosen in the window is chosen for good
+    _pointer().write_text(json.dumps({"active": name}, indent=2), encoding="utf-8")
+
+
+def active_dir() -> Path:
+    _ensure()
+    return _made(dir_for(active()))
+
+
+def settings_path() -> Path:
+    return active_dir() / "settings.json"
+
+
+def layout_path() -> Path:
+    return active_dir() / "layout.json"
+
+
+def _made(path: Path) -> Path:
+    return paths.made(path)
+
+
+# --- naming one -------------------------------------------------------------------------
+def clean(name: str) -> str:
+    """The name as it will actually be used.
+
+    Only the space around it, which nobody typed on purpose. Everything else
+    is left alone and refused by name below rather than quietly repaired:
+    turning "board 1/2" into "board 12" would leave somebody looking for a
+    workspace that is not called what they called it.
+    """
+    return name.strip()
+
+
+def why_not(name: str) -> str:
+    """Why this name cannot be used, or "" if it can."""
+    name = clean(name)
+    if reason := _not_a_folder_name(name):
+        return reason
+    if exists(name):
+        return f"There is already a workspace called {name}."
+    return ""
+
+
+def _not_a_folder_name(name: str) -> str:
+    """Why this could never be a workspace, taken or not. "" if it could."""
+    if not name:
+        return "A workspace needs a name."
+    if len(name) > MAX_NAME:
+        return f"Names are at most {MAX_NAME} characters."
+    if not _ALLOWED.match(name) or name.endswith((" ", ".")):
+        return (
+            "A workspace name is also a folder name: letters, digits, spaces, "
+            "dots, dashes and underscores, starting with a letter or a digit."
+        )
+    if name.lower() in _RESERVED:
+        return f"Windows will not accept a folder called {name}."
+    return ""
+
+
+def next_free(base: str = "workspace") -> str:
+    """A name nobody has used, as close to ``base`` as it can be.
+
+    Offered, never imposed: it is what a name dialog opens on, so the easy
+    answer is one that will be accepted. A ``base`` that could never be a
+    folder name -- a downloaded file called "board (1)", say -- is not tidied
+    into something that looks like it; the suggestion falls back to plain
+    "workspace" and the person can type what they meant.
+    """
+    base = clean(base)
+    if _not_a_folder_name(base):
+        base = "workspace"
+    if not exists(base):
+        return base
+    number = 2
+    while True:
+        suffix = f" {number}"
+        # Shortened to fit rather than refused for length, which would never end.
+        candidate = base[: MAX_NAME - len(suffix)].rstrip(" .") + suffix
+        if why_not(candidate) == "":
+            return candidate
+        number += 1
+
+
+# --- making, renaming, removing -----------------------------------------------------------
+def create(name: str, copy_from: str | None = None) -> Path:
+    """A new workspace, optionally forked from an existing one.
+
+    Save as... forks, because what somebody means by it is "keep what I have
+    and start calling it something else". An empty new one would throw away
+    the arrangement they were looking at when they asked.
+    """
+    if (reason := why_not(name)) != "":
+        raise ValueError(reason)
+    name = clean(name)
+    target = dir_for(name)
+    if copy_from and exists(copy_from):
+        shutil.copytree(dir_for(copy_from), target)
+    else:
+        target.mkdir(parents=True)
+    return target
+
+
+def rename(old: str, new: str) -> None:
+    if old == DEFAULT:
+        raise ValueError(f"{DEFAULT} cannot be renamed: it is the one that is always there.")
+    if not exists(old):
+        raise ValueError(f"There is no workspace called {old}.")
+    if (reason := why_not(new)) != "":
+        raise ValueError(reason)
+    # Asked before the folder moves. Afterwards the pointer names something
+    # that is no longer there, so active() has already fallen back to default
+    # and the rename would quietly send somebody somewhere else.
+    was_active = active() == old
+    new = clean(new)
+    dir_for(old).rename(dir_for(new))
+    if was_active and _this_run == old:
+        use(new)
+    elif was_active:
+        set_active(new)
+
+
+def delete(name: str) -> None:
+    """Remove a workspace and everything in it.
+
+    Not the active one: pulling the settings and layout out from under
+    a running window is a worse answer than asking somebody to switch away
+    first, which is one click and leaves them somewhere they chose.
+    """
+    if name == DEFAULT:
+        raise ValueError(f"{DEFAULT} cannot be deleted: it is the one that is always there.")
+    if name == active():
+        raise ValueError(f"{name} is the workspace in use. Switch to another one first.")
+    if not exists(name):
+        raise ValueError(f"There is no workspace called {name}.")
+    shutil.rmtree(dir_for(name))

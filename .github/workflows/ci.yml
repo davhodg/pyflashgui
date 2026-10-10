@@ -1,0 +1,228 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Read-only unless a job says otherwise. The repository is public, so pull
+# requests from forks run this workflow too, and no test needs to write.
+permissions:
+  contents: read
+
+jobs:
+  # Both ends of the supported range. The latest Python runs on both
+  # platforms, because platform differences (Qt, threads, USB) are what
+  # actually bite. The oldest supported Python runs on Linux: bugs that appear
+  # only on the floor are real, but they are rarely platform specific.
+  test:
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: windows-latest, python: "3.14" }
+          - { os: ubuntu-latest, python: "3.14" }
+          - { os: ubuntu-latest, python: "3.12" }  # the floor: requires-python
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+
+      - name: Install
+        run: python -m pip install --upgrade pip && python -m pip install -e ".[dev]"
+
+      - name: Lint
+        run: |
+          python -m ruff check pyflashgui tests build/check_build.py build/notices.py
+          python -m ruff format --check pyflashgui tests
+
+      # Qt needs a display. The tests already ask for the offscreen platform,
+      # but Linux runners also lack the X libraries Qt links against.
+      - name: Install Qt's Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1 libxkbcommon-x11-0 libxcb-cursor0 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0
+
+      - name: Test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        # -n auto: the suite is a thousand Qt tests and splits cleanly
+        # across processes, which is seven times faster than in one.
+        run: python -m pytest -q -n auto tests
+
+      - name: Self test
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m pyflashgui --selftest
+
+  # The installer is only built for a release: nothing about the packaging
+  # changes between tags, and nobody installs from an ordinary push. Push a
+  # tag (git tag v0.1.0 && git push --tags) to produce and publish one, or run
+  # the workflow by hand from the Actions tab.
+  package:
+    name: Windows installer
+    needs: test
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    # Publishing the release is the one write in the workflow. The repository
+    # gives the token read access by default, so without this a tag would
+    # build the installer and then fail to publish it.
+    # The attestation needs the last two: a short-lived token from GitHub to
+    # sign with, and leave to store what it signed.
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      # The hosted image usually has Inno Setup already; installing it anyway
+      # keeps the build reproducible whichever image version is in use.
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      # In two halves, so that the application can be signed before the
+      # installer is built around it, once there is something to sign it
+      # with (see CODE_SIGNING.md): an installer signed with an unsigned
+      # program inside is half the point missed.
+      # This job waits for the test jobs, so the Windows tests have passed for
+      # this commit on this Python; build.cmd would otherwise run them again.
+      - name: Build and check the application
+        env:
+          WINDOWS_TESTS_PASSED: "1"
+        run: .\build.cmd nosetup
+
+      - name: Check the licence guard actually ran
+        run: python build\check_build.py
+
+      - name: Build the installer
+        run: .\build.cmd setup
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pyflashgui-windows
+          path: |
+            dist/*-setup.exe
+            THIRD-PARTY-NOTICES.txt
+          if-no-files-found: error
+
+      # Where the installer came from, signed by GitHub with Sigstore and kept in
+      # a public log: anyone can check a download was built by this workflow
+      # from the tagged commit, with `gh attestation verify <file> --repo
+      # davhodg/pyflashgui`. Not Authenticode, so Windows does not read it and
+      # SmartScreen is unchanged; it is provenance, free, and needs no account.
+      - name: Attest where the installer was built
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: actions/attest-build-provenance@v4
+        with:
+          subject-path: dist/*-setup.exe
+
+      # The release's description is the tag's section of the changelog, so
+      # the release page and the manual cannot say different things. A tag
+      # with no section stops here rather than publishing an empty release.
+      - name: Release notes
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python build\release_notes.py ${{ github.ref_name }} release-notes.md
+
+      # A tagged commit publishes the installer as a release asset.
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          body_path: release-notes.md
+          files: |
+            dist/*-setup.exe
+            THIRD-PARTY-NOTICES.txt
+            LICENSE
+            NOTICE
+
+  # The same two triggers as the installer: a v* tag publishes to PyPI, and a
+  # run by hand from the Actions tab publishes to TestPyPI, to see the page and
+  # try the install before a release. Trusted publishing: PyPI accepts this
+  # workflow's short-lived token, so no API token is stored anywhere, and the
+  # files get attestations of where they were built. Each index needs a
+  # publisher registered for workflow ci.yml and the environment named below.
+  #
+  # After every test run, on Windows and Linux, *and* the installer
+  # build: a release is on both or on neither, never on PyPI with no
+  # installer beside it. A reviewer can be
+  # required on the pypi environment (repository Settings > Environments), and
+  # then the job waits for that approval before anything is uploaded.
+  pypi:
+    # A plain name: GitHub shows an expression here unevaluated whenever the
+    # job is skipped, which is on every ordinary push.
+    name: Publish to PyPI or TestPyPI
+    needs: [test, package]
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ startsWith(github.ref, 'refs/tags/v') && 'pypi' || 'testpypi' }}
+    permissions:
+      contents: read
+      id-token: write  # the token trusted publishing is based on
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+
+      # A version can never be uploaded twice, so a tag that disagrees with
+      # __version__ would put the wrong number on PyPI for good. The same check
+      # the installer's name comes from.
+      - name: Check the tag against the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: python build/version.py
+
+      # TestPyPI refuses a version it has seen too, so each run by hand is its
+      # own development release: 0.1.0 becomes 0.1.0.dev<run number>. Only in
+      # this checkout; nothing is committed.
+      - name: Number this test upload
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        run: |
+          python - <<'EOF'
+          import os, pathlib, re
+          path = pathlib.Path("pyflashgui/__init__.py")
+          text = path.read_text(encoding="utf-8")
+          run = os.environ["GITHUB_RUN_NUMBER"]
+          text = re.sub(r'__version__ = "([^"]+)"', rf'__version__ = "\1.dev{run}"', text)
+          path.write_text(text, encoding="utf-8")
+          EOF
+          grep __version__ pyflashgui/__init__.py
+
+      # --strict fails on anything PyPI would reject or render badly, the page
+      # (PYPI.md) included, before a single file is uploaded.
+      - name: Build and check
+        run: |
+          python -m pip install --upgrade build twine
+          python -m build
+          python -m twine check --strict dist/*
+
+      - name: Publish to TestPyPI
+        if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: https://test.pypi.org/legacy/
+
+      - name: Publish to PyPI
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: pypa/gh-action-pypi-publish@release/v1

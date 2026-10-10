@@ -1,0 +1,132 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 davhodg
+"""Check a built distribution before it is wrapped in an installer.
+
+Two things are worth failing the build over:
+
+* a **GPL-only Qt module** having crept in. PySide6 ships Qt Charts, Qt Data
+  Visualization and friends in the same wheel as the LGPL modules, and they are
+  easy to pull in by accident. Shipping one would change the licence of the
+  whole application, quietly.
+* a **missing probe driver or data file**. pyOCD finds its probe drivers by
+  name at run time, so a missing one only shows up when somebody plugs in that
+  probe; the icon and the licences are read from disk.
+
+The import check is done by running the built executable's own ``--selftest``,
+which is the only honest way to know what the bundle can import.
+"""
+
+from __future__ import annotations
+
+import subprocess
+from pathlib import Path
+
+PROJECT = Path(__file__).resolve().parent.parent
+DIST = PROJECT / "dist" / "pyflashgui"
+
+GPL_QT_BINARIES = (
+    "Qt6Charts",
+    "Qt6DataVisualization",
+    "Qt6Graphs",
+    "Qt6VirtualKeyboard",
+    "Qt6WaylandCompositor",
+)
+
+ICON = PROJECT / "pyflashgui" / "resources" / "pyflashgui.ico"
+
+REQUIRED_FILES = (
+    "pyflashgui/resources/pyflashgui.ico",
+    "pyflashgui/help/manual.md",
+    "LICENSE",
+    "NOTICE",
+    "THIRD-PARTY-NOTICES.txt",
+)
+
+SELFTEST_TIMEOUT_S = 120
+
+
+def largest_image(ico: bytes) -> bytes:
+    """The biggest image in an .ico, exactly as stored.
+
+    ICONDIR is six bytes with the image count at offset 4; each ICONDIRENTRY
+    after it is sixteen, with the width in its first byte (0 meaning 256) and
+    the image's size and offset in its last eight.
+    """
+    count = int.from_bytes(ico[4:6], "little")
+    best, best_side = b"", -1
+    for i in range(count):
+        entry = ico[6 + 16 * i : 22 + 16 * i]
+        side = entry[0] or 256
+        size = int.from_bytes(entry[8:12], "little")
+        offset = int.from_bytes(entry[12:16], "little")
+        if side > best_side:
+            best, best_side = ico[offset : offset + size], side
+    return best
+
+
+def carries_icon(exe: bytes, ico: bytes) -> bool:
+    """Whether *exe* was built with this icon, rather than merely with one.
+
+    PyInstaller copies each image of the .ico into the executable's resources
+    unchanged, and embeds its own icon when given none -- so an icon being
+    present proves nothing, while our largest image's exact bytes do.
+    """
+    image = largest_image(ico)
+    return bool(image) and image in exe
+
+
+def main() -> int:
+    if not DIST.is_dir():
+        print(f"FAIL: {DIST} does not exist; run the build first")
+        return 1
+
+    problems: list[str] = []
+    names = [p.name for p in DIST.rglob("*")]
+    # PyInstaller 6 puts everything but the executable under _internal/
+    internal = DIST / "_internal"
+    payload = internal if internal.is_dir() else DIST
+
+    for banned in GPL_QT_BINARIES:
+        hits = [n for n in names if n.startswith(banned)]
+        if hits:
+            problems.append(
+                f"GPL-only Qt module in the build: {', '.join(sorted(set(hits)))}. "
+                "Exclude it in pyflashgui.spec -- shipping it would make the "
+                "whole application GPL."
+            )
+
+    for relative in REQUIRED_FILES:
+        if not (payload / relative).is_file():
+            problems.append(f"missing from the build: {relative}")
+
+    executable = DIST / "pyflashgui.exe"
+    if not executable.is_file():
+        problems.append("pyflashgui.exe is missing")
+    else:
+        if not carries_icon(executable.read_bytes(), ICON.read_bytes()):
+            problems.append(
+                "pyflashgui.exe does not carry pyflashgui.ico -- check icon= in "
+                "pyflashgui.spec, and run build/icon.py if the SVGs changed"
+            )
+        result = subprocess.run(
+            [str(executable), "--selftest"],
+            capture_output=True,
+            text=True,
+            timeout=SELFTEST_TIMEOUT_S,
+            check=False,
+        )
+        if result.returncode != 0:
+            detail = (result.stderr or result.stdout or "").strip()
+            problems.append("the built application failed its self test:\n" + detail)
+
+    size_mb = sum(p.stat().st_size for p in DIST.rglob("*") if p.is_file()) / 1e6
+    if problems:
+        for problem in problems:
+            print(f"FAIL: {problem}")
+        return 1
+    print(f"build checks passed: {len(names)} files, {size_mb:.0f} MB")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

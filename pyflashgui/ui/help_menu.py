@@ -1,0 +1,568 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 davhodg
+"""The Help menu: how to drive it, what it is, what it is licensed under.
+
+Documentation shows the manual that ships inside the package, rendered here
+rather than opened in a browser. A Help menu that needs the internet is worth
+nothing on a bench or a production line, which is where it is most wanted; the
+web copy is the fallback for a build that somehow arrived without one.
+"""
+
+from __future__ import annotations
+
+import platform
+import sys
+from pathlib import Path
+from typing import NamedTuple
+
+from PySide6.QtCore import QObject, Qt, QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication, QImage, QTextDocument
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QPushButton,
+    QTabWidget,
+    QTextBrowser,
+    QVBoxLayout,
+)
+
+from pyflashgui import APP_NAME, __version__
+from pyflashgui import help as help_pages
+from pyflashgui.core import checkout, installation, packages, timing
+from pyflashgui.core.updates import (
+    PROJECT_PAGE,
+    README_PAGE,
+    RELEASES_PAGE,
+    Release,
+    Standing,
+    checkout_standing,
+    latest_on_pypi,
+    latest_release,
+)
+from pyflashgui.core.updates import is_newer as version_is_newer
+from pyflashgui.core.worker import Worker
+from pyflashgui.help import manual_text
+from pyflashgui.ui import fonts, messages
+
+
+class LicenceFile(NamedTuple):
+    title: str
+    filename: str
+    blurb: str
+    #: True for a file the build produces rather than one kept in the
+    #: repository, so it is absent from a source checkout and required only
+    #: of a packaged application.
+    generated: bool = False
+
+
+#: Shown in the Licences window, in this order. All three are shipped beside
+#: the executable in a build.
+LICENCE_FILES = (
+    LicenceFile("Licence", "LICENSE", "pyflashgui is licensed under the Apache License 2.0."),
+    LicenceFile("Notice", "NOTICE", "Attributions required by the licences of the libraries used."),
+    LicenceFile(
+        "Third party",
+        "THIRD-PARTY-NOTICES.txt",
+        "The full licence text of every installed package.",
+        generated=True,
+    ),
+)
+
+
+def _find(name: str) -> Path | None:
+    """Locate a file shipped alongside the application.
+
+    Three places, because the same code runs from a checkout and from an
+    installed build, where PyInstaller puts data next to the executable or in
+    its _internal folder depending on the version.
+    """
+    roots = []
+    if getattr(sys, "frozen", False):
+        roots.append(Path(sys.executable).parent)
+        if meipass := getattr(sys, "_MEIPASS", None):
+            roots.append(Path(meipass))
+    roots.append(Path(__file__).resolve().parents[2])  # repository root
+    for root in roots:
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def licence_text(entry: LicenceFile) -> str:
+    """The contents of one licence tab, including why it might be empty."""
+    path = _find(entry.filename)
+    if path is None:
+        missing = f"{entry.filename} was not found."
+        if entry.generated:
+            # Running from a source checkout: the file is built, not committed.
+            return (
+                f"{missing}\n\nIt is generated when the application is built, from the "
+                "packages actually installed, so a source checkout does not carry one.\n\n"
+                "Run build/notices.py to produce it."
+            )
+        return missing
+    try:
+        return f"{entry.blurb}\n\n{path.read_text(encoding='utf-8')}"
+    except OSError as exc:
+        return f"{entry.filename} could not be read: {exc}"
+
+
+def missing_licence_files(frozen: bool) -> list[str]:
+    """Licence files that ought to be present but are not.
+
+    A generated file is required only of a packaged build. A source checkout
+    has no copy -- THIRD-PARTY-NOTICES.txt is built from the packages actually
+    installed and is not committed -- which is what broke CI when this check
+    was first added, because a stale copy from an earlier build was sitting in
+    the working tree and hid it.
+    """
+    return [
+        entry.filename
+        for entry in LICENCE_FILES
+        if (frozen or not entry.generated) and _find(entry.filename) is None
+    ]
+
+
+class _ManualView(QTextBrowser):
+    """A text browser that finds a page's pictures inside the manual.
+
+    ``setMarkdown`` gives the document no location, so a picture arrives here
+    as a bare name with nothing to be relative to -- the problem the links have,
+    solved the same way: it is looked up among the files the manual ships, and
+    nowhere else. A picture wider than the page is scaled to fit, because a
+    screenshot of the main window is wider than a help window.
+    """
+
+    #: Room left beside a picture for the scroll bar and the page margins.
+    MARGIN = 80
+    #: However narrow the window, a picture is not shrunk past legibility.
+    SMALLEST = 320
+
+    def loadResource(self, kind, url: QUrl):
+        if QTextDocument.ResourceType(kind) == QTextDocument.ImageResource and not url.scheme():
+            data = help_pages.image_bytes(url.toString())
+            if data:
+                image = QImage.fromData(data)
+                # The dialog's width rather than the viewport's: the first page
+                # is laid out before the window is shown, when the viewport has
+                # not been given its size yet.
+                width = max(self.window().width() - self.MARGIN, self.SMALLEST)
+                if image.width() > width:
+                    image = image.scaledToWidth(width, Qt.SmoothTransformation)
+                return image
+        return super().loadResource(kind, url)
+
+
+class ManualDialog(QDialog):
+    """The shipped manual, rendered, a page at a time.
+
+    Qt reads Markdown itself, so these are the same files the repository serves
+    on the web with no conversion step to go stale. The GitHub dialect is
+    asked for by name because the manual is full of tables, and the CommonMark
+    default does not have them.
+
+    The pages link to one another with ordinary relative links, which is what
+    lets them work unchanged in a browser. Qt will not follow one by itself --
+    ``setMarkdown`` gives the document no location to be relative *to* -- so a
+    click arrives here as a bare filename and is looked up in the manual's own
+    list of pages. Anything not in that list is a link out of the manual, and
+    goes to the browser.
+
+    Back and Contents are buttons as well as links at the top of each page. A
+    page that can only be left from its first line is a page people scroll back
+    up through, and the one thing worse than a document too long to navigate is
+    a short one you cannot get out of.
+    """
+
+    def __init__(
+        self, parent: QMainWindow | None, text: str = "", page: str = help_pages.MANUAL
+    ) -> None:
+        super().__init__(parent)
+        # A window, not a dialog: read beside the pane it describes, so it must
+        # not freeze the rest of pyflashgui, and a long page wants maximising.
+        self.setWindowFlags(Qt.Window | Qt.WindowMinMaxButtonsHint | Qt.WindowCloseButtonHint)
+        self.setModal(False)
+        self.setWindowTitle(f"{APP_NAME} manual")
+        self.resize(860, 700)
+        #: Where the reader has been, so that Back goes back rather than home.
+        self._history: list[str] = []
+        self._page = page
+
+        self.view = _ManualView(self)
+        self.view.setOpenLinks(False)  # every link is ours to resolve first
+        self.view.anchorClicked.connect(self._follow)
+
+        self.back_button = QPushButton("Back")
+        self.back_button.clicked.connect(self.back)
+        self.contents_button = QPushButton("Contents")
+        self.contents_button.clicked.connect(lambda: self.show_page(help_pages.MANUAL))
+
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.addButton(self.back_button, QDialogButtonBox.ActionRole)
+        buttons.addButton(self.contents_button, QDialogButtonBox.ActionRole)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.view)
+        layout.addWidget(buttons)
+
+        # ``text`` is still taken, so that anything holding a page already can
+        # show it; without one the front page is read like any other.
+        self._render(text or help_pages.page_text(page))
+        self._update_buttons()
+
+    def _render(self, text: str) -> None:
+        self.view.document().setMarkdown(text, QTextDocument.MarkdownDialectGitHub)
+        self.view.verticalScrollBar().setValue(0)  # a new page starts at its top
+
+    def show_page(self, name: str, remember: bool = True) -> bool:
+        """Open one page of the manual. False if there is no such page."""
+        text = help_pages.page_text(name)
+        if not text:
+            return False
+        if remember and name != self._page:
+            self._history.append(self._page)
+        self._page = name
+        self._render(text)
+        self.setWindowTitle(
+            f"{APP_NAME} manual"
+            if name == help_pages.MANUAL
+            else f"{help_pages.title_of(name)} - {APP_NAME} manual"
+        )
+        self._update_buttons()
+        return True
+
+    def back(self) -> None:
+        if self._history:
+            self.show_page(self._history.pop(), remember=False)
+
+    def _update_buttons(self) -> None:
+        self.back_button.setEnabled(bool(self._history))
+        self.contents_button.setEnabled(self._page != help_pages.MANUAL)
+
+    def _follow(self, url: QUrl) -> None:
+        """A link: another page of the manual, or something outside it."""
+        if self.show_page(url.toString()):
+            return
+        if url.scheme() in ("http", "https"):
+            QDesktopServices.openUrl(url)
+
+
+class LicenceDialog(QDialog):
+    def __init__(self, parent: QMainWindow) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"{APP_NAME} licences")
+        self.resize(760, 560)
+        tabs = QTabWidget()
+        for entry in LICENCE_FILES:
+            view = QPlainTextEdit(licence_text(entry))
+            view.setReadOnly(True)
+            view.setFont(fonts.mono())
+            view.setLineWrapMode(QPlainTextEdit.NoWrap)
+            tabs.addTab(view, entry.title)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        buttons.accepted.connect(self.accept)
+        layout = QVBoxLayout(self)
+        layout.addWidget(tabs)
+        layout.addWidget(buttons)
+
+
+class AboutDialog(QDialog):
+    """Version and environment, selectable so it can be pasted into a report."""
+
+    def __init__(self, parent: QMainWindow) -> None:
+        super().__init__(parent)
+        self.setWindowTitle(f"About {APP_NAME}")
+        heading = QLabel(
+            f"<h3>{APP_NAME} {__version__}</h3><p>A graphical flash programming tool.</p>"
+        )
+        heading.setTextFormat(Qt.RichText)
+        details = QPlainTextEdit(environment_report())
+        details.setReadOnly(True)
+        details.setFont(fonts.mono())
+        # One report line to one line on screen: wrapped, a path ran on under
+        # the column of names and the table stopped reading as one. Wide
+        # enough for the longest line, up to most of the screen, and a
+        # scroll bar past that -- a deep folder can be longer than any screen.
+        details.setLineWrapMode(QPlainTextEdit.NoWrap)
+        self.details = details
+        metrics = details.fontMetrics()
+        text = details.toPlainText().splitlines()
+        frame = 2 * details.frameWidth() + 2 * int(details.document().documentMargin())
+        # The frame and margins are not all of it: the cursor and the
+        # viewport's own edge take a few pixels more, measured at eight.
+        wanted = max(metrics.horizontalAdvance(line) for line in text) + frame + 16
+        screen = (parent.screen() if parent is not None else None) or self.screen()
+        widest = int(screen.availableGeometry().width() * 0.8)
+        details.setMinimumWidth(min(max(wanted, metrics.horizontalAdvance("M" * 60)), widest))
+        # Tall enough for the whole report, so nothing has to be scrolled to,
+        # and for the scroll bar under it when the width ran out.
+        height = metrics.lineSpacing() * len(text) + frame + 8
+        if wanted > widest:
+            height += details.horizontalScrollBar().sizeHint().height()
+        details.setMinimumHeight(height)
+        link = QLabel(
+            f'<p>Apache License 2.0 &middot; <a href="{PROJECT_PAGE}">{PROJECT_PAGE}</a></p>'
+        )
+        link.setOpenExternalLinks(True)
+        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.rejected.connect(self.reject)
+        layout = QVBoxLayout(self)
+        for widget in (heading, details, link, buttons):
+            layout.addWidget(widget)
+
+
+def _label_width(names) -> int:
+    return max(len(name) for name in ("Python", "Platform", *names)) + 2
+
+
+def environment_report() -> str:
+    """What a bug report needs: pyflashgui, Python, where both are, and every package."""
+    direct = packages.declared()
+    where = installation.report()
+    width = _label_width([*(r.name for r in direct), *(label for label, _ in where)])
+    lines = [f"{APP_NAME} {__version__}", f"{'Python':{width}}{sys.version.split()[0]}"]
+    lines += [f"{label:{width}}{value}" for label, value in where]
+    for requirement in direct:
+        found = packages.version(requirement.name)
+        if found is None:
+            found = "not installed" + (" (optional)" if requirement.extra else "")
+        lines.append(f"{requirement.name:{width}}{found}")
+    lines.append(f"{'Platform':{width}}{platform.platform()}")
+    # Only a checkout has one, and only a checkout needs one: between two
+    # releases every build calls itself the same version, which is no help
+    # when the question is whether somebody had pulled.
+    if (source := checkout.describe()) is not None:
+        lines.append(f"{'Source':{width}}{source}")
+    return "\n".join(lines)
+
+
+def diagnostics(window) -> str:
+    """What this pyflashgui is running on and how it is arranged.
+
+    Written for copying into a bug report, which is where "it does not see my
+    probe" needs the versions of everything underneath it.
+    """
+    lines = [environment_report(), ""]
+
+    # What the packages above brought with them. A fault is as likely to be
+    # in one of these -- a libusb too old for a probe -- and nobody
+    # would think to name them.
+    if pulled := packages.pulled_in(packages.declared()):
+        width = _label_width(pulled)
+        lines.append("Installed with them")
+        lines += [f"  {name:{width}}{packages.version(name)}" for name in pulled]
+        lines.append("")
+
+    floating = [(n, d) for n, d in window.panes.docks.items() if d.isFloating()]
+    if floating:
+        from PySide6.QtCore import Qt
+
+        lines += ["", "Undocked panes"]
+        for name, dock in floating:
+            flags = dock.windowFlags()
+            kind = {Qt.Widget: "Widget", Qt.Window: "Window", Qt.Tool: "Tool"}.get(
+                flags & Qt.WindowType_Mask, "?"
+            )
+            hints = [
+                label
+                for hint, label in (
+                    (Qt.WindowMaximizeButtonHint, "maximise"),
+                    (Qt.WindowMinimizeButtonHint, "minimise"),
+                    (Qt.WindowCloseButtonHint, "close"),
+                    (Qt.CustomizeWindowHint, "customised"),
+                    (Qt.FramelessWindowHint, "frameless"),
+                )
+                if flags & hint
+            ]
+            lines.append(f"  {name}: {kind}, {', '.join(hints) or 'no hints'}")
+
+    # Starting is measured on every run, so a report can say how long it took
+    # without anybody having thought to ask beforehand -- which is the whole
+    # difficulty with "it has got slow to start".
+    if steps := timing.report_lines():
+        lines += ["", *steps]
+    return "\n".join(lines)
+
+
+class HelpMenu(QObject):
+    """Builds the Help menu and owns the update check behind it."""
+
+    def __init__(self, window: QMainWindow) -> None:
+        super().__init__(window)
+        self.window = window
+        self._worker = Worker(self)
+        self._checking = False
+        #: The manual, once opened: kept, so Documentation brings the same
+        #: window forward -- on the page it was left at -- rather than a second.
+        self.manual: ManualDialog | None = None
+
+        menu = window.menuBar().addMenu("&Help")
+        menu.addAction("Documentation", self._open_docs)
+        menu.addAction("Diagnostics...", self._show_diagnostics)
+        menu.addSeparator()
+        self.check_action = menu.addAction("Check for updates...", self._check_for_updates)
+        menu.addAction("Licences...", self._show_licences)
+        menu.addAction(f"About {APP_NAME}", self._show_about)
+        self.menu = menu
+
+    def shutdown(self) -> None:
+        self._worker.stop()
+        self.close_manual()
+
+    def close_manual(self) -> None:
+        if self.manual is not None:
+            # A window of its own, with no parent to take it down: without this
+            # it would keep pyflashgui running after the main window had gone.
+            self.manual.close()
+            self.manual.deleteLater()
+            self.manual = None
+
+    def _open_docs(self) -> None:
+        """The shipped manual, or the web page if this build has none.
+
+        Opened without a parent, as a pane taken out into a window is, so it can
+        sit behind or beside the main window rather than always on top of it.
+        """
+        text = manual_text()
+        if not text:
+            QDesktopServices.openUrl(QUrl(README_PAGE))
+            return
+        if self.manual is None:
+            self.manual = ManualDialog(None, text)
+            self.manual.setWindowIcon(self.window.windowIcon())
+        self.manual.show()
+        self.manual.raise_()
+        self.manual.activateWindow()
+
+    def _show_diagnostics(self) -> None:
+        """Report the state of the window, and put it on the clipboard."""
+        report = diagnostics(self.window)
+        QGuiApplication.clipboard().setText(report)
+        # Through the Event Log like every other line, as information. Written
+        # into the pane directly it had no level of its own, and took the
+        # colour of whatever came before it -- red and bold after an error.
+        self.window.events.information("Diagnostics (copied to the clipboard):\n" + report)
+
+    def _show_licences(self) -> None:
+        LicenceDialog(self.window).exec()
+
+    def _show_about(self) -> None:
+        AboutDialog(self.window).exec()
+
+    # --- updates -------------------------------------------------------------------
+    def _check_for_updates(self) -> None:
+        if self._checking:  # the menu stays clickable while the request is out
+            return
+        self._checking = True
+        self.check_action.setText("Checking for updates...")
+        self.check_action.setEnabled(False)
+        # Each kind of installation has its own question. Run from a source
+        # folder, it is whether there is more to pull: a release is behind
+        # every commit made since it. The Windows build is updated by the
+        # installer on the releases page, and a pip installation by pip.
+        if (found := checkout.head()) is not None:
+            branch, commit = found
+            self._worker.submit(lambda: checkout_standing(branch, commit), self._on_checked)
+        elif getattr(sys, "frozen", False):
+            self._worker.submit(latest_release, self._on_checked)
+        else:
+            self._worker.submit(latest_on_pypi, self._on_checked)
+
+    def _on_checked(self, result, error: str | None) -> None:
+        self._checking = False
+        self.check_action.setText("Check for updates...")
+        self.check_action.setEnabled(True)
+        if error is not None:
+            messages.information(self.window, "Check for updates", error)
+            return
+        found, problem = result
+        if isinstance(found, Standing) or (found is None and checkout.head() is not None):
+            self._report_standing(found, problem)
+        else:
+            self._report(found, problem)
+
+    def _report_standing(self, standing: Standing | None, problem: str) -> None:
+        """How a source folder compares with the same branch on GitHub."""
+        running = f"You are running {APP_NAME} from source, at {checkout.describe()}."
+        if standing is None:
+            messages.information(self.window, "Check for updates", f"{problem}\n\n{running}")
+            return
+        on_github = f"GitHub's {standing.branch} is at {standing.latest}"
+        if not standing.known:
+            messages.information(
+                self.window,
+                "Check for updates",
+                f"This folder is at {standing.here}, which GitHub does not have: a "
+                f"commit made here and not pushed, or one from a fork.\n\n{on_github}.",
+            )
+        elif standing.behind:
+            n = standing.behind
+            commits = f"{n} newer commit{'s' if n != 1 else ''}"
+            answer = messages.question(
+                self.window,
+                "Update available",
+                f"{on_github}, {commits} than this folder ({standing.here}).\n\n"
+                "To update, pull them into this folder (git pull) and start pyflashgui "
+                "again; the launcher installs any new libraries.\n\n"
+                "Open the list of commits?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl(standing.url))
+        else:
+            own = ""
+            if n := standing.ahead:
+                own = f" This folder also has {n} commit{'s' if n != 1 else ''} not on GitHub."
+            messages.information(
+                self.window,
+                "Check for updates",
+                f"Up to date with GitHub's {standing.branch} ({standing.latest}).{own}",
+            )
+
+    def _report(self, release: Release | None, problem: str) -> None:
+        if release is None:
+            messages.information(
+                self.window,
+                "Check for updates",
+                f"{problem}\n\nYou are running {APP_NAME} {__version__}.",
+            )
+        elif release.pip and version_is_newer(release.version, __version__):
+            answer = messages.question(
+                self.window,
+                "Update available",
+                f"{APP_NAME} {release.version} is on PyPI. You are running {__version__}.\n\n"
+                "To update, run this in the Python environment it is installed in "
+                f"({sys.prefix}), then start {APP_NAME} again:\n\n"
+                f"    pip install --upgrade {APP_NAME}\n\n"
+                "Open its page on PyPI?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl(release.url))
+        elif version_is_newer(release.version, __version__):
+            answer = messages.question(
+                self.window,
+                "Update available",
+                f"{APP_NAME} {release.version} is available. "
+                f"You are running {__version__}.\n\n"
+                "Open the releases page to download it?",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes,
+            )
+            if answer == QMessageBox.Yes:
+                QDesktopServices.openUrl(QUrl(release.url or RELEASES_PAGE))
+        else:
+            messages.information(
+                self.window,
+                "Check for updates",
+                f"{APP_NAME} {__version__} is up to date.",
+            )
