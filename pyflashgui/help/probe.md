@@ -32,7 +32,7 @@ Every probe is reached through pyOCD, which has a driver for each of the ways a 
 |---|---|---|---|
 | **CMSIS-DAP probes** | Arm's open CMSIS-DAP protocol | Windows: nothing. Linux: a udev rule. | The widest choice, and the one to pick when there is a choice. |
 | **ST-Link** v2, v2-1 and v3 | ST's own protocol | Windows: ST's USB driver, where Windows has none for it. Linux: a udev rule. | Recent ST-Link firmware reaches only STM32 targets: for any other maker's device, use another probe. Firmware V2J24 or newer. |
-| **J-Link** | SEGGER's own library | SEGGER's J-Link software, on Windows and on Linux. | Not offered until that software is installed. Programming is slower than with SEGGER's own tools. |
+| **J-Link** | SEGGER's own library, or CMSIS-DAP for a J-Link switched to that mode | SEGGER's J-Link software, on Windows and on Linux. | In its own mode it is not offered until that software is installed. Current J-Link BASE, PLUS, EDU, ULTRA+ and PRO models can be set to start as a CMSIS-DAP probe instead, with SEGGER's Configurator, and are then used like any other. |
 | **Picoprobe** | The original Raspberry Pi Pico probe firmware | Linux: a udev rule. | The Pico's current debug probe firmware is CMSIS-DAP instead, and is the one to have. |
 
 CMSIS-DAP is a protocol and not a product, so a great many probes speak it. Among those pyOCD's documentation names:
