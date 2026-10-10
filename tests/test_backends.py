@@ -240,3 +240,12 @@ def test_a_file_linked_for_the_wrong_address_of_a_real_part_is_caught_by_the_map
 def test_pyocd_refuses_a_probe_that_is_not_plugged_in():
     with pytest.raises(BackendError, match="not plugged in"):
         backends.get("pyocd").connect("no-such-probe-0000", "rp2350")
+
+
+def test_an_xds110_is_asked_for_one_reply_at_a_time():
+    """pyOCD's own advice for that probe's firmware; nothing else is slowed."""
+    from pyflashgui.backends.pyocd_backend import needs_one_packet_at_a_time
+
+    assert needs_one_packet_at_a_time("Texas Instruments XDS110 (03.00.00.25)", None)
+    assert needs_one_packet_at_a_time(None, "XDS110 with CMSIS-DAP")
+    assert not needs_one_packet_at_a_time("Raspberry Pi Debug Probe (CMSIS-DAP)", "Debug Probe")

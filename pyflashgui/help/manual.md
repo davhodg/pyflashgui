@@ -2,12 +2,24 @@
 
 pyflashgui is a graphical flash programming tool for Arm Cortex-M targets, for any debug probe pyOCD supports.
 
-**pyflashgui is at the start.** What is here is the application's frame: the window, its panes and workspaces. It does not connect to a probe or program anything yet, and this manual grows a page with each thing it learns to do.
+**pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device through pyOCD has not yet been tried on hardware.
 
 ## Contents
 
+- [Probe and target](probe.md): the bar across the top, connecting, and which probes need what
+- [Files](files.md): what is programmed, and Program, Verify, Erase and Reset
+- [Memory Map](memory-map.md): where the files land, checked before anything is sent
 - [About, licences and updates](about.md)
 - [Changes](changelog.md)
+
+## In short
+
+1. Choose the **Probe** and the **Target** in the bar across the top.
+2. **Add...** the firmware files in the Files pane.
+3. Look at the Memory Map: it says whether they fit the target.
+4. **Connect**, then **Program**.
+
+With no hardware, choose *Simulated* under **Through** and the same steps work on a target that exists only in memory.
 
 ## The window
 
@@ -19,7 +31,7 @@ Each pane can be dragged to another edge of the window, floated, or closed, and 
 
 ## Where your files are
 
-The arrangement of the panes and pyflashgui's settings are kept in a workspace, a folder under pyflashgui's own:
+The probe, the target, the list of files, the arrangement of the panes and pyflashgui's settings are kept in a workspace, a folder under pyflashgui's own:
 
 | | |
 |---|---|

@@ -13,6 +13,13 @@ since the last version, and comes out in the next one.
 
 ### Added
 
+- **Probe and target** in a bar across the top: the probe by its serial number, the
+  target by name, the debug clock, and Connect. A simulated probe and target for trying
+  pyflashgui with no hardware.
+- **Files**: a list of ELF, Intel HEX, S-record and raw binary files, read again at each
+  use and whenever one changes on disc, with Program, Verify, Erase and Reset.
+- **Memory Map**: where the ticked files land on the chosen target, how full each flash
+  region is, and what is wrong, worked out before anything is sent.
 - The application's frame: the main window with dockable panes and the Event Log, workspaces,
   light and dark themes, the manual, and the Help menu with diagnostics, licences and a check
   for updates.

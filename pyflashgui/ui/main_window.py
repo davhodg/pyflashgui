@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""Main window: dockable panes, the Event Log, persistent layout."""
+"""Main window: the probe bar, dockable panes, persistent layout."""
 
 from __future__ import annotations
 
@@ -20,9 +20,14 @@ from pyflashgui.core import shortcut, timing, workspaces
 from pyflashgui.core.context import Context
 from pyflashgui.core.events import PROBLEMS, EventLog
 from pyflashgui.core.excepthook import ExceptionLogger
-from pyflashgui.ui import event_colours, theme
+from pyflashgui.core.flasher import Flasher
+from pyflashgui.ui import event_colours, folders, theme
+from pyflashgui.ui.confirm import Confirmations, Remembered
+from pyflashgui.ui.files_view import FilesView
 from pyflashgui.ui.help_menu import HelpMenu
+from pyflashgui.ui.map_view import MapView
 from pyflashgui.ui.panes import PaneKind, Panes
+from pyflashgui.ui.probe_bar import ProbeBar
 
 
 def window_title() -> str:
@@ -39,10 +44,10 @@ def window_title() -> str:
 # Bumped whenever the set of docks changes. restoreState declines a state
 # saved under a different version, so an old layout is replaced by the current
 # default instead of being restored with panes missing.
-LAYOUT_VERSION = 1
+LAYOUT_VERSION = 2
 
 #: Open on a first run. Everything else is one click away in the View menu.
-DEFAULT_VISIBLE = ("log",)
+DEFAULT_VISIBLE = ("files", "map", "log")
 
 #: How near the bottom of the Event Log still counts as being at the bottom,
 #: in scrollbar steps. Exactly at the end is too strict: a line arriving
@@ -96,13 +101,33 @@ class MainWindow(QMainWindow):
         self.exceptions.install()
         timing.mark("exception hook")
 
+        #: Shared, so that agreeing once covers erasing and programming a
+        #: target rather than each asking again.
+        self.confirm = Confirmations(Remembered())
+        #: The one thing that talks to a probe. The bar and the panes ask
+        #: it for things and listen for what comes back.
+        self.flasher = Flasher(self.events, parent=self)
+
+        # --- toolbar ---------------------------------------------------------
+        self.probe_bar = ProbeBar(self.flasher, self.ctx)
+        self.addToolBar(self.probe_bar)
+
         # --- panes -----------------------------------------------------------
         #: Every dock, and how many of each kind there can be. The window
         #: names a pane to open it and then leaves it alone.
         self.panes = Panes(self, self.ctx)
         self._register_panes()
+        # Opened in the order the View menu should list them: what is done,
+        # what it will do, and what the tool has to say for itself.
+        self.files_view = self.panes.view(self.panes.add("files"))
+        self.map_view = self.panes.view(self.panes.add("map"))
         self.panes.add("log")
         self._arrange_default()
+        # The map is of the ticked files on the chosen target, so either
+        # changing redraws it.
+        self.files_view.changed.connect(self._refresh_map)
+        self.flasher.regions_changed.connect(self._refresh_map)
+        self._refresh_map()
 
         self.setStatusBar(QStatusBar())
         timing.mark("panes built")
@@ -172,6 +197,16 @@ class MainWindow(QMainWindow):
         self.reset_menu = tools_menu.addMenu("Reset")
         self.reset_menu.setToolTipsVisible(True)
         self.reset_menu.addAction(self.reset_layout_action)
+        forget = self.reset_menu.addAction("Forget remembered folders", self._forget_folders)
+        forget.setToolTip(
+            "A file dialog opens where that sort of file was last used. This\n"
+            "puts them all back to where they start."
+        )
+        ask_again = self.reset_menu.addAction("Re-enable all confirmations", self._ask_again)
+        ask_again.setToolTip(
+            "Bring back every confirmation you told pyflashgui not to ask again:\n"
+            "erasing and programming a target."
+        )
 
         self.help_menu = HelpMenu(self)
 
@@ -184,6 +219,9 @@ class MainWindow(QMainWindow):
         # it came up in front of them: a pane left on a second screen, hidden
         # behind the main window, might as well have been closed.
         QTimer.singleShot(0, self.panes.raise_detached)
+        # Once the window is on screen: listing the targets loads the
+        # flashing library, which is the slowest thing there is to load.
+        QTimer.singleShot(0, self.probe_bar.start)
 
     # --- panes ---------------------------------------------------------------
     def _register_panes(self) -> None:
@@ -194,6 +232,13 @@ class MainWindow(QMainWindow):
         menu.
         """
         for kind in (
+            PaneKind(
+                "files",
+                "Files",
+                Qt.LeftDockWidgetArea,
+                lambda _name: FilesView(self.flasher, self.ctx, self.confirm),
+            ),
+            PaneKind("map", "Memory Map", Qt.RightDockWidgetArea, lambda _name: MapView()),
             PaneKind("log", "Event Log", Qt.BottomDockWidgetArea, lambda _name: self.log),
         ):
             self.panes.register(kind)
@@ -262,8 +307,24 @@ class MainWindow(QMainWindow):
         self.view_menu.addAction(self.reset_layout_action)
 
     def _arrange_default(self) -> None:
-        """The layout a first run opens with, and what Reset layout goes back to."""
-        self.addDockWidget(Qt.BottomDockWidgetArea, self.panes.docks["log"])
+        """The layout a first run opens with, and what Reset layout goes back to.
+
+            +-----------+--------------+
+            |  Files    |  Memory Map  |
+            +-----------+--------------+
+            |        Event Log         |
+            +--------------------------+
+
+        What is to be programmed beside where it will land, because the
+        second is read while changing the first; and the log under both,
+        because its lines are long.
+        """
+        files, memory, log = (self.panes.docks[n] for n in DEFAULT_VISIBLE)
+        self.addDockWidget(Qt.LeftDockWidgetArea, files)
+        self.splitDockWidget(files, log, Qt.Vertical)
+        self.splitDockWidget(files, memory, Qt.Horizontal)
+        self.resizeDocks([files, memory], [1, 1], Qt.Horizontal)
+        self.resizeDocks([files, log], [7, 3], Qt.Vertical)
         for name, dock in self.panes.docks.items():
             dock.setVisible(name in DEFAULT_VISIBLE)
 
@@ -331,6 +392,14 @@ class MainWindow(QMainWindow):
         self.panes.save()
 
     def closeEvent(self, event) -> None:
+        # Not while a target is being written to: closing would abandon it
+        # half programmed, with nothing left on screen to say so.
+        if self.flasher.busy and not self._closing:
+            self.events.warning(
+                "pyflashgui is still working on the target. Close it when that has finished."
+            )
+            event.ignore()
+            return
         # Everything is about to be hidden, and reporting each pane going away
         # on the way out would be a paragraph nobody asked for.
         self._closing = True
@@ -344,12 +413,30 @@ class MainWindow(QMainWindow):
         # running after the main window had gone.
         self.panes.close_detached()
         self.help_menu.shutdown()
+        self.flasher.shutdown()
         self.exceptions.remove()
         super().closeEvent(event)
 
     # --- tools ---------------------------------------------------------------
     def _open_workspace_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.workspace_dir)))
+
+    def _refresh_map(self) -> None:
+        """Lay the ticked files over the target's memory again."""
+        target = self.flasher.target if self.flasher.connected else (self.probe_bar.chosen_target())
+        self.map_view.show_layout(self.files_view.loaded(), self.flasher.regions, target)
+
+    def _forget_folders(self) -> None:
+        count = folders.forget_all(self.ctx)
+        self.events.information(
+            "Every file dialog opens where it starts again."
+            if count
+            else "No folders were being remembered."
+        )
+
+    def _ask_again(self) -> None:
+        self.confirm.forget_everything()
+        self.events.information("Every confirmation will be asked again.")
 
     def _add_shortcut(self) -> None:
         """Tools > Settings > Add shortcut to Start menu, to this folder's launcher."""

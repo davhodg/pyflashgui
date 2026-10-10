@@ -44,6 +44,15 @@ def _isolate_settings(tmp_path_factory):
     )
 
 
+@pytest.fixture(autouse=True)
+def _fresh_backends(monkeypatch):
+    """A backend is made once and kept, and the simulated one remembers what
+    was programmed into it: each test gets its own, with empty boards."""
+    from pyflashgui import backends
+
+    monkeypatch.setattr(backends, "_made", {})
+
+
 @pytest.fixture(scope="session")
 def app():
     return QApplication.instance() or QApplication([])

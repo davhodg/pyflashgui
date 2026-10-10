@@ -26,6 +26,9 @@ class Worker(QThread):
         super().__init__(parent)
         self._jobs: queue.Queue = queue.Queue()
         self.done.connect(self._deliver)
+        #: Until it is stopped. Stopping twice must not disconnect twice,
+        #: which PySide complains about at length.
+        self._delivering = True
 
     def submit(self, fn: Callable[[], Any], callback: Callback) -> None:
         # Started on first use: a QThread that is running when Qt destroys it
@@ -56,10 +59,12 @@ class Worker(QThread):
         object, which Qt punishes with an access violation rather than an
         exception.
         """
-        try:
-            self.done.disconnect(self._deliver)
-        except (RuntimeError, TypeError):  # already disconnected
-            pass
+        if self._delivering:
+            self._delivering = False
+            try:
+                self.done.disconnect(self._deliver)
+            except (RuntimeError, TypeError):  # the C++ side has already gone
+                pass
         if not self.isRunning():
             return
         self._jobs.put(None)

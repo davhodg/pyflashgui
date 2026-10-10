@@ -66,6 +66,16 @@ def regions_of(memory_map) -> list[Region]:
     return sorted(out, key=lambda r: r.start)
 
 
+def needs_one_packet_at_a_time(*names: str | None) -> bool:
+    """Whether a probe called this must be sent one command and then waited for.
+
+    pyOCD's own advice for the TI XDS110, whose firmware loses track when
+    several commands are outstanding. Set for every one of them, since it
+    is not known which versions are free of it, and the cost is only speed.
+    """
+    return any("xds110" in (name or "").lower() for name in names)
+
+
 def _said(doing: str, exc: Exception) -> BackendError:
     """A library's exception as a sentence about what was being attempted."""
     detail = str(exc).strip() or type(exc).__name__
@@ -224,6 +234,8 @@ class PyocdBackend(Backend):
         }
         if frequency is not None:
             options["frequency"] = int(frequency)
+        if needs_one_packet_at_a_time(chosen.description, chosen.product_name):
+            options["cmsis_dap.limit_packets"] = True
         try:
             session = Session(chosen, auto_open=False, options=options)
             session.open()
