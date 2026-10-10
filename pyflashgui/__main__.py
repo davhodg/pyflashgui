@@ -36,8 +36,8 @@ SELFTEST_MODULES = (
 #: The probe drivers pyOCD has to be able to find. It looks them up through
 #: entry points, which a build that left pyOCD's package metadata behind
 #: does not have: every one of them would then be missing, with no error.
-#: Only the drivers pyOCD offers on every machine: one it offers only where
-#: a vendor's own library is installed is not asked for.
+#: Not the J-Link driver, which pyOCD only offers where SEGGER's own library
+#: is installed, and that is the user's to install.
 PROBE_DRIVERS = ("cmsisdap", "picoprobe", "stlink")
 
 #: Targets that are part of pyOCD itself rather than a CMSIS-Pack, and so

@@ -11,7 +11,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 
-A graphical flash programming tool for Arm Cortex-M targets that works with any debug probe [pyOCD](https://pyocd.io) supports: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, the probes built into many development boards, ST-Link and TI XDS110.
+A graphical flash programming tool for Arm Cortex-M targets that works with any debug probe [pyOCD](https://pyocd.io) supports: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, TI XDS110 and the probes built into many development boards, as well as ST-Link and J-Link.
 
 **pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device through pyOCD has not yet been tried on hardware.
 

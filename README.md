@@ -11,7 +11,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
 ![license](https://img.shields.io/badge/license-Apache--2.0-green)
 
-A graphical flash programming tool for Arm Cortex-M targets that works with any debug probe [pyOCD](https://pyocd.io) supports: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, the probes built into many development boards, ST-Link and TI XDS110.
+A graphical flash programming tool for Arm Cortex-M targets that works with any debug probe [pyOCD](https://pyocd.io) supports: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, TI XDS110 and the probes built into many development boards, as well as ST-Link and J-Link.
 
 **pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device through pyOCD has not yet been tried on hardware.
 
@@ -86,13 +86,16 @@ Without it pyflashgui stops as it starts, naming the package that is missing.
 
 **Where your own files are kept** is the same whichever way it was installed: your workspaces and settings are in `%APPDATA%\pyflashgui` on Windows and `~/.config/pyflashgui` on Linux. Upgrading and uninstalling leave that folder alone.
 
-## Probes and drivers
+## Probes
 
-| Probe | Windows | Linux |
-|---|---|---|
-| CMSIS-DAP, v1 or v2 | no driver needed | a udev rule |
-| ST-Link | ST's driver | a udev rule |
-| TI XDS110 | TI's driver | a udev rule |
+Every probe is reached through [pyOCD](https://pyocd.io), which has a driver for each of the ways a probe talks over USB. Which probes work is therefore pyOCD's list:
+
+| Probe | How pyOCD talks to it | What to install | Worth knowing |
+|---|---|---|---|
+| **CMSIS-DAP probes** | Arm's open CMSIS-DAP protocol | Windows: nothing. Linux: a udev rule. | The widest choice, and the one to pick when there is a choice. |
+| **ST-Link** v2, v2-1 and v3 | ST's own protocol | Windows: ST's USB driver, where Windows has none for it. Linux: a udev rule. | Recent ST-Link firmware reaches only STM32 targets: for any other maker's device, use another probe. Firmware V2J24 or newer. |
+| **J-Link** | SEGGER's own library | SEGGER's J-Link software, on Windows and on Linux. | Not offered until that software is installed. Programming is slower than with SEGGER's own tools. |
+| **Picoprobe** | The original Raspberry Pi Pico probe firmware | Linux: a udev rule. | The Pico's current debug probe firmware is CMSIS-DAP instead, and is the one to have. |
 
 CMSIS-DAP is a protocol and not a product, so a great many probes speak it. Among those pyOCD's documentation names:
 
@@ -102,9 +105,11 @@ CMSIS-DAP is a protocol and not a product, so a great many probes speak it. Amon
 - Microchip Atmel-ICE, and the EDBG on Microchip's boards
 - Infineon (Cypress) KitProg3 and MiniProg4
 - Keil ULINKplus
-- TI XDS110, standalone and on TI LaunchPads
+- TI XDS110, standalone and on TI LaunchPads. It is asked for one reply at a time, which some versions of its firmware need; pyflashgui sets that itself. pyOCD's udev rules do not include it, so on Linux it wants a rule of its own or the one TI's software installs.
 
-pyflashgui has not yet been tried with any of them: this is what pyOCD says it supports.
+**The target has to be an Arm Cortex-M, whichever probe it is.** The probe carries the debug port; what is on the far side of it is pyOCD's to understand, and Cortex-M is what it understands. A probe that can reach other kinds of processor with its maker's own software -- a Cortex-A or Cortex-R, a RISC-V core -- still reaches only Cortex-M here.
+
+pyflashgui has not yet been tried with any of these probes: this is what pyOCD says it supports, and how.
 
 On Linux a probe is usable without root once a udev rule allows it; pyOCD publishes [a set of them](https://github.com/pyocd/pyOCD/tree/main/udev). Vendor software is never bundled with pyflashgui: install the vendor's own, and pyflashgui finds it.
 

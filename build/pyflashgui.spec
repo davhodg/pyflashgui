@@ -46,6 +46,9 @@ for _package in ("libusb_package", "cmsis_pack_manager", "capstone"):
 HIDDEN = [
     *PYOCD_HIDDEN,
     "bincopy",
+    # J-Link, through SEGGER's own library, which the user installs. pyOCD
+    # imports it only when it looks for a J-Link.
+    "pylink",
     "hid",
     "usb.backend.libusb1",
 ]

@@ -19,7 +19,7 @@ requires-python = ">=3.12"
 authors = [{ name = "davhodg" }]
 # What PyPI shows as tags, and searches on.
 keywords = [
-    "flash", "programmer", "debug probe", "SWD", "CMSIS-DAP", "ST-Link", "pyOCD",
+    "flash", "programmer", "debug probe", "SWD", "CMSIS-DAP", "ST-Link", "J-Link", "pyOCD",
     "Cortex-M", "microcontroller", "embedded", "firmware", "Qt",
 ]
 # Checked against the official list by tests/test_readme.py: PyPI refuses an
