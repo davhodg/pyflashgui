@@ -26,6 +26,10 @@ SELFTEST_MODULES = (
     "cmsis_pack_manager",
     "usb.core",
     "libusb_package",
+    "pyflashgui.core.images",
+    "pyflashgui.core.memory_map",
+    "pyflashgui.backends.pyocd_backend",
+    "pyflashgui.backends.simulated",
     "pyflashgui.ui.main_window",
 )
 
