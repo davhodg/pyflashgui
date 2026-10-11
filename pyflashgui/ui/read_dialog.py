@@ -2,9 +2,8 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """Which part of a target's memory to read back.
 
-Asked before the file is, because what is read decides what the file should
-be called. A region of the target fills in the address and the length, and
-both can still be typed over: what is wanted is as often the first few
+A region of the target fills in the address and the length, and both can
+still be typed over: what is wanted is as often the first few
 kilobytes of a region as the whole of it.
 """
 
@@ -13,7 +12,6 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from PySide6.QtWidgets import (
-    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -31,11 +29,6 @@ from pyflashgui.ui import fonts
 OTHER = "Another range"
 NO_REGIONS = (
     "The memory of this target is not known here, so say where to start and how much to read."
-)
-TRIM_TIP = (
-    "Erased flash reads as FF. With this ticked, the FF bytes after the last\n"
-    "byte that holds something are not saved, so the file is the size of\n"
-    "what is there and not the size of the flash."
 )
 
 
@@ -76,10 +69,6 @@ class ReadDialog(QDialog):
         self.length.setToolTip("How many bytes to read, in hexadecimal.")
         self.size = QLabel()
 
-        self.trim = QCheckBox("Leave off the erased bytes at the end")
-        self.trim.setChecked(True)
-        self.trim.setToolTip(TRIM_TIP)
-
         #: Why OK did nothing, when it did nothing. In the dialog rather
         #: than in a box on top of it.
         self.problem = QLabel()
@@ -91,10 +80,9 @@ class ReadDialog(QDialog):
         form.addRow("Address:", self.address)
         form.addRow("Length:", self.length)
         form.addRow("", self.size)
-        form.addRow("", self.trim)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Read...")
+        self.buttons.button(QDialogButtonBox.Ok).setText("Read")
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
 
@@ -124,8 +112,8 @@ class ReadDialog(QDialog):
         length = parse_number(self.length.text())
         self.size.setText(size_text(length) if length else "")
 
-    def values(self) -> tuple[int, int, bool] | None:
-        """The address, the length and whether to trim; None if they will not do."""
+    def values(self) -> tuple[int, int] | None:
+        """The address and the length, or None if they will not do."""
         address = parse_number(self.address.text())
         length = parse_number(self.length.text())
         if address is None or not 0 <= address <= 0xFFFF_FFFF:
@@ -138,7 +126,7 @@ class ReadDialog(QDialog):
             self.problem.setText("That runs past the end of a 32-bit address space.")
             return None
         self.problem.setText("")
-        return address, length, self.trim.isChecked()
+        return address, length
 
     def _accept(self) -> None:
         if self.values() is not None:

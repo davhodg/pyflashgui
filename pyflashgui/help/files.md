@@ -27,9 +27,9 @@ These need a probe [connected](probe.md) to a target.
 
 - **Program** writes the ticked files. Before it starts, the files are checked against the target's memory, as the [Memory Map](memory-map.md) shows: if anything is an error there, nothing is programmed and the [Event Log](manual.md) says why.
 - **Verify** reads the flash back and compares it with the ticked files, changing nothing. If they differ, it says how many bytes do and where the first one is.
-- **Erase** erases all of the target's flash.
+- **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
 - **Reset** restarts the target.
-- **Read...** reads part of the target's memory back into a file, changing nothing in the target. See *Reading back* below.
+- **Read...** reads part of the target's memory back and shows it in the [Memory](memory.md) pane, changing nothing in the target. It can be saved to a file from there.
 
 Three ticks say what **Program** does besides writing:
 
@@ -41,14 +41,14 @@ Three ticks say what **Program** does besides writing:
 
 The bar beside the buttons says what is being done and how far along it is; where that cannot be told, it shows only that something is happening. **Cancel** stops a verify or a read. Programming is not stopped part way: that would leave the target holding neither the old firmware nor the new.
 
-## Reading back
+## Erasing
 
-**Read...** asks what to read, then where to save it.
+**Erase...** asks how much, and opens on **All of the flash**.
 
-- **Region** offers the target's own regions, the flash first, and fills in the address and the length. Both can be typed over, in hexadecimal: what is wanted is as often the first few kilobytes as the whole region. Where the target's memory is not known, as with J-Link Commander, the range is typed.
-- **Leave off the erased bytes at the end** is ticked to begin with. Erased flash reads as `FF`, so reading the whole of a 16 MiB flash that holds 100 KiB of firmware would otherwise save 16 MiB. With it ticked, the file ends at the last byte that holds something. An `FF` in the middle of what is there is kept. If everything read is erased, nothing is saved and the Event Log says so.
+- **These regions** lists the target's flash regions, each with a tick. It is for a device with more than one flash, where the bootloader or the data is to be kept.
+- **This range** takes an address and a length, in hexadecimal.
 
-The file is saved as a raw binary, Intel HEX or Motorola S-record, by the name it is given. A raw binary is the bytes and nothing else, so it does not record where they came from; the other two do. An S-record file is given addresses wide enough for what it holds, whatever its name: flash at `08000000` saved as `.s19` has 32-bit addresses.
+Flash is erased a sector at a time, so every sector that any of a range falls in is erased whole: a range of sixteen bytes costs the sector they are in. Where the target's memory is not known there are no regions to tick, and the choice is all of it or a range.
 
-A device that protects its flash from being read gives an error from the probe, or reads as something other than what it holds. pyflashgui does not try to get round that.
+Before anything is erased, pyflashgui says which addresses will go and asks, as it does before programming.
 

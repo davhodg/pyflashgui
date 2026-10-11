@@ -12,10 +12,11 @@ of commands to carry out. So there is no connection held open between one
 operation and the next: connecting checks that the probe and the device
 answer, and each operation after it attaches again by itself.
 
-**Written from SEGGER's documentation and not yet tried on a J-Link.** What
-Commander is asked to do is as its manual gives it; how its replies are read
-is the part most likely to need putting right against the real thing, and is
-kept in a few small functions for that reason.
+**Tried on one board so far**: listing the probe, connecting and reading
+worked on an XMC4500 through its on-board J-Link. The rest is written from
+SEGGER's documentation. How Commander's replies are read is the part most
+likely to need putting right, and is kept in a few small functions for that
+reason.
 
 Commander says little while it works, so progress is the start and the end
 and nothing between.
@@ -23,7 +24,6 @@ and nothing between.
 
 from __future__ import annotations
 
-import csv
 import os
 import re
 import shutil
@@ -49,7 +49,7 @@ from pyflashgui.backends.base import (
     _nothing,
 )
 from pyflashgui.core.images import Segment
-from pyflashgui.core.memory_map import Region
+from pyflashgui.core.memory_map import FLASH, RAM, Region
 
 #: What Commander is called: JLink.exe on Windows, JLinkExe elsewhere.
 PROGRAM = "JLink.exe" if sys.platform == "win32" else "JLinkExe"
@@ -70,6 +70,10 @@ NOT_FOUND = (
     "or say where it is with Tools > Settings > J-Link Commander location."
 )
 
+#: Said by Commander when the probe is there and the device does not answer.
+#: Looked for as well as its exit code, which has been seen to be 0 with it.
+NO_TARGET = "Cannot connect to target"
+
 #: Where Commander is, when it has been said. None to go and look.
 _chosen: list[str] | None = None
 
@@ -89,6 +93,18 @@ def set_commander(command: str | Sequence[str] | None) -> None:
         _chosen = list(command)
 
 
+def _version(folder: Path) -> tuple[int, int, str]:
+    """The version in a folder's name, for sorting: JLink_V812a is (8, 12, "a").
+
+    A folder with none sorts first, as the one SEGGER's installer keeps up
+    to date when it is told to replace what is there.
+    """
+    found = re.search(r"V(\d+)(\d\d)([a-z]?)", folder.name, re.I)
+    if found is None:
+        return (10**6, 0, "")
+    return (int(found.group(1)), int(found.group(2)), found.group(3).lower())
+
+
 def _installed() -> list[Path]:
     """The folders SEGGER's installer uses, newest version first."""
     if sys.platform == "win32":
@@ -104,9 +120,8 @@ def _installed() -> list[Path]:
     found: list[Path] = []
     for root in roots:
         if root.is_dir():
-            # "JLink" for the current one, "JLink_V812" for each kept beside it.
-            found += sorted((p for p in root.glob("JLink*") if p.is_dir()), reverse=True)
-    return found
+            found += [p for p in root.glob("JLink*") if p.is_dir()]
+    return sorted(found, key=_version, reverse=True)
 
 
 def find_commander() -> list[str] | None:
@@ -133,9 +148,33 @@ def _is_seggers(program: Path) -> bool:
     return any(folder.glob("JLink*.dll")) or any(folder.glob("libjlinkarm*"))
 
 
-def _quoted(path: Path | str) -> str:
-    """A path as a command file takes one: in quotes, for the spaces in it."""
-    return f'"{path}"'
+def _short(path: str) -> str:
+    """Windows' short name for a path, which has no spaces in it. The path
+    itself where there is none to be had."""
+    if sys.platform != "win32":
+        return path
+    try:
+        import ctypes
+
+        buffer = ctypes.create_unicode_buffer(1024)
+        got = ctypes.windll.kernel32.GetShortPathNameW(path, buffer, len(buffer))
+        return buffer.value if 0 < got < len(buffer) else path
+    except (AttributeError, OSError):
+        return path
+
+
+def _named(path: Path | str) -> str:
+    """A path as a command in a command file can take it.
+
+    Commander is not sure to take a space in one, quoted or not. So a path
+    with a space in it, or a letter outside ASCII, is given by the short name
+    Windows keeps for it; and it goes in quotes regardless, which a J-Link
+    has been seen to accept.
+    """
+    text = str(path)
+    if " " in text or not text.isascii():
+        text = _short(text)
+    return f'"{text}"'
 
 
 def _why(output: str) -> str:
@@ -145,7 +184,12 @@ def _why(output: str) -> str:
     well. The lines that name a failure are the ones worth showing; with
     none that look like one, the last few are the best there is.
     """
-    lines = [line.strip() for line in output.splitlines() if line.strip()]
+    lines = [
+        line.strip()
+        for line in output.splitlines()
+        # Its own announcement that it is stopping says nothing about why.
+        if line.strip() and "will now exit" not in line.lower()
+    ]
     telling = [
         line
         for line in lines
@@ -190,7 +234,8 @@ def run(arguments: Sequence[str], commands: Sequence[str], timeout: float, doing
         except OSError as exc:
             raise BackendError(f"{doing} failed: J-Link Commander would not start: {exc}") from exc
     output = (done.stdout or "") + (done.stderr or "")
-    if done.returncode != 0:
+    wanted_a_target = "-AutoConnect" in arguments
+    if done.returncode != 0 or (wanted_a_target and NO_TARGET.lower() in output.lower()):
         raise BackendError(f"{doing} failed: {_why(output)}")
     return output
 
@@ -199,6 +244,12 @@ def run(arguments: Sequence[str], commands: Sequence[str], timeout: float, doing
 #: One line of ShowEmuList for each J-Link:
 #: ``J-Link[0]: Connection: USB, Serial number: 801012345, ProductName: J-Link PLUS``
 _PROBE = re.compile(r"Serial number:\s*(\d+)(?:.*?ProductName:\s*([^,\r\n]+))?", re.I)
+
+#: One line of the device list ExpDevList writes: the maker, the device and
+#: its core, each in quotes, and then its memory in braces.
+_DEVICE = re.compile(r'^\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,\s*"([^"]*)"\s*,?(.*)$')
+#: A stretch of memory inside the braces: where it starts and how long it is.
+_AREA = re.compile(r"0x([0-9A-Fa-f]+)\s*,\s*0x([0-9A-Fa-f]+)")
 
 
 def parse_probes(output: str) -> list[ProbeInfo]:
@@ -210,31 +261,89 @@ def parse_probes(output: str) -> list[ProbeInfo]:
     return list(probes.values())
 
 
-def parse_devices(text: str) -> list[TargetInfo]:
+def _groups(text: str) -> list[str]:
+    """The outermost ``{...}`` groups of a line, braces inside them included."""
+    groups, depth, start = [], 0, 0
+    for index, char in enumerate(text):
+        if char == "{":
+            if depth == 0:
+                start = index
+            depth += 1
+        elif char == "}" and depth:
+            depth -= 1
+            if depth == 0:
+                groups.append(text[start : index + 1])
+    return groups
+
+
+def _areas(group: str) -> list[tuple[int, int]]:
+    """The (start, length) of each stretch of memory in one group, empty ones left out."""
+    pairs = [(int(start, 16), int(length, 16)) for start, length in _AREA.findall(group)]
+    return [pair for pair in pairs if pair[1] > 0]
+
+
+class Device:
+    """One device Commander knows: who makes it, its core and its memory."""
+
+    def __init__(
+        self,
+        maker: str,
+        name: str,
+        core: str,
+        flash: list[tuple[int, int]],
+        ram: list[tuple[int, int]],
+    ) -> None:
+        self.maker, self.name, self.core = maker, name, core
+        self.flash, self.ram = flash, ram
+
+    def regions(self) -> list[Region]:
+        """Its memory as pyflashgui's regions, lowest address first.
+
+        Numbered, since SEGGER's list gives the areas no names. Nothing is
+        known of how the flash is divided into sectors, so that is left as
+        not known rather than made up.
+        """
+        made = [
+            Region(f"Flash {index}", start, length, FLASH)
+            for index, (start, length) in enumerate(self.flash)
+        ]
+        made += [
+            Region(f"RAM {index}", start, length, RAM)
+            for index, (start, length) in enumerate(self.ram)
+        ]
+        return sorted(made, key=lambda region: region.start)
+
+
+def parse_devices(text: str) -> list[Device]:
     """The devices in the list Commander writes out with ExpDevList.
 
-    A line for each, its first two fields the maker and the device's name in
-    quotes. The fields after them describe its memory, in a form that has
-    not been checked against the real thing, and are left alone: a memory map
-    read wrongly would refuse files that are perfectly good.
+    A line for each: three fields in quotes -- maker, device, core -- then a
+    group in braces of its flash areas and another of its RAM areas, each
+    area a start and a length in hexadecimal. A line that is not one of
+    those, the line of headings among them, is passed over.
     """
-    devices: dict[str, TargetInfo] = {}
-    for row in csv.reader(text.splitlines(), skipinitialspace=True):
-        if len(row) < 2:
+    devices: dict[str, Device] = {}
+    for line in text.splitlines():
+        found = _DEVICE.match(line)
+        if found is None:
             continue
-        maker, name = row[0].strip(), row[1].strip()
+        maker, name, core = (found.group(i).strip() for i in (1, 2, 3))
         if not name or name.lower() == "device":
-            continue  # a blank line, or the line of headings
-        devices.setdefault(name, TargetInfo(name, vendor=maker, source="J-Link software"))
+            continue
+        groups = _groups(found.group(4))
+        flash = _areas(groups[0]) if groups else []
+        ram = _areas(groups[1]) if len(groups) > 1 else []
+        devices.setdefault(name.upper(), Device(maker, name, core, flash, ram))
     return sorted(devices.values(), key=lambda device: device.name.lower())
 
 
 class JLinkConnection(Connection):
     """A probe and a device that have answered once, and how to reach them again."""
 
-    def __init__(self, arguments: list[str], device: str) -> None:
+    def __init__(self, arguments: list[str], device: str, regions: list[Region]) -> None:
         self._arguments: list[str] | None = arguments
         self._device = device
+        self._regions = regions
 
     def _run(self, commands: Sequence[str], timeout: float, doing: str) -> str:
         if self._arguments is None:
@@ -242,12 +351,18 @@ class JLinkConnection(Connection):
         return run(self._arguments, commands, timeout, doing)
 
     def regions(self) -> list[Region]:
-        # Commander knows the device's memory and has no way of being asked
-        # for it that has been checked here, so the map says it could not.
-        return []
+        return list(self._regions)
 
     def erase_chip(self) -> None:
-        self._run(["Erase"], WORK_S, f"Erasing {self._device}")
+        self._run(["H", "Erase"], WORK_S, f"Erasing {self._device}")
+
+    def erase_ranges(self, ranges: Sequence[tuple[int, int]]) -> None:
+        # Erase takes the first and the last address, and erases every
+        # sector that any of the range falls in.
+        commands = ["H"] + [
+            f"Erase 0x{start:08X} 0x{start + length - 1:08X}" for start, length in ranges
+        ]
+        self._run(commands, WORK_S, f"Erasing part of {self._device}")
 
     def program(
         self,
@@ -269,23 +384,29 @@ class JLinkConnection(Connection):
             # memory map, and Commander reads them once.
             path = Path(folder) / "image.hex"
             path.write_text(image.as_ihex(), encoding="ascii")
-            commands = ["R", "H"]
+            # Stopped, and not restarted first: a device is programmed as it
+            # is found, and restarting it is Reset's to do afterwards.
+            commands = ["H"]
             if erase == ERASE_CHIP:
                 commands.append("Erase")
             # LoadFile erases the sectors it writes to, and checks what it
             # wrote, by itself.
-            commands.append(f"LoadFile {_quoted(path)}")
+            commands.append(f"LoadFile {_named(path)}")
             self._run(commands, WORK_S, f"Programming {self._device}")
         progress(1.0)
 
-    def read(self, address: int, length: int) -> bytes:
+    def read(self, address: int, length: int, resume: bool = False) -> bytes:
+        """Stopped while it is read, so that what is read is one moment's.
+
+        ``resume`` sets the device going again afterwards, for a read that
+        somebody asked for of a device that was running.
+        """
         with tempfile.TemporaryDirectory(prefix="pyflashgui-jlink-") as folder:
             path = Path(folder) / "read.bin"
-            self._run(
-                [f"SaveBin {_quoted(path)} 0x{address:X} 0x{length:X}"],
-                WORK_S,
-                f"Reading {length} bytes at {address:08X}",
-            )
+            commands = ["H", f"SaveBin {_named(path)} 0x{address:X} 0x{length:X}"]
+            if resume:
+                commands.append("G")
+            self._run(commands, WORK_S, f"Reading {length} bytes at {address:08X}")
             try:
                 data = path.read_bytes()
             except OSError as exc:
@@ -310,7 +431,7 @@ class JLinkConnection(Connection):
         if cancelled():
             raise CancelledError("Reading was cancelled.")
         progress(0.0)
-        data = self.read(address, length)
+        data = self.read(address, length, resume=True)
         progress(1.0)
         return data
 
@@ -356,11 +477,16 @@ class JLinkBackend(Backend):
     name = "jlink"
     label = "J-Link Commander"
     interfaces = INTERFACES
+    #: SEGGER's list says where a device's memory is, and not every address
+    #: it can be reached by: flash that also appears at a second address is
+    #: listed once. So a file outside the list may still be one it takes.
+    map_is_complete = False
 
     def __init__(self) -> None:
-        #: The devices Commander knows, once it has been asked: the list is
-        #: thousands long and does not change while pyflashgui runs.
-        self._devices: list[TargetInfo] | None = None
+        #: The devices Commander knows, by name in capitals, once it has been
+        #: asked: the list is thousands long and does not change while
+        #: pyflashgui runs.
+        self._devices: dict[str, Device] | None = None
 
     def probes(self) -> list[ProbeInfo]:
         # No -ExitOnError: with no J-Link plugged in Commander fails to open
@@ -368,26 +494,39 @@ class JLinkBackend(Backend):
         output = run([], ["ShowEmuList USB"], QUICK_S, "Looking for J-Links")
         return parse_probes(output)
 
-    def targets(self) -> list[TargetInfo]:
+    def _known(self) -> dict[str, Device]:
         if self._devices is not None:
-            return list(self._devices)
+            return self._devices
         if find_commander() is None:
             # Said once, by the probes: the target can still be typed in.
-            return []
+            return {}
         with tempfile.TemporaryDirectory(prefix="pyflashgui-jlink-") as folder:
             path = Path(folder) / "devices.csv"
             try:
-                run([], [f"ExpDevList {_quoted(path)}"], LIST_S, "Listing the devices")
-                text = path.read_text(encoding="utf-8", errors="replace")
+                run([], [f"ExpDevList {_named(path)}"], LIST_S, "Listing the devices")
+                # Not UTF-8: a maker's name has been seen with a letter in
+                # it that is not, and latin-1 reads any byte there is.
+                text = path.read_text(encoding="latin-1")
             except (BackendError, OSError):
                 # A Commander that will not write the list still programs a
                 # device whose name is typed in.
                 text = ""
-        self._devices = parse_devices(text)
-        return list(self._devices)
+        self._devices = {device.name.upper(): device for device in parse_devices(text)}
+        return self._devices
+
+    def device(self, target: str) -> Device | None:
+        """What is known of the device of this name, whatever its capitals."""
+        return self._known().get(target.strip().upper())
+
+    def targets(self) -> list[TargetInfo]:
+        return [
+            TargetInfo(device.name, vendor=device.maker, source="J-Link software", core=device.core)
+            for device in self._known().values()
+        ]
 
     def regions(self, target: str) -> list[Region]:
-        return []
+        device = self.device(target)
+        return device.regions() if device is not None else []
 
     def connect(
         self,
@@ -421,7 +560,10 @@ class JLinkBackend(Backend):
         if chosen in ("JTAG", "cJTAG"):
             # Let it work out where the device sits in the scan chain.
             arguments += ["-JTAGConf", "-1,-1"]
+        # Looked up first, while nothing is attached: it may mean asking
+        # Commander for its list of devices, which is a run of its own.
+        regions = self.regions(target)
         # With nothing to do but leave: a run that comes back clean has
         # opened the probe and found the device answering.
         run(arguments, [], QUICK_S, f"Connecting to {target}")
-        return JLinkConnection(arguments, target)
+        return JLinkConnection(arguments, target, regions)

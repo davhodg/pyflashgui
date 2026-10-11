@@ -162,11 +162,17 @@ def _overlaps(pieces: Iterable[Piece]) -> list[Problem]:
     return problems
 
 
-def _placement(piece: Piece) -> Problem | None:
+def _placement(piece: Piece, complete: bool = True) -> Problem | None:
     """What is wrong with where one piece lands, if anything is."""
     what = f"{piece.source}: {_bytes(piece.length)} at {_span(piece.address, piece.end)}"
     region = piece.region
     if region is None:
+        if not complete:
+            return Problem(
+                WARNING,
+                f"{what} are outside the memory listed for this target, which may not "
+                "be all of it.",
+            )
         return Problem(ERROR, f"{what} are outside the target's memory.")
     if region.alias_of:
         return Problem(
@@ -204,8 +210,13 @@ def _usage(pieces: Iterable[Piece], regions: Sequence[Region]) -> list[Usage]:
     return out
 
 
-def lay_out(images: Iterable[Image], regions: Sequence[Region]) -> Layout:
+def lay_out(images: Iterable[Image], regions: Sequence[Region], complete: bool = True) -> Layout:
     """Where every byte of these files would go on a target with this memory.
+
+    ``complete`` says whether the regions are every address the target can
+    be written at. Where they may not be, bytes outside them are a warning
+    and not an error: refusing a file that the target would have taken is
+    worse than passing on one that it will refuse for itself.
 
     With no regions -- a target whose memory is not known until it is
     connected to -- the pieces are still listed and overlaps still found, and
@@ -217,6 +228,7 @@ def lay_out(images: Iterable[Image], regions: Sequence[Region]) -> Layout:
             layout.pieces += _split(image.name, segment.address, len(segment), regions)
     layout.problems += _overlaps(layout.pieces)
     if layout.checked:
-        layout.problems += [p for p in map(_placement, layout.pieces) if p is not None]
+        found = (_placement(piece, complete) for piece in layout.pieces)
+        layout.problems += [p for p in found if p is not None]
         layout.usage = _usage(layout.pieces, regions)
     return layout

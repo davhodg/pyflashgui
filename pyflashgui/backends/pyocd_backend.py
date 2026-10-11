@@ -103,6 +103,27 @@ class PyocdConnection(Connection):
         except Exception as exc:
             raise _said("Erasing the flash", exc) from exc
 
+    def erase_ranges(self, ranges: Sequence[tuple[int, int]]) -> None:
+        from pyocd.flash.eraser import FlashEraser
+
+        flash = [r for r in self.regions() if r.kind == FLASH and not r.alias_of]
+        for start, length in ranges:
+            # Checked here: asked to erase what is not flash, pyOCD stops
+            # with a line in its own log and no error, having erased
+            # nothing, and that would be reported as done.
+            if not any(r.start <= start and start + length <= r.end for r in flash):
+                raise BackendError(
+                    f"{start:08X} to {start + length - 1:08X} is not all within one "
+                    "region of the target's flash."
+                )
+        try:
+            # pyOCD takes where each range starts and where it stops.
+            FlashEraser(self._session, FlashEraser.Mode.SECTOR).erase(
+                [(start, start + length) for start, length in ranges]
+            )
+        except Exception as exc:
+            raise _said("Erasing the flash", exc) from exc
+
     def program(
         self,
         segments: Sequence[Segment],

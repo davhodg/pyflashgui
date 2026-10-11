@@ -98,6 +98,22 @@ class SimulatedConnection(Connection):
             if region.kind == FLASH and not region.alias_of:
                 board.memory[region.name][:] = bytes([ERASED]) * region.length
 
+    def erase_ranges(self, ranges: Sequence[tuple[int, int]]) -> None:
+        board = self._open()
+        # Everything is placed before anything is erased, so that a range
+        # that is not flash leaves the target as it was.
+        placed = [self._place(board, start, length) for start, length in ranges]
+        for runs in placed:
+            for region, _offset, _length in runs:
+                if region.kind != FLASH:
+                    raise BackendError(f"{region.name} is not flash, and cannot be erased.")
+        for runs in placed:
+            for region, offset, length in runs:
+                size = region.sector_size
+                start = offset // size * size
+                stop = -(-(offset + length) // size) * size
+                board.memory[region.name][start:stop] = bytes([ERASED]) * (stop - start)
+
     def _place(self, board: _Board, address: int, length: int) -> list[tuple[Region, int, int]]:
         """A run of bytes as (region, offset in it, length), region by region."""
         out = []

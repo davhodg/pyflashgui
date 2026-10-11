@@ -30,9 +30,8 @@ from pyflashgui.backends.base import (
     Connection,
     Verification,
 )
-from pyflashgui.core import images
 from pyflashgui.core.events import EventLog
-from pyflashgui.core.images import Image, ImageError, Segment
+from pyflashgui.core.images import Image, Segment
 from pyflashgui.core.memory_map import Region
 from pyflashgui.core.worker import Worker
 
@@ -79,6 +78,9 @@ class Flasher(QObject):
     regions_changed = Signal()
     #: An operation ended: its name, and whether it did what was asked.
     finished = Signal(str, bool)
+    #: Memory was read from a target: where it starts, the bytes, and the
+    #: target they came from.
+    memory_read = Signal(int, bytes, str)
 
     def __init__(
         self,
@@ -269,17 +271,31 @@ class Flasher(QObject):
         return self.connection
 
     # --- what is done to a target ----------------------------------------------------
-    def erase(self) -> None:
+    def erase(self, ranges: Sequence[tuple[int, int]] | None = None) -> None:
+        """Erase all of the target's flash, or these stretches of it.
+
+        Each of ``ranges`` is an address and a length.
+        """
         if (connection := self._connection("Erasing")) is None:
             return
+        target = self.target
         started = time.monotonic()
+        if ranges is None:
+            what = f"all of the flash of {target}"
+            work = connection.erase_chip
+        else:
+            asked = list(ranges)
+            what = ", ".join(f"{a:08X} to {a + n - 1:08X}" for a, n in asked) + f" of {target}"
+
+            def work() -> None:
+                connection.erase_ranges(asked)
 
         def done(_result) -> None:
             took = time.monotonic() - started
-            self.events.good(f"Erased all of the flash of {self.target} in {took:.1f} s.")
+            self.events.good(f"Erased {what} in {took:.1f} s.")
 
-        if self._run("Erasing", connection.erase_chip, done):
-            self.events.information(f"Erasing all of the flash of {self.target}...")
+        if self._run("Erasing", work, done):
+            self.events.information(f"Erasing {what}...")
             self.progress.emit("Erasing", 0.0)
 
     def program(
@@ -353,39 +369,24 @@ class Flasher(QObject):
 
         self._run("Verifying", work, done)
 
-    def read_back(self, address: int, length: int, path: str, trim: bool = False) -> None:
-        """Read this much of the target's memory and save it in this file.
+    def read_memory(self, address: int, length: int) -> None:
+        """Read this much of the target's memory, and say so with ``memory_read``.
 
-        ``trim`` leaves off the erased bytes after the last one that holds
-        something, so that the file is the size of what is there.
+        Into memory and not into a file: most reads are to look at what is
+        there, and whoever shows it can save it once it has been looked at.
         """
         if (connection := self._connection("Reading")) is None:
             return
         target = self.target
 
-        def work() -> tuple[str, int] | None:
-            data = connection.read_range(
+        def work() -> bytes:
+            return connection.read_range(
                 address, length, self._progress("Reading"), self._cancel.is_set
             )
-            if trim:
-                data = data.rstrip(b"\xff")
-            if not data:
-                return None
-            try:
-                return images.write(path, address, data), len(data)
-            except ImageError as exc:
-                raise BackendError(f"Saving to {path} failed: {exc}") from exc
 
-        def done(result: tuple[str, int] | None) -> bool:
-            where = f"{size_text(length)} at {address:08X} of {target}"
-            if result is None:
-                self.events.warning(
-                    f"Read {where}: all of it is erased, so there was nothing to save."
-                )
-                return True
-            fmt, saved = result
-            self.events.good(f"Read {where}, and saved {size_text(saved)} as {fmt} in {path}.")
-            return True
+        def done(data: bytes) -> None:
+            self.events.good(f"Read {size_text(len(data))} at {address:08X} of {target}.")
+            self.memory_read.emit(address, data, target)
 
         if self._run("Reading", work, done):
             self.events.information(f"Reading {size_text(length)} at {address:08X} of {target}...")

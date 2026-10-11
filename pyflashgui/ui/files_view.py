@@ -39,8 +39,8 @@ from pyflashgui.core.images import Image, ImageError
 from pyflashgui.core.memory_map import lay_out
 from pyflashgui.ui import folders, fonts
 from pyflashgui.ui.confirm import Confirmations
+from pyflashgui.ui.erase_dialog import EraseDialog
 from pyflashgui.ui.persist import remember
-from pyflashgui.ui.read_dialog import ReadDialog
 
 FILES_KEY = "files.list"
 
@@ -92,6 +92,8 @@ class FilesView(QWidget):
     #: The files, or what is in one of them, changed: the memory map is out
     #: of date.
     changed = Signal()
+    #: Read... was pressed: the window asks what to read and reads it.
+    read_requested = Signal()
 
     def __init__(self, flasher: Flasher, ctx: Context, confirm: Confirmations) -> None:
         super().__init__()
@@ -148,18 +150,20 @@ class FilesView(QWidget):
             "Compare what is in the target with the ticked files, changing nothing."
         )
         self.verify_button.clicked.connect(self.verify)
-        self.erase_button = QPushButton("Erase")
-        self.erase_button.setToolTip("Erase all of the target's flash.")
+        self.erase_button = QPushButton("Erase...")
+        self.erase_button.setToolTip(
+            "Erase the target's flash: all of it, some of its regions, or a range."
+        )
         self.erase_button.clicked.connect(self.erase)
         self.reset_button = QPushButton("Reset")
         self.reset_button.setToolTip("Restart the target.")
         self.reset_button.clicked.connect(self.flasher.reset)
         self.read_button = QPushButton("Read...")
         self.read_button.setToolTip(
-            "Read part of the target's memory back and save it in a file,\n"
-            "changing nothing in the target."
+            "Read part of the target's memory back and show it in the Memory\n"
+            "pane, changing nothing in the target. It can be saved from there."
         )
-        self.read_button.clicked.connect(self.read_back)
+        self.read_button.clicked.connect(self.read_requested.emit)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
@@ -383,7 +387,7 @@ class FilesView(QWidget):
             return
         # Checked against the target that is actually connected, with the
         # bytes that were just read: the same check the Memory Map shows.
-        layout = lay_out(files, self.flasher.regions)
+        layout = lay_out(files, self.flasher.regions, self.flasher.backend.map_is_complete)
         for problem in layout.problems:
             self.ctx.events.post(problem.message, problem.level)
         if not layout.programmable:
@@ -415,32 +419,29 @@ class FilesView(QWidget):
             self.flasher.verify(files)
 
     def erase(self) -> None:
-        target = self.flasher.target
-        if self._may(
-            "erase",
-            f"Erase all of the flash of {target}?",
-            "Everything it holds is lost, and it will not run until it is "
-            "programmed again. It cannot be undone.",
-        ):
-            self.flasher.erase()
-
-    def read_back(self) -> None:
-        """Ask what to read and where to put it, and read it."""
-        dialog = ReadDialog(self.flasher.regions, self)
-        if dialog.exec() != ReadDialog.Accepted or (asked := dialog.values()) is None:
+        """Ask how much to erase, ask whether to, and erase it."""
+        dialog = EraseDialog(self.flasher.regions, self)
+        if dialog.exec() != EraseDialog.Accepted:
             return
-        address, length, trim = asked
-        path = folders.save_file(
-            self,
-            self.ctx,
-            folders.EXPORT,
-            "Save what is read",
-            images.WRITE_FILTER,
-            Path.home(),
-            suggested=folders.stamped(f"{self.flasher.target}_{address:08X}", ".bin"),
-        )
-        if path:
-            self.flasher.read_back(address, length, path, trim)
+        ok, ranges = dialog.chosen()
+        if not ok:
+            return
+        target = self.flasher.target
+        if ranges is None:
+            title = f"Erase all of the flash of {target}?"
+            text = (
+                "Everything it holds is lost, and it will not run until it is "
+                "programmed again. It cannot be undone."
+            )
+        else:
+            title = f"Erase part of the flash of {target}?"
+            spans = ", ".join(f"{a:08X} to {a + n - 1:08X}" for a, n in ranges)
+            text = (
+                f"What is in {spans} is lost, with the rest of every sector those "
+                "addresses fall in. It cannot be undone."
+            )
+        if self._may("erase", title, text):
+            self.flasher.erase(ranges)
 
     # --- following the flasher -------------------------------------------------------
     def _enable(self) -> None:

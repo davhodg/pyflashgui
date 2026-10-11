@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""Reading a target's memory back into a file."""
+"""Reading a target's memory back, looking at it, and saving it."""
 
 import sys
 import time
@@ -18,6 +18,7 @@ from pyflashgui.core.events import EventLog
 from pyflashgui.core.flasher import Flasher
 from pyflashgui.core.images import Segment
 from pyflashgui.core.memory_map import FLASH, RAM, Region
+from pyflashgui.ui.memory_view import MemoryModel, text_of
 from pyflashgui.ui.read_dialog import ReadDialog, parse_number
 
 PROBE = "SIM0001"
@@ -109,7 +110,11 @@ def flasher(app):
     events = EventLog()
     made = Flasher(events, backend="simulated")
     made.said = []
+    made.read = []
     events.posted.connect(lambda message, level: made.said.append((level, message)))
+    made.memory_read.connect(
+        lambda address, data, target: made.read.append((address, data, target))
+    )
     made.connect_to(PROBE, "sim_single")
     wait_for(lambda: made.connected)
     yield made
@@ -121,55 +126,35 @@ def finish(flasher) -> None:
     QCoreApplication.processEvents()
 
 
-def test_reading_back_saves_what_is_in_the_target_and_says_so(flasher, tmp_path):
+def test_a_read_goes_into_memory_and_is_announced(flasher):
     data = pattern(5000)
     flasher.program([images.Image("a.bin", images.BINARY, (Segment(FLASH_AT, data),))], reset=False)
     finish(flasher)
-    path = tmp_path / "read.hex"
-    flasher.read_back(FLASH_AT, 5000, str(path))
+    flasher.read_memory(FLASH_AT, 5000)
+    assert flasher.busy
     finish(flasher)
-    assert images.read(str(path)).segments == (Segment(FLASH_AT, data),)
-    level, line = flasher.said[-1]
-    assert level == "good"
-    assert line == (
-        f"Read 4.9 KiB at 08000000 of sim_single, and saved 4.9 KiB as Intel HEX in {path}."
-    )
+    assert flasher.read == [(FLASH_AT, data, "sim_single")]
+    assert flasher.said[-1] == ("good", "Read 4.9 KiB at 08000000 of sim_single.")
 
 
-def test_the_erased_bytes_at_the_end_can_be_left_off(flasher, tmp_path):
-    flasher.program(
-        [images.Image("a.bin", images.BINARY, (Segment(FLASH_AT, b"\x01\xff\x02"),))], reset=False
-    )
-    finish(flasher)
-    whole, trimmed = tmp_path / "whole.bin", tmp_path / "trimmed.bin"
-    flasher.read_back(FLASH_AT, 0x100, str(whole))
-    finish(flasher)
-    flasher.read_back(FLASH_AT, 0x100, str(trimmed), trim=True)
-    finish(flasher)
-    assert whole.read_bytes() == b"\x01\xff\x02" + b"\xff" * 0xFD
-    assert trimmed.read_bytes() == b"\x01\xff\x02", "an FF in the middle is part of what is there"
-    assert "saved 3 bytes as raw binary" in flasher.said[-1][1]
-
-
-def test_flash_that_is_all_erased_saves_nothing_and_says_why(flasher, tmp_path):
-    path = tmp_path / "empty.bin"
-    flasher.read_back(FLASH_AT, 0x100, str(path), trim=True)
-    finish(flasher)
-    assert not path.exists()
-    assert flasher.said[-1] == (
-        "warning",
-        "Read 256 bytes at 08000000 of sim_single: all of it is erased, so there was nothing "
-        "to save.",
-    )
-
-
-def test_memory_the_target_does_not_have_and_a_file_that_cannot_be_made(flasher, tmp_path):
-    flasher.read_back(0x4000_0000, 16, str(tmp_path / "a.bin"))
+def test_memory_the_target_does_not_have_is_an_error_and_nothing_is_announced(flasher):
+    flasher.read_memory(0x4000_0000, 16)
     finish(flasher)
     assert flasher.said[-1] == ("error", "The target has no memory at 40000000.")
-    flasher.read_back(FLASH_AT, 16, str(tmp_path / "nowhere" / "a.bin"))
-    finish(flasher)
-    assert flasher.said[-1][0] == "error" and flasher.said[-1][1].startswith("Saving to ")
+    assert flasher.read == []
+
+
+def test_nothing_is_read_with_nothing_connected(app):
+    events = EventLog()
+    said = []
+    events.posted.connect(lambda message, level: said.append((level, message)))
+    made = Flasher(events, backend="simulated")
+    try:
+        made.read_memory(FLASH_AT, 16)
+        assert not made.busy
+        assert said == [("warning", "Reading needs a probe connected to a target first.")]
+    finally:
+        made.shutdown()
 
 
 # --- the dialog -----------------------------------------------------------------------
@@ -186,7 +171,7 @@ def test_the_dialog_opens_on_the_flash_with_its_address_and_length(app):
     assert dialog.region.currentText() == "xip (flash, 16.0 MiB at 10000000)"
     assert dialog.address.text() == "10000000" and dialog.length.text() == "1000000"
     assert dialog.size.text() == "16.0 MiB"
-    assert dialog.values() == (0x1000_0000, 0x100_0000, True)
+    assert dialog.values() == (0x1000_0000, 0x100_0000)
     names = [dialog.region.itemText(i).split()[0] for i in range(dialog.region.count())]
     assert names == ["bootrom", "xip", "sram", "Another"], "an alias is not offered twice"
 
@@ -194,10 +179,9 @@ def test_the_dialog_opens_on_the_flash_with_its_address_and_length(app):
 def test_another_region_fills_in_and_both_can_be_typed_over(app):
     dialog = ReadDialog(REGIONS)
     dialog.region.setCurrentIndex(2)
-    assert dialog.values() == (0x2000_0000, 0x4_0000, True)
+    assert dialog.values() == (0x2000_0000, 0x4_0000)
     dialog.length.setText("0x1_0000")
-    dialog.trim.setChecked(False)
-    assert dialog.values() == (0x2000_0000, 0x1_0000, False)
+    assert dialog.values() == (0x2000_0000, 0x1_0000)
     assert dialog.size.text() == "64.0 KiB"
 
 
@@ -212,7 +196,7 @@ def test_what_will_not_do_is_said_in_the_dialog(app):
     dialog.length.setText("100")
     assert dialog.values() is None and "past the end" in dialog.problem.text()
     dialog.length.setText("10")
-    assert dialog.values() == (0xFFFF_FFF0, 0x10, True) and dialog.problem.text() == ""
+    assert dialog.values() == (0xFFFF_FFF0, 0x10) and dialog.problem.text() == ""
 
 
 def test_with_no_memory_known_the_range_is_typed(app):
@@ -220,7 +204,7 @@ def test_with_no_memory_known_the_range_is_typed(app):
     assert dialog.address.text() == "" and dialog.values() is None
     dialog.address.setText("0")
     dialog.length.setText("400")
-    assert dialog.values() == (0, 0x400, True)
+    assert dialog.values() == (0, 0x400)
 
 
 def test_numbers_are_taken_as_they_are_typed():
@@ -228,8 +212,31 @@ def test_numbers_are_taken_as_they_are_typed():
     assert parse_number("") is None and parse_number("lots") is None
 
 
-# --- from the Files pane --------------------------------------------------------------
-def test_read_asks_what_and_where_and_then_reads(app, tmp_path, monkeypatch):
+# --- the Memory pane ------------------------------------------------------------------
+def test_a_row_is_an_address_sixteen_bytes_and_what_they_spell():
+    model = MemoryModel()
+    model.show(0x0800_0000, b"pyflashgui\x00\x01\xff rows" + bytes(range(0x30, 0x35)))
+    assert model.rowCount() == 2 and model.columnCount() == 3
+    assert model.row(0) == (
+        "08000000",
+        "70 79 66 6C 61 73 68 67  75 69 00 01 FF 20 72 6F",
+        "pyflashgui... ro",
+    )
+    assert model.row(1) == ("08000010", "77 73 30 31 32 33 34", "ws01234"), "a short last row"
+    assert model.data(model.index(1, 0)) == "08000010"
+    assert text_of(bytes([0x1F, 0x20, 0x7E, 0x7F, 0x80])) == ". ~.."
+
+
+def test_a_whole_flash_is_shown_without_being_laid_out_in_advance(app):
+    """A million rows, each worked out as it is drawn."""
+    model = MemoryModel()
+    model.show(0x1000_0000, bytes(16 * 1024 * 1024))
+    assert model.rowCount() == 1024 * 1024
+    assert model.row(1024 * 1024 - 1)[0] == "10FFFFF0"
+
+
+@pytest.fixture
+def window(app, tmp_path, monkeypatch):
     from pyflashgui.core import workspaces
     from pyflashgui.core.settings import Settings
     from pyflashgui.ui import probe_bar
@@ -240,41 +247,147 @@ def test_read_asks_what_and_where_and_then_reads(app, tmp_path, monkeypatch):
     settings = Settings(workspaces.settings_path())
     settings.set(probe_bar.BACKEND_KEY, "simulated")
     settings.set(probe_bar.TARGET_KEY, "sim_single")
-    window = MainWindow()
-    window.show()
-    try:
-        wait_for(lambda: window.probe_bar.chosen_probe() == PROBE and window.flasher.regions)
-        files = window.files_view
-        assert not files.read_button.isEnabled(), "there is nothing connected to read from"
-        window.probe_bar.button.click()
-        wait_for(lambda: window.flasher.connected)
-        assert files.read_button.isEnabled()
+    made = MainWindow()
+    made.said = []
+    made.events.posted.connect(lambda message, level: made.said.append((level, message)))
+    made.show()
+    wait_for(lambda: made.probe_bar.chosen_probe() == PROBE and made.flasher.regions)
+    yield made
+    wait_for(lambda: not made.flasher.busy)
+    made.close()
 
-        saved_as = tmp_path / "out.bin"
-        offered = []
 
+def read(window, monkeypatch, address: str = "", length: str = "") -> None:
+    """Press Read... in the Files pane and answer the dialog."""
+
+    def answer(dialog):
+        if address:
+            dialog.address.setText(address)
+            dialog.length.setText(length)
+        return ReadDialog.Accepted
+
+    monkeypatch.setattr(ReadDialog, "exec", answer)
+    window.files_view.read_button.click()
+    wait_for(lambda: not window.flasher.busy)
+    QCoreApplication.processEvents()
+
+
+def connect_and_program(window, data: bytes) -> None:
+    window.probe_bar.button.click()
+    wait_for(lambda: window.flasher.connected)
+    window.flasher.program(
+        [images.Image("a.bin", images.BINARY, (Segment(FLASH_AT, data),))], reset=False
+    )
+    wait_for(lambda: not window.flasher.busy)
+
+
+def test_the_memory_pane_is_put_away_until_something_is_read(window, monkeypatch):
+    memory = window.memory_view
+    assert not window.panes.on_screen("memory")
+    assert memory.summary.text().startswith("Nothing has been read yet")
+    assert not memory.save_button.isEnabled() and not memory.read_button.isEnabled()
+    assert not window.files_view.read_button.isEnabled(), "nothing is connected to read from"
+
+    connect_and_program(window, b"firmware")
+    assert window.files_view.read_button.isEnabled() and memory.read_button.isEnabled()
+    read(window, monkeypatch, "08000000", "20")
+    assert window.panes.on_screen("memory"), "and it comes out when there is something in it"
+    assert "memory" in window.panes.detached, "in a window of its own"
+    assert memory.model.row(0)[2].startswith("firmware")
+    assert memory.summary.text().startswith(
+        "sim_single: 32 bytes from 08000000 to 0800001F, read at "
+    )
+    assert memory.save_button.isEnabled()
+
+
+def test_reading_saves_no_file_until_save_is_pressed(window, monkeypatch, tmp_path):
+    connect_and_program(window, b"firmware")
+    asked = []
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
+    read(window, monkeypatch, "08000000", "100")
+    assert asked == [], "a read made to look costs no file, and asks for none"
+    assert window.said[-1] == ("good", "Read 256 bytes at 08000000 of sim_single.")
+
+
+def test_the_dialog_opens_on_the_whole_of_the_flash(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch)
+    assert window.memory_view.model.address == FLASH_AT
+    assert len(window.memory_view.model.data_read) == 0x4_0000
+
+
+def test_read_from_the_memory_pane_is_the_same_read(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    monkeypatch.setattr(ReadDialog, "exec", lambda dialog: ReadDialog.Accepted)
+    window.memory_view.read_button.click()
+    wait_for(lambda: not window.flasher.busy and window.memory_view.model.data_read)
+    assert window.memory_view.model.data_read[:8] == b"firmware"
+
+
+def test_what_is_shown_is_saved_as_it_was_read_by_the_name_it_is_given(
+    window, monkeypatch, tmp_path
+):
+    connect_and_program(window, b"\x01\xff\x02")
+    read(window, monkeypatch, "08000000", "100")
+    memory = window.memory_view
+    offered = []
+
+    def save_as(path):
         def answer(_parent, _caption, start, _filter="", _selected=""):
             offered.append(Path(start).name)
-            return str(saved_as), "Raw binary (*.bin)"
+            return str(path), ""
 
-        window.flasher.program(
-            [images.Image("a.bin", images.BINARY, (Segment(FLASH_AT, b"firmware"),))],
-            reset=False,
-        )
-        wait_for(lambda: not window.flasher.busy)
-        monkeypatch.setattr(ReadDialog, "exec", lambda self: ReadDialog.Accepted)
         monkeypatch.setattr(QFileDialog, "getSaveFileName", answer)
-        files.read_button.click()
-        wait_for(lambda: not window.flasher.busy and saved_as.exists())
-        # The whole of the flash, which is what the dialog opens on, less
-        # the erased bytes after what is there.
-        assert saved_as.read_bytes() == b"firmware"
-        assert offered[0].startswith("sim_single_08000000_") and offered[0].endswith(".bin")
-    finally:
-        wait_for(lambda: not window.flasher.busy)
-        window.close()
+        memory.save_button.click()
+
+    whole, trimmed, hexed = tmp_path / "whole.bin", tmp_path / "trimmed.bin", tmp_path / "a.hex"
+    save_as(whole)
+    assert whole.read_bytes() == b"\x01\xff\x02" + b"\xff" * 0xFD, "what was read, all of it"
+    assert offered[0].startswith("sim_single_08000000_") and offered[0].endswith(".bin")
+    assert window.said[-1] == (
+        "good",
+        f"Saved 256 bytes from 08000000 of sim_single as raw binary in {whole}.",
+    )
+
+    memory.trim.setChecked(True)
+    save_as(trimmed)
+    assert trimmed.read_bytes() == b"\x01\xff\x02", "an FF in the middle is part of what is there"
+
+    save_as(hexed)
+    assert images.read(str(hexed)).segments == (Segment(FLASH_AT, b"\x01\xff\x02"),)
 
 
+def test_flash_that_is_all_erased_is_not_saved_as_nothing(window, monkeypatch, tmp_path):
+    window.probe_bar.button.click()
+    wait_for(lambda: window.flasher.connected)
+    read(window, monkeypatch, "08000000", "100")
+    memory = window.memory_view
+    memory.trim.setChecked(True)
+    asked = []
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
+    memory.save_button.click()
+    assert asked == [] and window.said[-1][0] == "warning"
+    assert "there is nothing to save" in window.said[-1][1]
+
+
+def test_a_file_that_cannot_be_made_is_said_and_the_read_is_kept(window, monkeypatch, tmp_path):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "10")
+    nowhere = tmp_path / "no" / "such" / "folder" / "a.bin"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(nowhere), ""))
+    window.memory_view.save_button.click()
+    assert window.said[-1][0] == "error" and window.said[-1][1].startswith("Saving to ")
+    assert window.memory_view.model.data_read[:8] == b"firmware"
+
+
+def test_cancelling_the_dialog_reads_nothing(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    monkeypatch.setattr(ReadDialog, "exec", lambda dialog: ReadDialog.Rejected)
+    window.files_view.read_button.click()
+    assert not window.flasher.busy and not window.memory_view.model.data_read
+
+
+# --- an S-record wide enough ----------------------------------------------------------
 def test_an_s_record_is_given_addresses_wide_enough_for_what_it_holds(tmp_path):
     """Flash at 08000000 saved as .s19, which by its name has 16-bit addresses."""
     low, high = str(tmp_path / "low.s19"), str(tmp_path / "high.s19")

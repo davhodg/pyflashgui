@@ -28,10 +28,18 @@ import bincopy
 HOME = Path(os.environ["COMMANDER_SIM_HOME"])
 FLASH = HOME / "flash.json"
 RUNS = HOME / "runs.json"
+#: Maker, device, core, and its flash and RAM areas as they are written in
+#: the list: a group in braces of (start, length) pairs for each.
 DEVICES = (
-    ("ST", "STM32F103ZE", "Cortex-M3"),
-    ("Raspberry Pi", "RP2350_M33_0", "Cortex-M33"),
-    ("TI", "AM2434_R5F0_0", "Cortex-R5"),
+    ("ST", "STM32F103ZE", "Cortex-M3", "{{0x08000000, 0x00080000}}", "{{0x20000000, 0x00010000}}"),
+    (
+        "NXP",
+        "S32K310",
+        "Cortex-M7",
+        "{{0x00400000, 0x00080000}, {0x10000000, 0x00010000}, {0x1B000000, 0x00000380}}",
+        "{{0x20000000, 0x00008000}, {0x00000000, 0x00000000}}",
+    ),
+    ("TI", "AM2434_R5F0_0", "Cortex-R5", "{}", "{{0x70000000, 0x00200000}}"),
 )
 SECTOR = 0x1000
 ERASED = 0xFF
@@ -79,7 +87,7 @@ def main() -> int:
     if not serials or (wanted and wanted not in serials):
         fail("Connecting to J-Link via USB...FAILED: Cannot connect to J-Link.", options)
     device = options.get("-device")
-    if device and device not in [name for _maker, name, _core in DEVICES]:
+    if device and device not in [row[1] for row in DEVICES]:
         fail(f"Unknown device '{device}' selected.", options)
     if options.get("-autoconnect") == "1" and os.environ.get("COMMANDER_SIM_NO_TARGET"):
         fail("Cannot connect to target.", options)
@@ -99,11 +107,16 @@ def main() -> int:
         elif command == "expdevlist":
             rows = ['"Manufacturer", "Device", "Core", "Flash areas", "RAM areas"']
             rows += [
-                f'"{maker}", "{name}", "{core}", {{0x08000000, 0x00080000}}, '
-                "{0x20000000, 0x00010000}"
-                for maker, name, core in DEVICES
+                f'"{maker}", "{name}", "{core}", {flash}, {ram}'
+                for maker, name, core, flash, ram in DEVICES
             ]
             Path(words[1]).write_text("\n".join(rows) + "\n")
+        elif command == "erase" and len(words) >= 3:
+            # A first and a last address: every sector either falls in goes.
+            first = int(words[1], 0) // SECTOR * SECTOR
+            last = (int(words[2], 0) // SECTOR + 1) * SECTOR
+            flash = {a: v for a, v in flash.items() if not first <= a < last}
+            print("Erasing done.")
         elif command == "erase":
             flash = {}
             print("Erasing done.")

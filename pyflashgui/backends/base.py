@@ -80,6 +80,8 @@ class TargetInfo:
     #: Where the backend's knowledge of it comes from: "built in", or the
     #: pack it was installed with.
     source: str = ""
+    #: The processor in it, where the backend knows: "Cortex-M7".
+    core: str = ""
 
 
 @dataclass(frozen=True)
@@ -119,6 +121,14 @@ class Connection(ABC):
     @abstractmethod
     def erase_chip(self) -> None:
         """Erase all of the target's flash."""
+
+    @abstractmethod
+    def erase_ranges(self, ranges: Sequence[tuple[int, int]]) -> None:
+        """Erase these stretches of flash, each an address and a length.
+
+        Flash is erased a sector at a time, so every sector that any of
+        a range falls in is erased whole.
+        """
 
     @abstractmethod
     def program(
@@ -215,6 +225,10 @@ class Backend(ABC):
     #: The debug interfaces that can be asked for, the first being the
     #: one used when none is. Empty where the backend chooses for itself.
     interfaces: tuple[str, ...] = ()
+    #: Whether ``regions`` is every address the target can be written at.
+    #: Where it is not, a file outside them is worth a warning and is
+    #: not refused: the backend may know of memory that it does not list.
+    map_is_complete: bool = True
 
     @abstractmethod
     def probes(self) -> list[ProbeInfo]:

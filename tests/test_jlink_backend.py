@@ -104,17 +104,52 @@ def test_no_j_link_plugged_in_is_an_empty_list_and_not_a_fault(backend, monkeypa
 
 def test_the_targets_are_the_devices_commander_knows_asked_for_once(backend, home):
     names = {t.name: t for t in backend.targets()}
-    assert set(names) == {"STM32F103ZE", "RP2350_M33_0", "AM2434_R5F0_0"}
+    assert set(names) == {"STM32F103ZE", "S32K310", "AM2434_R5F0_0"}
     assert names["AM2434_R5F0_0"].vendor == "TI", "more than Cortex-M, which is the point"
+    assert names["AM2434_R5F0_0"].core == "Cortex-R5"
     assert names["STM32F103ZE"].source == "J-Link software"
     backend.targets()
     assert sum("ExpDevList" in run["commands"][0] for run in runs(home)) == 1
 
 
-def test_a_devices_memory_is_not_claimed_to_be_known(backend, connection):
-    """Read wrongly, it would refuse files that are perfectly good."""
-    assert backend.regions(DEVICE) == []
-    assert connection.regions() == []
+def test_a_devices_memory_is_what_commanders_list_says(backend, connection):
+    flash, ram = backend.regions(DEVICE)
+    assert (flash.name, flash.start, flash.length, flash.kind) == (
+        "Flash 0",
+        0x0800_0000,
+        0x8_0000,
+        "flash",
+    )
+    assert (ram.name, ram.start, ram.length, ram.kind) == ("RAM 0", 0x2000_0000, 0x1_0000, "ram")
+    assert flash.sector_size == 0, "how it is divided into sectors is not said, so not made up"
+    assert connection.regions() == [flash, ram]
+    assert backend.regions("stm32f103ze") == [flash, ram], "whatever its capitals"
+    assert backend.regions("NOT_A_DEVICE") == []
+
+
+def test_a_device_with_several_flashes_has_each_and_no_empty_ones(backend):
+    """As a real part has them: code flash, data flash and a small one besides."""
+    regions = backend.regions("S32K310")
+    assert [(r.name, r.start, r.length) for r in regions] == [
+        ("Flash 0", 0x0040_0000, 0x8_0000),
+        ("Flash 1", 0x1000_0000, 0x1_0000),
+        ("Flash 2", 0x1B00_0000, 0x380),
+        ("RAM 0", 0x2000_0000, 0x8000),
+    ]
+    assert backend.regions("AM2434_R5F0_0")[0].kind == "ram", "a device with no flash listed"
+
+
+def test_the_list_is_not_claimed_to_be_every_address_a_device_has(backend):
+    """Flash that also appears at a second address is listed once."""
+    from pyflashgui.core.images import BINARY, Image
+    from pyflashgui.core.memory_map import lay_out
+
+    assert backend.map_is_complete is False and backends.get("pyocd").map_is_complete is True
+    elsewhere = Image("app.hex", BINARY, (Segment(0x0C00_0000, bytes(16)),))
+    layout = lay_out([elsewhere], backend.regions(DEVICE), backend.map_is_complete)
+    assert layout.programmable, "a warning, and Commander has the last word"
+    assert layout.problems[0].level == "warning"
+    assert "outside the memory listed for this target" in layout.problems[0].message
 
 
 def test_the_interfaces_on_offer_are_commanders(backend):
@@ -165,8 +200,8 @@ def test_programming_hands_commander_one_hex_file_of_the_bytes_read(connection, 
     seen = []
     connection.program(segments, progress=seen.append)
     commands = runs(home)[-1]["commands"]
-    assert commands[:2] == ["R", "H"]
-    assert commands[2].startswith('LoadFile "') and commands[2].endswith('image.hex"')
+    assert commands[0] == "H", "stopped, and not restarted: it is programmed as it is found"
+    assert commands[1].startswith('LoadFile "') and commands[1].endswith('image.hex"')
     assert commands[-1] == "Exit"
     assert seen == [0.0, 1.0], "the start and the end, which is all Commander gives"
     assert connection.read(FLASH_AT, 32) == b"boot" * 8
@@ -177,7 +212,6 @@ def test_erasing_everything_first_is_an_erase_before_the_load(connection, home):
     connection.program([Segment(FLASH_AT + 0x8000, b"old!")])
     connection.program([Segment(FLASH_AT, b"new!")], erase=ERASE_CHIP)
     assert [c.split()[0] for c in runs(home)[-1]["commands"]] == [
-        "R",
         "H",
         "Erase",
         "LoadFile",
@@ -197,8 +231,11 @@ def test_a_path_with_a_space_in_it_reaches_commander_whole(connection, home, mon
 def test_reading_asks_for_the_bytes_and_checks_it_got_them(connection, home):
     connection.program([Segment(FLASH_AT, b"abcdefgh")])
     assert connection.read(FLASH_AT + 2, 4) == b"cdef"
-    command = runs(home)[-1]["commands"][0]
+    halt, command, leave = runs(home)[-1]["commands"]
+    assert (halt, leave) == ("H", "Exit"), "stopped while it is read, and left stopped"
     assert command.startswith('SaveBin "') and command.endswith(" 0x8000002 0x4")
+    connection.read_range(FLASH_AT, 8)
+    assert runs(home)[-1]["commands"][-2:] == ["G", "Exit"], "a read asked for sets it going again"
 
 
 def test_verifying_reads_each_run_back_once_and_compares(connection, home):
@@ -231,7 +268,7 @@ def test_verifying_stops_between_runs_when_asked(connection):
 def test_erase_and_reset(connection, home):
     connection.program([Segment(FLASH_AT, b"abcd")])
     connection.erase_chip()
-    assert runs(home)[-1]["commands"] == ["Erase", "Exit"]
+    assert runs(home)[-1]["commands"] == ["H", "Erase", "Exit"]
     assert connection.read(FLASH_AT, 4) == b"\xff" * 4
     connection.reset()
     assert runs(home)[-1]["commands"] == ["R", "G", "Exit"]
@@ -266,18 +303,24 @@ def test_probes_are_read_from_the_lines_that_name_one():
     assert parse_probes("Connecting to J-Link via USB...FAILED") == []
 
 
-def test_devices_are_read_by_maker_and_name_and_nothing_else_is_trusted():
+def test_devices_are_read_with_their_core_and_their_memory():
     listed = (
         '"Manufacturer", "Device", "Core", "Flash areas", "RAM areas"\n'
-        '"ST", "STM32F103ZE", "Cortex-M3", {0x08000000, 0x00080000}, {0x20000000, 0x00010000}\n'
+        '"ST", "STM32F103ZE", "Cortex-M3", {{0x08000000, 0x00080000}}, {{0x20000000, 0x00010000}}\n'
+        '"NXP", "S32K310", "Cortex-M7", {{0x00400000, 0x80000}, {0x10000000, 0x10000}}, '
+        "{{0x20000000, 0x8000}, {0x0, 0x0}}\n"
         '"TI", "AM2434_R5F0_0", "Cortex-R5"\n'
+        '"ST", "stm32f103ze", "Cortex-M3", {{0x0, 0x10}}, {}\n'
         "\n"
         "not a row\n"
     )
-    assert [(d.vendor, d.name) for d in parse_devices(listed)] == [
-        ("TI", "AM2434_R5F0_0"),
-        ("ST", "STM32F103ZE"),
-    ]
+    devices = {d.name: d for d in parse_devices(listed)}
+    assert list(devices) == ["AM2434_R5F0_0", "S32K310", "STM32F103ZE"], "each once, by name"
+    assert (devices["S32K310"].maker, devices["S32K310"].core) == ("NXP", "Cortex-M7")
+    assert devices["S32K310"].flash == [(0x0040_0000, 0x8_0000), (0x1000_0000, 0x1_0000)]
+    assert devices["S32K310"].ram == [(0x2000_0000, 0x8000)], "an area of no length is not one"
+    assert devices["AM2434_R5F0_0"].flash == [] and devices["AM2434_R5F0_0"].ram == []
+    assert devices["STM32F103ZE"].flash == [(0x0800_0000, 0x8_0000)], "the first of a name wins"
     assert parse_devices("") == []
 
 
@@ -318,3 +361,59 @@ def test_the_bar_offers_an_interface_only_where_it_can_be_chosen(app, home, monk
         assert not bar._interface_action.isVisible() and bar.chosen_interface() is None
     finally:
         window.close()
+
+
+def test_what_went_wrong_is_the_line_that_says_so_and_not_the_one_that_says_goodbye():
+    """As a J-Link said it, reading an address the XMC4500 does not have."""
+    said = (
+        "Connecting to target via SWD\n"
+        "Cortex-M4 identified.\n"
+        "J-Link Commander will now exit on Error\n"
+        "Reading 1048576 bytes from addr 0x00C00000 into file...Could not read memory.\n"
+    )
+    assert jlink_backend._why(said) == (
+        "Reading 1048576 bytes from addr 0x00C00000 into file...Could not read memory."
+    )
+
+
+# --- erasing part of it ---------------------------------------------------------------
+def test_erasing_a_range_gives_commander_its_first_and_last_address(connection, home):
+    connection.program([Segment(FLASH_AT, bytes(0x3000))])
+    connection.erase_ranges([(FLASH_AT + 0x1000, 0x1000), (FLASH_AT + 0x2800, 0x10)])
+    assert runs(home)[-1]["commands"] == [
+        "H",
+        "Erase 0x08001000 0x08001FFF",
+        "Erase 0x08002800 0x0800280F",
+        "Exit",
+    ]
+    assert connection.read(FLASH_AT, 0x1000) == bytes(0x1000), "what was not asked for is kept"
+    assert connection.read(FLASH_AT + 0x1000, 0x2000) == b"\xff" * 0x2000
+
+
+# --- the things a real J-Link has taught ----------------------------------------------
+def test_a_device_that_does_not_answer_is_a_failure_whatever_the_exit_code(backend, monkeypatch):
+    """Commander has been seen to say so and still leave with nothing wrong."""
+    import subprocess
+
+    def answers_and_leaves(command, **_kwargs):
+        said = "Connecting to target via SWD\nCannot connect to target.\n"
+        return subprocess.CompletedProcess(command, 0, stdout=said, stderr="")
+
+    monkeypatch.setattr(jlink_backend.subprocess, "run", answers_and_leaves)
+    monkeypatch.setattr(backend, "regions", lambda _target: [])
+    with pytest.raises(BackendError, match="Cannot connect to target"):
+        backend.connect(SERIAL, DEVICE)
+
+
+def test_a_path_commander_might_not_take_is_given_by_its_short_name(tmp_path, monkeypatch):
+    monkeypatch.setattr(jlink_backend, "_short", lambda path: "C:/SHORT~1/IMAGE.HEX")
+    assert jlink_backend._named("C:/plain/image.hex") == '"C:/plain/image.hex"'
+    assert jlink_backend._named("C:/a folder/image.hex") == '"C:/SHORT~1/IMAGE.HEX"'
+    assert jlink_backend._named("C:/caf\u00e9/image.hex") == '"C:/SHORT~1/IMAGE.HEX"'
+
+
+def test_the_newest_commander_installed_is_the_one_used(tmp_path):
+    for name in ("JLink_V798a", "JLink_V812", "JLink_V810b", "JLink"):
+        (tmp_path / name).mkdir()
+    ordered = sorted(tmp_path.iterdir(), key=jlink_backend._version, reverse=True)
+    assert [p.name for p in ordered] == ["JLink", "JLink_V812", "JLink_V810b", "JLink_V798a"]

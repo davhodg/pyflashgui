@@ -42,6 +42,7 @@ PAGES = (
     "probe.md",
     "files.md",
     "memory-map.md",
+    "memory.md",
     "about.md",
     "changelog.md",
 )

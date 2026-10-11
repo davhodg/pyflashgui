@@ -13,7 +13,7 @@
 
 A graphical flash programming tool. It works with any debug probe [pyOCD](https://pyocd.io) supports, for Arm Cortex-M targets: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, TI XDS110 and the probes built into many development boards, as well as ST-Link and J-Link. With a J-Link it can also use SEGGER's J-Link Commander, for the many other devices that supports.
 
-**pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device, through pyOCD or through J-Link Commander, has not yet been tried on hardware.
+**pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. On hardware, only reading through J-Link Commander has been tried so far, on one board; programming a real device has not.
 
 ## What it is for
 
@@ -114,7 +114,7 @@ pyflashgui has not yet been tried with any of these probes: this is what pyOCD s
 
 ### Beyond Cortex-M, with a J-Link
 
-pyflashgui can instead drive a J-Link through SEGGER's own J-Link Commander, which comes with SEGGER's J-Link software. That reaches every device SEGGER's software knows -- Cortex-A and Cortex-R, RISC-V and others -- and works with a J-Link and nothing else. SEGGER's software is yours to install, under SEGGER's licence: it is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming. This too has not yet been tried on a probe.
+pyflashgui can instead drive a J-Link through SEGGER's own J-Link Commander, which comes with SEGGER's J-Link software. That reaches every device SEGGER's software knows -- Cortex-A and Cortex-R, RISC-V and others -- and works with a J-Link and nothing else. SEGGER's software is yours to install, under SEGGER's licence: it is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming. Of this, listing the probe, connecting and reading have been tried, on one board.
 
 On Linux a probe is usable without root once a udev rule allows it; pyOCD publishes [a set of them](https://github.com/pyocd/pyOCD/tree/main/udev). Vendor software is never bundled with pyflashgui: install the vendor's own, and pyflashgui finds it.
 

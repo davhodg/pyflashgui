@@ -18,6 +18,7 @@ from PySide6.QtGui import (
 from PySide6.QtWidgets import (
     QApplication,
     QFileDialog,
+    QLabel,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
@@ -26,18 +27,22 @@ from PySide6.QtWidgets import (
 
 from pyflashgui import APP_NAME, __version__
 from pyflashgui.backends import jlink_backend
+from pyflashgui.backends.base import TargetInfo
 from pyflashgui.core import shortcut, timing, workspaces
 from pyflashgui.core.context import Context
 from pyflashgui.core.events import PROBLEMS, EventLog
 from pyflashgui.core.excepthook import ExceptionLogger
-from pyflashgui.core.flasher import Flasher
+from pyflashgui.core.flasher import Flasher, size_text
+from pyflashgui.core.memory_map import FLASH, RAM, Region
 from pyflashgui.ui import event_colours, folders, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.files_view import FilesView
 from pyflashgui.ui.help_menu import HelpMenu
 from pyflashgui.ui.map_view import MapView
+from pyflashgui.ui.memory_view import MemoryView
 from pyflashgui.ui.panes import PaneKind, Panes
 from pyflashgui.ui.probe_bar import ProbeBar
+from pyflashgui.ui.read_dialog import ReadDialog
 
 
 def window_title() -> str:
@@ -54,10 +59,14 @@ def window_title() -> str:
 # Bumped whenever the set of docks changes. restoreState declines a state
 # saved under a different version, so an old layout is replaced by the current
 # default instead of being restored with panes missing.
-LAYOUT_VERSION = 2
+LAYOUT_VERSION = 3
 
 #: Open on a first run. Everything else is one click away in the View menu.
 DEFAULT_VISIBLE = ("files", "map", "log")
+
+#: What the Memory pane opens at, in a window of its own: wide enough for
+#: an address, sixteen bytes and their text.
+MEMORY_PANE_SIZE = (760, 560)
 
 #: How near the bottom of the Event Log still counts as being at the bottom,
 #: in scrollbar steps. Exactly at the end is too strict: a line arriving
@@ -69,6 +78,20 @@ DEFAULT_WIDTH = 1100
 #: Where J-Link Commander is, when it is not where it is looked for.
 COMMANDER_SETTING = "jlink/commander"
 DEFAULT_HEIGHT = 720
+
+
+def describe_device(target: str, info: TargetInfo | None, regions: list[Region]) -> str:
+    """A line about a target: its maker, its core, and its flash and RAM.
+
+    Only what is known. A target with nothing known of it gets no line,
+    rather than a row of dashes.
+    """
+    parts = [part for part in (info.vendor, info.core) if part] if info else []
+    for kind, label in ((FLASH, "flash"), (RAM, "RAM")):
+        total = sum(r.length for r in regions if r.kind == kind and not r.alias_of)
+        if total:
+            parts.append(f"{label} {size_text(total)}")
+    return f"{target}: " + " | ".join(parts) if target and parts else ""
 
 
 class MainWindow(QMainWindow):
@@ -137,15 +160,28 @@ class MainWindow(QMainWindow):
         # what it will do, and what the tool has to say for itself.
         self.files_view = self.panes.view(self.panes.add("files"))
         self.map_view = self.panes.view(self.panes.add("map"))
+        self.memory_view = self.panes.view(self.panes.add("memory"))
         self.panes.add("log")
         self._arrange_default()
         # The map is of the ticked files on the chosen target, so either
         # changing redraws it.
+        #: What is known of the chosen target, for the status bar: who makes
+        #: it, its core, how much flash and RAM it has. Made here, before
+        #: the map is first drawn, which is what fills it in.
+        self.device_label = QLabel()
+        #: The targets the backend last listed, by name in capitals.
+        self._targets: dict[str, TargetInfo] = {}
+        self.flasher.targets_changed.connect(self._on_targets)
         self.files_view.changed.connect(self._refresh_map)
+        # Asked for from either pane, shown in the one.
+        self.files_view.read_requested.connect(self._read_memory)
+        self.memory_view.read_requested.connect(self._read_memory)
+        self.flasher.memory_read.connect(self._show_memory)
         self.flasher.regions_changed.connect(self._refresh_map)
         self._refresh_map()
 
         self.setStatusBar(QStatusBar())
+        self.statusBar().addWidget(self.device_label, 1)
         timing.mark("panes built")
 
         # --- menus & layout persistence --------------------------------------
@@ -263,6 +299,16 @@ class MainWindow(QMainWindow):
                 lambda _name: FilesView(self.flasher, self.ctx, self.confirm),
             ),
             PaneKind("map", "Memory Map", Qt.RightDockWidgetArea, lambda _name: MapView()),
+            PaneKind(
+                "memory",
+                "Memory",
+                Qt.RightDockWidgetArea,
+                lambda _name: MemoryView(self.flasher, self.ctx),
+                # Not there until something is read, and then beside the
+                # window rather than taking room from the panes in it.
+                detached_first=True,
+                floating_size=MEMORY_PANE_SIZE,
+            ),
             PaneKind("log", "Event Log", Qt.BottomDockWidgetArea, lambda _name: self.log),
         ):
             self.panes.register(kind)
@@ -448,7 +494,22 @@ class MainWindow(QMainWindow):
     def _refresh_map(self) -> None:
         """Lay the ticked files over the target's memory again."""
         target = self.flasher.target if self.flasher.connected else (self.probe_bar.chosen_target())
-        self.map_view.show_layout(self.files_view.loaded(), self.flasher.regions, target)
+        self.map_view.show_layout(
+            self.files_view.loaded(),
+            self.flasher.regions,
+            target,
+            self.flasher.backend.map_is_complete,
+        )
+        self._show_device(target)
+
+    def _show_device(self, target: str) -> None:
+        """Say in the status bar what is known of the target that is chosen."""
+        info = self._targets.get(target.upper())
+        self.device_label.setText(describe_device(target, info, self.flasher.regions))
+
+    def _on_targets(self, targets: list) -> None:
+        self._targets = {target.name.upper(): target for target in targets}
+        self._refresh_map()
 
     def _choose_commander(self) -> None:
         """Tools > Settings > J-Link Commander location."""
@@ -467,6 +528,18 @@ class MainWindow(QMainWindow):
         self.events.information(f"J-Link Commander is {path}.")
         self.flasher.refresh_targets()
         self.flasher.refresh_probes()
+
+    def _read_memory(self) -> None:
+        """Ask what to read from the target, and read it."""
+        dialog = ReadDialog(self.flasher.regions, self)
+        if dialog.exec() != ReadDialog.Accepted or (asked := dialog.values()) is None:
+            return
+        self.flasher.read_memory(*asked)
+
+    def _show_memory(self, address: int, data: bytes, target: str) -> None:
+        """Put what was read in the Memory pane, and bring the pane out."""
+        self.memory_view.show_memory(address, data, target)
+        self.panes.show("memory")
 
     def _forget_folders(self) -> None:
         count = folders.forget_all(self.ctx)

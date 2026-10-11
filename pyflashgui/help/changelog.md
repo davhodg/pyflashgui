@@ -21,8 +21,11 @@ since the last version, and comes out in the next one.
   included.
 - **Files**: a list of ELF, Intel HEX, S-record and raw binary files, read again at each
   use and whenever one changes on disc, with Program, Verify, Erase and Reset.
-- **Read...** in the Files pane: part of a target's memory read back into a raw binary,
-  Intel HEX or S-record file.
+- **Memory**: part of a target's memory read back and shown as addresses, bytes and text,
+  in a window of its own, and saved from there as a raw binary, Intel HEX or S-record file.
+- **Erase...**: all of a target's flash, some of its regions, or a range of addresses.
+- **What the chosen target is**, at the foot of the window: its maker, its core where known,
+  and how much flash and RAM it has.
 - **Memory Map**: where the ticked files land on the chosen target, how full each flash
   region is, and what is wrong, worked out before anything is sent.
 - The application's frame: the main window with dockable panes and the Event Log, workspaces,

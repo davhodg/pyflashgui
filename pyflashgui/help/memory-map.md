@@ -21,6 +21,8 @@ From top to bottom:
 
 With an error showing, **Program** refuses. A warning does not stop it.
 
+With *J-Link Commander*, bytes outside the memory listed for the device are a **warning** and not an error. SEGGER's list says where a device's memory is and may not give every address it can be reached at -- flash that also appears at a second address is listed once -- so pyflashgui does not refuse what SEGGER's software may take. That list does not say how flash is divided into sectors either, so for these devices the map says how full a region is and not how much is erased.
+
 ## When the memory is not known
 
 A target that pyOCD has built in has its memory known as soon as it is chosen. One that comes from a CMSIS-Pack is known once it is connected to; until then the pieces are listed, files that overlap are still found, and the pane says that nothing has been checked against the target.

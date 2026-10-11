@@ -13,6 +13,8 @@ The bar across the top of the window says what pyflashgui is connected through a
 | **Interface** | With J-Link Commander only: how the probe is wired to the device. |
 | **Connect** | Attaches the probe to the target, and becomes **Disconnect**. |
 
+The bar at the foot of the window says what is known of the target that is chosen: who makes it, its core where that is known, and how much flash and RAM it has.
+
 What is chosen is kept in the [workspace](manual.md): the target and the speed belong to the product being worked on, and the probe is remembered by its serial number, so a bench with two probes on it connects through the same one each time.
 
 ## Connecting
@@ -30,15 +32,15 @@ The list is every target pyOCD has built in, and every device in the CMSIS-Packs
 Choosing *J-Link Commander* under **Through** uses a J-Link by way of SEGGER's own command line program, which comes with SEGGER's J-Link software. It reaches every device that software knows, which is far more than Cortex-M: Cortex-A and Cortex-R, RISC-V and others. The price is that it works with a J-Link and nothing else, and needs SEGGER's software installed.
 
 - **SEGGER's software is yours to install**, and its licence is between you and SEGGER. pyflashgui never carries it. It is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming.
-- **Target** is the device's name as SEGGER's software has it, such as `STM32F103ZE`. The list is read from that software; a name not on it can be typed.
+- **Target** is the device's name as SEGGER's software has it, such as `STM32F103ZE`. The list is read from that software, with each device's maker, core and memory; a name not on it can be typed.
 - **Interface** appears for this choice only: SWD, JTAG, cJTAG or FINE, as the device is wired.
-- **The Memory Map is not checked against the device.** pyflashgui does not know its memory this way, so the pieces are listed, files that overlap are still found, and SEGGER's software is what refuses a file that does not fit.
+- **The Memory Map goes by SEGGER's list of the device's memory**, which says where its flash and RAM are and may not give every address they can be reached at. So a file outside what is listed is a warning and not a refusal, and SEGGER's software has the last word. The list does not say how the flash is divided into sectors, so the map does not say how much is erased.
 - **The bar shows that something is happening, not how far along it is**, since J-Link Commander does not say.
 - **Connect** checks that the probe and the device answer. Nothing is held open between one operation and the next; each attaches again by itself.
 
 If pyflashgui does not find J-Link Commander, *Tools > Settings > J-Link Commander location...* says where it is.
 
-**This has not yet been tried on a J-Link.** It is written from SEGGER's documentation and tested against a stand-in.
+**Tried on one board so far.** Listing the probe, connecting and reading were tried on an XMC4500 through its on-board J-Link, and what was read matched SEGGER's own tool. Programming, erasing and resetting this way have not yet been tried on a probe.
 
 ## Probes with pyOCD
 

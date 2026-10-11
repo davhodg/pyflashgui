@@ -253,7 +253,11 @@ def test_the_ticks_say_what_program_does_besides(window, tmp_path):
     assert window.ctx.settings.get("files.verify") is False
 
 
-def test_verify_erase_and_reset_from_their_buttons(window, tmp_path):
+def test_verify_erase_and_reset_from_their_buttons(window, tmp_path, monkeypatch):
+    from pyflashgui.ui.erase_dialog import EraseDialog
+
+    # The dialog opens on all of the flash, and is agreed to as it opens.
+    monkeypatch.setattr(EraseDialog, "exec", lambda dialog: EraseDialog.Accepted)
     files = window.files_view
     files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"abcd")])
     connect(window)
@@ -285,6 +289,9 @@ def test_a_real_target_is_asked_about_before_it_is_changed(window, tmp_path, mon
         asked.append(box.text())
         return QMessageBox.Cancel
 
+    from pyflashgui.ui.erase_dialog import EraseDialog
+
+    monkeypatch.setattr(EraseDialog, "exec", lambda dialog: EraseDialog.Accepted)
     monkeypatch.setattr(QMessageBox, "exec", answer)
     monkeypatch.setattr(type(window.flasher.backend), "name", "pyocd")
     files.program_button.click()
@@ -359,9 +366,11 @@ def test_the_window_opens_with_the_three_panes_and_the_bar(window):
     assert [d.windowTitle() for d in window.panes.docks.values()] == [
         "Files",
         "Memory Map",
+        "Memory",
         "Event Log",
     ]
-    assert all(dock.isVisible() for dock in window.panes.docks.values())
+    shown = [name for name, dock in window.panes.docks.items() if dock.isVisible()]
+    assert shown == ["files", "map", "log"], "Memory waits until something is read"
     assert window.probe_bar.isVisible()
 
 

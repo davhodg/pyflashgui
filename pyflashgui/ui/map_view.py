@@ -69,11 +69,13 @@ def _discard(layout: QLayout, widget: QWidget) -> None:
 
 
 def usage_text(used: int, length: int, sectors: int, erased: int) -> str:
+    filled = f"{size_text(used)} of {size_text(length)} ({100 * used / length:.1f} %)"
+    if not sectors:
+        # Where the size of a sector is not known, what is erased is not
+        # either, and is not guessed at.
+        return filled
     sector_text = "1 sector" if sectors == 1 else f"{sectors} sectors"
-    return (
-        f"{size_text(used)} of {size_text(length)} ({100 * used / length:.1f} %), "
-        f"erasing {sector_text}, {size_text(erased)}"
-    )
+    return f"{filled}, erasing {sector_text}, {size_text(erased)}"
 
 
 class MapView(QWidget):
@@ -112,9 +114,15 @@ class MapView(QWidget):
         layout.addWidget(self.pieces, 1)
         self.show_layout([], [], "")
 
-    def show_layout(self, files: Sequence[Image], regions: Sequence[Region], target: str) -> None:
+    def show_layout(
+        self,
+        files: Sequence[Image],
+        regions: Sequence[Region],
+        target: str,
+        complete: bool = True,
+    ) -> None:
         """Lay these files over this memory and show what comes of it."""
-        made = lay_out(files, regions)
+        made = lay_out(files, regions, complete)
         self.layout_shown = made
         self._show_summary(made, bool(files), target)
         self._show_problems(made)
