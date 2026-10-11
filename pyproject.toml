@@ -20,7 +20,7 @@ authors = [{ name = "davhodg" }]
 # What PyPI shows as tags, and searches on.
 keywords = [
     "flash", "programmer", "debug probe", "SWD", "CMSIS-DAP", "ST-Link", "J-Link", "pyOCD",
-    "Cortex-M", "microcontroller", "embedded", "firmware", "Qt",
+    "Cortex-M", "microcontroller", "embedded", "firmware", "Intel HEX", "S-record", "ELF", "Qt",
 ]
 # Checked against the official list by tests/test_readme.py: PyPI refuses an
 # upload with a classifier it does not know, which is the last step of a
