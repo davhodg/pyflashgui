@@ -2,6 +2,17 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """What the user has agreed to before pyflashgui changes a target.
 
+Two shapes of the same subject.
+
+**Once, before anything, every time.**  A notice at start-up saying what the
+tool is capable of, which has to be clicked through and cannot be switched off.
+It is not a question about anything in particular, which is why it is the one
+dialog here with no "do not ask again" on it: a notice dismissed for good on
+the first afternoon is never seen again on that login -- not months later, and
+not by anyone else sharing the account, as a bench computer often is. It is
+also where the slow half of starting up hides -- the libraries load behind it,
+so the notice costs no time at all.
+
 **Once a session, per thing.**  Erasing and programming replace what a device
 holds, and cannot be undone. Each asks before the first time, and then stays
 out of the way -- a dialog on every board would be worse than useless,
@@ -25,9 +36,18 @@ another account, asks that person for themselves.
 from __future__ import annotations
 
 import getpass
+import threading
+import time
+from collections.abc import Callable
 
-from PySide6.QtCore import QSettings
-from PySide6.QtWidgets import QCheckBox, QMessageBox, QWidget
+from PySide6.QtCore import QEventLoop, QSettings, QTimer
+from PySide6.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QMessageBox,
+    QProgressDialog,
+    QWidget,
+)
 
 #: Kept outside every workspace, deliberately. See the module docstring.
 AGREED_SETTING = "confirmations/agreed"
@@ -39,6 +59,27 @@ REMEMBER_TIP = (
     "travel in a workspace handed to somebody else, and another account on\n"
     "this machine is asked for itself.\n\n"
     "Tools > Reset > Re-enable all confirmations brings them back."
+)
+
+
+NOTICE_TITLE = "Before you start"
+#: Says what the tool can do and what to do about that, and promises nothing
+#: about what it will not do. A promise in a safety notice is one a fault can
+#: break, and the person who read it has stopped checking for themselves.
+NOTICE = (
+    "pyflashgui talks to real equipment. It is intended only for people trained and "
+    "experienced in working with microcontrollers, debug probes and the equipment they "
+    "are part of. It is a tool for development and the bench, and is not meant for "
+    "production programming.\n\n"
+    "Erasing and programming replace what a device holds, and cannot be undone. A "
+    "device given the wrong file, or one that changes its protection or configuration, "
+    "may not run, and may no longer be reachable through its debug port. Connecting, "
+    "resetting and reading can stop or restart a device that is running, and with it "
+    "whatever that device controls.\n\n"
+    "Like any software, pyflashgui can have faults, so do not rely on it alone to say "
+    "that a device holds what was meant. Where a mistake could hurt someone or damage "
+    "equipment, keep a way to stop that equipment within reach.\n\n"
+    "Provided under the Apache License 2.0, without warranty of any kind."
 )
 
 
@@ -85,6 +126,122 @@ class Remembered:
         for name in (AGREED_SETTING, USER_SETTING):
             self._settings.remove(name)
         return how_many
+
+
+def accept_notice(
+    parent: QWidget | None = None, while_shown: Callable[[], None] | None = None
+) -> bool:
+    """Show the start-up notice. False means the user chose not to go on.
+
+    Shown before the window is built rather than over the top of it, so that
+    nothing can have reached for a probe before it has been read.
+
+    **Every time, with no way to switch it off**, which is the one place in
+    pyflashgui where a dialog is not offered a tick box. The per-action
+    questions are answered once because they are about a thing you are doing
+    on purpose; this is not a question at all. A notice dismissed for good on
+    the first afternoon is never seen again on that login, including by anyone
+    sharing the account, and it costs one keypress a session.
+
+    ``while_shown`` is started on a thread of its own once the notice is on
+    screen, and has finished by the time this returns True. That is where the
+    slow half of starting up goes: the libraries load while somebody reads
+    the notice, and the notice stays responsive while they do. Continue
+    pressed before they are in shows how long it has been, rather than a
+    window that is not there yet. Whatever it raises is raised here.
+    """
+    box = QMessageBox(
+        QMessageBox.Warning,
+        NOTICE_TITLE,
+        NOTICE_TITLE,
+        QMessageBox.Ok | QMessageBox.Cancel,
+        parent,
+    )
+    box.setInformativeText(NOTICE)  # see Confirmations.ask for why not the title alone
+    box.button(QMessageBox.Ok).setText("Continue")
+    box.button(QMessageBox.Cancel).setText("Quit")
+    box.setDefaultButton(QMessageBox.Ok)
+    if while_shown is None:
+        return box.exec() == QMessageBox.Ok
+    # Painted first, then the slow work: the point is that something is on
+    # screen while it happens.
+    loading = Loading(while_shown)
+    box.show()
+    QApplication.processEvents()
+    loading.start()
+    ticker = QTimer(box)
+    ticker.timeout.connect(lambda: box.setWindowTitle(loading.title(NOTICE_TITLE)))
+    ticker.start(TICK_MS)
+    agreed = box.exec() == QMessageBox.Ok
+    ticker.stop()
+    box.hide()  # shown by hand above, so not left to exec to put away
+    if agreed:
+        loading.wait(parent)
+    return agreed
+
+
+#: How often the notice and the loading box say how long it has been.
+TICK_MS = 250
+LOADING_TEXT = "Loading libraries -- {seconds:.0f} s"
+
+
+class Loading:
+    """Slow work on a thread of its own, and waiting for it with something on
+    screen.
+
+    A thread rather than the GUI thread, because an import cannot be
+    interrupted to paint: seconds of libraries on the GUI thread is a notice
+    that cannot be scrolled, moved or answered, which reads as a hang. Only
+    imports belong here -- a Qt widget has to be made on the GUI thread.
+    """
+
+    def __init__(self, work: Callable[[], None]) -> None:
+        self._work = work
+        self._error: BaseException | None = None
+        self._began = 0.0
+        # A daemon, so that Quit pressed half way through is not held up.
+        self._thread = threading.Thread(target=self._run, name="pyflashgui-loading", daemon=True)
+
+    def _run(self) -> None:
+        try:
+            self._work()
+        except BaseException as exc:  # handed to the GUI thread, which raises it
+            self._error = exc
+
+    def start(self) -> None:
+        self._began = time.monotonic()
+        self._thread.start()
+
+    def busy(self) -> bool:
+        return self._thread.is_alive()
+
+    def seconds(self) -> float:
+        return time.monotonic() - self._began
+
+    def title(self, title: str) -> str:
+        if not self.busy():
+            return title
+        return f"{title} ({LOADING_TEXT.format(seconds=self.seconds()).lower()})"
+
+    def wait(self, parent: QWidget | None = None) -> None:
+        """Until the work is done, saying so if it is not done already."""
+        if self.busy():
+            dialog = QProgressDialog(parent)
+            dialog.setWindowTitle("Starting")
+            dialog.setCancelButton(None)  # there is nothing to go back to
+            dialog.setRange(0, 0)  # busy: how much is left is not known
+            dialog.setMinimumDuration(0)
+            dialog.setMinimumWidth(320)
+            dialog.show()
+            while self.busy():
+                dialog.setLabelText(LOADING_TEXT.format(seconds=self.seconds()))
+                QApplication.processEvents(QEventLoop.AllEvents, TICK_MS)
+                self._thread.join(TICK_MS / 1000)
+            dialog.close()
+            dialog.deleteLater()
+        self._thread.join()
+        if self._error is not None:
+            raise self._error
 
 
 class Confirmations:

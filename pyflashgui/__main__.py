@@ -209,19 +209,48 @@ def main() -> int:
     # after Qt because Qt is already in by now, and its cost is its own line.
     timing.watch_imports()
 
-    # Imported here rather than at the top of the file so that a library
-    # which is not installed becomes a dialog. Started from pyflashgui.cmd
-    # there is no console -- it runs pythonw -- so an ImportError on the way
-    # up is a window that never appears and not one word about why.
-    try:
-        from pyflashgui.ui.main_window import MainWindow
-        from pyflashgui.ui.session import Session
+    # confirm.py is cheap -- Qt widgets and nothing else -- and has to come
+    # before the rest of the imports, because it is what covers them.
+    from pyflashgui.ui.confirm import accept_notice
 
-        timing.mark(timing.LIBRARIES_STEP)
-    except Exception as failed:
-        # Not ImportError alone. A library that is installed and will not
-        # load fails however it likes, and anything not caught here is a
-        # window that never appears.
+    loaded: dict = {}
+
+    def load() -> None:
+        """The slow half of starting up, done behind the notice.
+
+        Loading the libraries with nothing on screen is how a tool comes to
+        feel heavy. Behind a dialog somebody is reading, it is free. Run on
+        a thread of its own, so imports only: the window is made on the GUI
+        thread after.
+
+        Imported here rather than at the top of the file for a second reason
+        as well: a library which is not installed becomes a dialog. Started
+        from pyflashgui.cmd there is no console -- it runs pythonw -- so an
+        ImportError on the way up is a window that never appears and not one
+        word about why.
+        """
+        try:
+            from pyflashgui.ui.main_window import MainWindow
+            from pyflashgui.ui.session import Session
+
+            loaded["classes"] = (Session, MainWindow)
+            timing.mark(timing.LIBRARIES_STEP)
+        except Exception as exc:
+            # Not ImportError alone. A library that is installed and will
+            # not load fails however it likes, and anything not caught
+            # here is a window that never appears.
+            loaded["error"] = exc
+
+    # Before the window is built, and therefore before anything can reach
+    # for a probe: a notice read after that is a notice that was too late.
+    if not accept_notice(while_shown=load):
+        return 0
+    # Its own line, because the libraries load behind the notice and the
+    # window is built after it: without this, every step between the two
+    # carries however long somebody took to read the notice and press
+    # Continue, and the report blames the first thing the window does.
+    timing.mark(timing.NOTICE_STEP)
+    if (failed := loaded.get("error")) is not None:
         from pyflashgui.ui import messages
 
         messages.critical(None, f"{APP_NAME} cannot start", why_it_cannot_start(failed))
@@ -230,7 +259,8 @@ def main() -> int:
 
     # Held by a Session rather than a local, because switching workspace
     # replaces the window rather than reconfiguring it.
-    session = Session(MainWindow)
+    session_class, window_class = loaded["classes"]
+    session = session_class(window_class)
     window = session.open()
     timing.mark("window on screen")
     note_a_slow_start(window)

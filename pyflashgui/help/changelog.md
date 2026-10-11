@@ -30,6 +30,8 @@ since the last version, and comes out in the next one.
   Intel HEX or S-record file, and is asked about before it is let go of unsaved.
   Through J-Link Commander, a read can leave out SEGGER's own setting up of the device, for
   a part where that changes its RAM.
+- **A notice at the start**, each time, saying what programming a device can do and
+  what to check first. The libraries load behind it.
 - **Erase...**: all of a target's flash, some of its regions, or a range of addresses.
 - **What the chosen target is**, at the foot of the window: its maker, its core where known,
   and how much flash and RAM it has.

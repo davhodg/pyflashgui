@@ -140,6 +140,14 @@ and no way of uninstalling touches them; delete that folder to remove them too.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md): the policy for changes, setting up to work on pyflashgui, running the tests, and building the Windows installer. Everyone taking part is asked to follow the [code of conduct](CODE_OF_CONDUCT.md). Security problems go through [SECURITY.md](SECURITY.md).
 
+## Safety notice
+
+pyflashgui talks to real equipment. It is intended only for people trained and experienced in working with microcontrollers, debug probes and the equipment they are part of. It is a tool for development and the bench, and is not meant for production programming.
+
+Erasing and programming replace what a device holds, and cannot be undone. A device given the wrong file, or one that changes its protection or configuration, may not run, and may no longer be reachable through its debug port. Connecting, resetting and reading can stop or restart a device that is running, and with it whatever that device controls.
+
+Like any software, pyflashgui can have faults, so do not rely on it alone to say that a device holds what was meant. Where a mistake could hurt someone or damage equipment, keep a way to stop that equipment within reach.
+
 ## Licence
 
 pyflashgui is free software, provided under the Apache License 2.0, without warranty of any kind; see `LICENSE` and `NOTICE`.
