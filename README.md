@@ -150,6 +150,6 @@ Like any software, pyflashgui can have faults, so do not rely on it alone to say
 
 ## Licence
 
-pyflashgui is free software, provided under the Apache License 2.0, without warranty of any kind; see `LICENSE` and `NOTICE`.
+pyflashgui is free software, provided under the Apache License 2.0, without warranty of any kind; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 Development has made use of Anthropic's Claude.
