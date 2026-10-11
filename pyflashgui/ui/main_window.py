@@ -531,10 +531,10 @@ class MainWindow(QMainWindow):
 
     def _read_memory(self) -> None:
         """Ask what to read from the target, and read it."""
-        dialog = ReadDialog(self.flasher.regions, self)
+        dialog = ReadDialog(self.flasher.regions, self, self.flasher.backend.can_skip_setup)
         if dialog.exec() != ReadDialog.Accepted or (asked := dialog.values()) is None:
             return
-        self.flasher.read_memory(*asked)
+        self.flasher.read_memory(*asked, skip_setup=dialog.skips_setup())
 
     def _show_memory(self, address: int, data: bytes, target: str) -> None:
         """Put what was read in the Memory pane, and bring the pane out."""

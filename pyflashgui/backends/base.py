@@ -162,8 +162,14 @@ class Connection(ABC):
         length: int,
         progress: Progress = _nothing,
         cancelled: Cancelled = _never,
+        skip_setup: bool = False,
     ) -> bytes:
         """A long run of the target's memory, a piece at a time.
+
+        ``skip_setup`` asks a backend that sets a device up on connecting
+        to it -- which on some parts writes to its RAM -- to leave that
+        out for this read. It means something only where the backend's
+        ``can_skip_setup`` says so, and is passed over elsewhere.
 
         In pieces so that there is progress to report and a cancel is
         noticed: a megabyte asked for in one go is a window that says
@@ -229,6 +235,9 @@ class Backend(ABC):
     #: Where it is not, a file outside them is worth a warning and is
     #: not refused: the backend may know of memory that it does not list.
     map_is_complete: bool = True
+    #: Whether a read can be made without the backend first setting the
+    #: device up in its own way. See ``Connection.read_range``.
+    can_skip_setup: bool = False
 
     @abstractmethod
     def probes(self) -> list[ProbeInfo]:

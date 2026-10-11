@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from PySide6.QtWidgets import (
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -32,6 +33,14 @@ NO_REGIONS = (
 )
 
 
+SKIP_SETUP_TIP = (
+    "On connecting, SEGGER's software sets some devices up in ways that\n"
+    "change them: on an S32K3 it fills the RAM. Tick this to read what a\n"
+    "running program left there. Leave it unticked otherwise: on a part\n"
+    "whose set-up is what lets it be read, a read without it fails."
+)
+
+
 def parse_number(text: str) -> int | None:
     """A hexadecimal number as somebody would type it, or None if it is not one."""
     text = text.strip().replace("_", "").replace(" ", "")
@@ -44,7 +53,12 @@ def parse_number(text: str) -> int | None:
 
 
 class ReadDialog(QDialog):
-    def __init__(self, regions: Sequence[Region], parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        regions: Sequence[Region],
+        parent: QWidget | None = None,
+        can_skip_setup: bool = False,
+    ) -> None:
         super().__init__(parent)
         self.setWindowTitle("Read from the target")
         # Another address for the same memory would read the same bytes twice
@@ -69,6 +83,14 @@ class ReadDialog(QDialog):
         self.length.setToolTip("How many bytes to read, in hexadecimal.")
         self.size = QLabel()
 
+        #: Only where the backend can do it, and never ticked to begin
+        #: with: on a part whose setting up is what lets it be read at
+        #: all, a read without it fails.
+        self.skip_setup = QCheckBox("Leave the device as it is (skip J-Link's own set-up)")
+        self.skip_setup.setToolTip(SKIP_SETUP_TIP)
+        self.skip_setup.setVisible(can_skip_setup)
+        self._can_skip_setup = can_skip_setup
+
         #: Why OK did nothing, when it did nothing. In the dialog rather
         #: than in a box on top of it.
         self.problem = QLabel()
@@ -80,6 +102,8 @@ class ReadDialog(QDialog):
         form.addRow("Address:", self.address)
         form.addRow("Length:", self.length)
         form.addRow("", self.size)
+        if can_skip_setup:
+            form.addRow("", self.skip_setup)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.button(QDialogButtonBox.Ok).setText("Read")
@@ -127,6 +151,10 @@ class ReadDialog(QDialog):
             return None
         self.problem.setText("")
         return address, length
+
+    def skips_setup(self) -> bool:
+        """Whether the read is to leave out the backend's own setting up."""
+        return self._can_skip_setup and self.skip_setup.isChecked()
 
     def _accept(self) -> None:
         if self.values() is not None:

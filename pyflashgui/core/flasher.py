@@ -369,7 +369,7 @@ class Flasher(QObject):
 
         self._run("Verifying", work, done)
 
-    def read_memory(self, address: int, length: int) -> None:
+    def read_memory(self, address: int, length: int, skip_setup: bool = False) -> None:
         """Read this much of the target's memory, and say so with ``memory_read``.
 
         Into memory and not into a file: most reads are to look at what is
@@ -381,7 +381,7 @@ class Flasher(QObject):
 
         def work() -> bytes:
             return connection.read_range(
-                address, length, self._progress("Reading"), self._cancel.is_set
+                address, length, self._progress("Reading"), self._cancel.is_set, skip_setup
             )
 
         def done(data: bytes) -> None:

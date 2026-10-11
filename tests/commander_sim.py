@@ -79,6 +79,9 @@ def main() -> int:
     options = {arguments[i].lower(): arguments[i + 1] for i in range(0, len(arguments) - 1, 2)}
     script = Path(options["-commandfile"])
     commands = [line.strip() for line in script.read_text().splitlines() if line.strip()]
+    if script_file := options.get("-jlinkscriptfile"):
+        # Read while it is there: it is gone again when the run is over.
+        options["script"] = Path(script_file).read_text()
     record(options, commands)
 
     print("pyflashgui's stand-in for J-Link Commander, for its tests")

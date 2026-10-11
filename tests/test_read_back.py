@@ -212,6 +212,73 @@ def test_numbers_are_taken_as_they_are_typed():
     assert parse_number("") is None and parse_number("lots") is None
 
 
+def test_leaving_the_device_as_it_is_is_offered_only_where_it_can_be_done(app):
+    plain = ReadDialog(REGIONS)
+    assert plain.skip_setup.isHidden() and not plain.skips_setup()
+    plain.skip_setup.setChecked(True)
+    assert not plain.skips_setup(), "a box nobody can see decides nothing"
+
+    offered = ReadDialog(REGIONS, can_skip_setup=True)
+    assert not offered.skip_setup.isHidden()
+    assert not offered.skips_setup(), "and it is not ticked to begin with"
+    offered.skip_setup.setChecked(True)
+    assert offered.skips_setup()
+    assert offered.values() == (0x1000_0000, 0x100_0000), "what is read is the same either way"
+
+
+def test_a_backend_that_sets_nothing_up_reads_the_same_when_asked_to_skip_it():
+    with backends.get("simulated").connect(PROBE, "sim_single") as connection:
+        connection.program([Segment(FLASH_AT, b"abcd")])
+        assert connection.read_range(FLASH_AT, 4, skip_setup=True) == b"abcd"
+
+
+def test_the_tick_reaches_the_backend_through_the_window(app, tmp_path, monkeypatch):
+    from pyflashgui.core import workspaces
+    from pyflashgui.core.settings import Settings
+    from pyflashgui.ui import probe_bar
+    from pyflashgui.ui.main_window import MainWindow
+
+    monkeypatch.setenv("PYFLASHGUI_HOME", str(tmp_path / "home"))
+    QSettings().clear()
+    settings = Settings(workspaces.settings_path())
+    settings.set(probe_bar.BACKEND_KEY, "simulated")
+    settings.set(probe_bar.TARGET_KEY, "sim_single")
+    window = MainWindow()
+    window.show()
+    try:
+        wait_for(lambda: window.probe_bar.chosen_probe() == PROBE and window.flasher.regions)
+        window.probe_bar.button.click()
+        wait_for(lambda: window.flasher.connected)
+        asked = []
+        real = type(window.flasher.connection).read_range
+
+        def noted(self, address, length, progress=None, cancelled=None, skip_setup=False):
+            asked.append(skip_setup)
+            return real(self, address, length)
+
+        monkeypatch.setattr(type(window.flasher.connection), "read_range", noted)
+        shown = []
+
+        def answer(dialog):
+            shown.append(not dialog.skip_setup.isHidden())
+            dialog.skip_setup.setChecked(True)
+            dialog.length.setText("10")
+            return ReadDialog.Accepted
+
+        monkeypatch.setattr(ReadDialog, "exec", answer)
+        window.files_view.read_button.click()
+        wait_for(lambda: not window.flasher.busy and asked)
+        assert shown == [False] and asked == [False], "not offered, so not asked for"
+
+        monkeypatch.setattr(type(window.flasher.backend), "can_skip_setup", True)
+        window.files_view.read_button.click()
+        wait_for(lambda: not window.flasher.busy and len(asked) == 2)
+        assert shown == [False, True] and asked == [False, True]
+    finally:
+        wait_for(lambda: not window.flasher.busy)
+        window.close()
+
+
 # --- the Memory pane ------------------------------------------------------------------
 def test_a_row_is_an_address_sixteen_bytes_and_what_they_spell():
     model = MemoryModel()

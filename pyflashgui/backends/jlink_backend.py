@@ -74,6 +74,12 @@ NOT_FOUND = (
 #: Looked for as well as its exit code, which has been seen to be 0 with it.
 NO_TARGET = "Cannot connect to target"
 
+#: A J-Link script that does nothing where SEGGER's software would set the
+#: device up after connecting to it. On some parts that set-up writes to
+#: the device -- an S32K3's RAM is filled, for its error correction -- and
+#: a read made to see what a running program left there finds it gone.
+NO_SETUP_SCRIPT = "int SetupTarget(void) {\n  return 0;\n}\n"
+
 #: Where Commander is, when it has been said. None to go and look.
 _chosen: list[str] | None = None
 
@@ -345,10 +351,25 @@ class JLinkConnection(Connection):
         self._device = device
         self._regions = regions
 
-    def _run(self, commands: Sequence[str], timeout: float, doing: str) -> str:
+    def _run(
+        self,
+        commands: Sequence[str],
+        timeout: float,
+        doing: str,
+        skip_setup: bool = False,
+    ) -> str:
         if self._arguments is None:
             raise BackendError("This connection has been closed.")
-        return run(self._arguments, commands, timeout, doing)
+        if not skip_setup:
+            return run(self._arguments, commands, timeout, doing)
+        with tempfile.TemporaryDirectory(prefix="pyflashgui-jlink-") as folder:
+            # Written afresh each time rather than kept anywhere: it is
+            # three lines, and a file somebody could edit would be a
+            # setting nobody knew they had.
+            script = Path(folder) / "no_setup.JLinkScript"
+            script.write_text(NO_SETUP_SCRIPT, encoding="ascii")
+            arguments = [*self._arguments, "-JLinkScriptFile", str(script)]
+            return run(arguments, commands, timeout, doing)
 
     def regions(self) -> list[Region]:
         return list(self._regions)
@@ -395,18 +416,22 @@ class JLinkConnection(Connection):
             self._run(commands, WORK_S, f"Programming {self._device}")
         progress(1.0)
 
-    def read(self, address: int, length: int, resume: bool = False) -> bytes:
+    def read(
+        self, address: int, length: int, resume: bool = False, skip_setup: bool = False
+    ) -> bytes:
         """Stopped while it is read, so that what is read is one moment's.
 
         ``resume`` sets the device going again afterwards, for a read that
-        somebody asked for of a device that was running.
+        somebody asked for of a device that was running. ``skip_setup``
+        leaves out SEGGER's own setting up of the device: see
+        NO_SETUP_SCRIPT.
         """
         with tempfile.TemporaryDirectory(prefix="pyflashgui-jlink-") as folder:
             path = Path(folder) / "read.bin"
             commands = ["H", f"SaveBin {_named(path)} 0x{address:X} 0x{length:X}"]
             if resume:
                 commands.append("G")
-            self._run(commands, WORK_S, f"Reading {length} bytes at {address:08X}")
+            self._run(commands, WORK_S, f"Reading {length} bytes at {address:08X}", skip_setup)
             try:
                 data = path.read_bytes()
             except OSError as exc:
@@ -426,12 +451,13 @@ class JLinkConnection(Connection):
         length: int,
         progress: Progress = _nothing,
         cancelled: Cancelled = _never,
+        skip_setup: bool = False,
     ) -> bytes:
         """All of it in one run of Commander, which is quicker than many."""
         if cancelled():
             raise CancelledError("Reading was cancelled.")
         progress(0.0)
-        data = self.read(address, length, resume=True)
+        data = self.read(address, length, resume=True, skip_setup=skip_setup)
         progress(1.0)
         return data
 
@@ -481,6 +507,7 @@ class JLinkBackend(Backend):
     #: it can be reached by: flash that also appears at a second address is
     #: listed once. So a file outside the list may still be one it takes.
     map_is_complete = False
+    can_skip_setup = True
 
     def __init__(self) -> None:
         #: The devices Commander knows, by name in capitals, once it has been

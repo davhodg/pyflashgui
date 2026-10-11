@@ -417,3 +417,26 @@ def test_the_newest_commander_installed_is_the_one_used(tmp_path):
         (tmp_path / name).mkdir()
     ordered = sorted(tmp_path.iterdir(), key=jlink_backend._version, reverse=True)
     assert [p.name for p in ordered] == ["JLink", "JLink_V812", "JLink_V810b", "JLink_V798a"]
+
+
+# --- reading without setting the device up --------------------------------------------
+def test_a_read_can_leave_out_seggers_setting_up_of_the_device(connection, home):
+    """For a part where that set-up fills the RAM a running program was using."""
+    connection.program([Segment(FLASH_AT, b"abcd")])
+    assert connection.read_range(FLASH_AT, 4, skip_setup=True) == b"abcd"
+    options = runs(home)[-1]["options"]
+    assert options["-jlinkscriptfile"].endswith("no_setup.JLinkScript")
+    assert options["script"] == "int SetupTarget(void) {\n  return 0;\n}\n"
+    assert options["-device"] == DEVICE, "and still the same probe, device and interface"
+    assert not Path(options["-jlinkscriptfile"]).exists(), "written for the run, and gone after"
+
+
+def test_nothing_but_a_read_asked_for_that_way_leaves_it_out(connection, home):
+    connection.program([Segment(FLASH_AT, b"abcd")])
+    connection.read_range(FLASH_AT, 4)
+    connection.verify([Segment(FLASH_AT, b"abcd")])
+    connection.erase_ranges([(FLASH_AT, 4)])
+    connection.erase_chip()
+    connection.reset()
+    assert not any("-jlinkscriptfile" in run["options"] for run in runs(home))
+    assert backends.get("jlink").can_skip_setup and not backends.get("pyocd").can_skip_setup

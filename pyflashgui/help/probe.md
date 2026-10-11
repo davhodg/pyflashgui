@@ -36,6 +36,7 @@ Choosing *J-Link Commander* under **Through** uses a J-Link by way of SEGGER's o
 - **Interface** appears for this choice only: SWD, JTAG, cJTAG or FINE, as the device is wired.
 - **The Memory Map goes by SEGGER's list of the device's memory**, which says where its flash and RAM are and may not give every address they can be reached at. So a file outside what is listed is a warning and not a refusal, and SEGGER's software has the last word. The list does not say how the flash is divided into sectors, so the map does not say how much is erased.
 - **The bar shows that something is happening, not how far along it is**, since J-Link Commander does not say.
+- **A read can leave the device as it is.** SEGGER's software sets some devices up on connecting in ways that change them; the [Read](memory.md) dialog has a tick to leave that out.
 - **Connect** checks that the probe and the device answer. Nothing is held open between one operation and the next; each attaches again by itself.
 
 If pyflashgui does not find J-Link Commander, *Tools > Settings > J-Link Commander location...* says where it is.
