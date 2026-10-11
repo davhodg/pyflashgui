@@ -189,6 +189,9 @@ class Backend(ABC):
     name: str = ""
     #: What it is called on screen.
     label: str = ""
+    #: The debug interfaces that can be asked for, the first being the
+    #: one used when none is. Empty where the backend chooses for itself.
+    interfaces: tuple[str, ...] = ()
 
     @abstractmethod
     def probes(self) -> list[ProbeInfo]:
@@ -208,9 +211,16 @@ class Backend(ABC):
         """
 
     @abstractmethod
-    def connect(self, probe: str, target: str, frequency: int | None = None) -> Connection:
+    def connect(
+        self,
+        probe: str,
+        target: str,
+        frequency: int | None = None,
+        interface: str | None = None,
+    ) -> Connection:
         """Attach the probe with this unique id to a target of this name.
 
         ``frequency`` is the debug clock in hertz, or None for the probe's
-        own choice.
+        own choice. ``interface`` is one of ``interfaces``, or None for
+        the first of them.
         """

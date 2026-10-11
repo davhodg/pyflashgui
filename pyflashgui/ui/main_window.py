@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtCore import QSettings, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import (
     QAction,
@@ -13,9 +15,17 @@ from PySide6.QtGui import (
     QTextCharFormat,
     QTextCursor,
 )
-from PySide6.QtWidgets import QApplication, QMainWindow, QMenu, QPlainTextEdit, QStatusBar
+from PySide6.QtWidgets import (
+    QApplication,
+    QFileDialog,
+    QMainWindow,
+    QMenu,
+    QPlainTextEdit,
+    QStatusBar,
+)
 
 from pyflashgui import APP_NAME, __version__
+from pyflashgui.backends import jlink_backend
 from pyflashgui.core import shortcut, timing, workspaces
 from pyflashgui.core.context import Context
 from pyflashgui.core.events import PROBLEMS, EventLog
@@ -56,6 +66,8 @@ AT_END = 4
 
 #: What the window opens at, and what Reset layout puts it back to.
 DEFAULT_WIDTH = 1100
+#: Where J-Link Commander is, when it is not where it is looked for.
+COMMANDER_SETTING = "jlink/commander"
 DEFAULT_HEIGHT = 720
 
 
@@ -104,6 +116,10 @@ class MainWindow(QMainWindow):
         #: Shared, so that agreeing once covers erasing and programming a
         #: target rather than each asking again.
         self.confirm = Confirmations(Remembered())
+        # Before anything asks a backend for its probes: where Commander
+        # is belongs to this machine, so it is kept with the window's place
+        # on the screen and not in the workspace.
+        jlink_backend.set_commander(str(QSettings().value(COMMANDER_SETTING, "") or ""))
         #: The one thing that talks to a probe. The bar and the panes ask
         #: it for things and listen for what comes back.
         self.flasher = Flasher(self.events, parent=self)
@@ -177,6 +193,14 @@ class MainWindow(QMainWindow):
         tools_menu.addMenu(self.settings_menu)
         self.theme_menu = theme.menu(self)
         self.settings_menu.addMenu(self.theme_menu)
+        commander = self.settings_menu.addAction(
+            "J-Link Commander location...", self._choose_commander
+        )
+        commander.setToolTip(
+            "Where SEGGER's J-Link Commander is, for when pyflashgui does not find\n"
+            "it by itself. It comes with SEGGER's J-Link software, and is only\n"
+            "needed to use a J-Link through it."
+        )
         # Below the line: not how pyflashgui behaves, but how this copy of it
         # is set up on this machine. Only for a source folder: the installer
         # makes its own entry.
@@ -425,6 +449,24 @@ class MainWindow(QMainWindow):
         """Lay the ticked files over the target's memory again."""
         target = self.flasher.target if self.flasher.connected else (self.probe_bar.chosen_target())
         self.map_view.show_layout(self.files_view.loaded(), self.flasher.regions, target)
+
+    def _choose_commander(self) -> None:
+        """Tools > Settings > J-Link Commander location."""
+        found = jlink_backend.find_commander()
+        start = found[0] if found else str(Path.home())
+        path, _type = QFileDialog.getOpenFileName(
+            self,
+            "Where J-Link Commander is",
+            start,
+            f"J-Link Commander ({jlink_backend.PROGRAM});;All files (*)",
+        )
+        if not path:
+            return
+        QSettings().setValue(COMMANDER_SETTING, path)
+        jlink_backend.set_commander(path)
+        self.events.information(f"J-Link Commander is {path}.")
+        self.flasher.refresh_targets()
+        self.flasher.refresh_probes()
 
     def _forget_folders(self) -> None:
         count = folders.forget_all(self.ctx)

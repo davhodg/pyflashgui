@@ -430,12 +430,21 @@ class FilesView(QWidget):
         self.remove_button.setEnabled(not busy and bool(self.table.selectedIndexes()))
 
     def _on_busy(self, busy: bool) -> None:
-        if not busy:
+        if busy:
+            # Moving, with no figure, until something says how far along
+            # it is: a backend that cannot say would otherwise show a
+            # bar stuck at nothing for as long as programming took.
+            self.progress.setRange(0, 0)
+        else:
+            self.progress.setRange(0, 1000)
             self.progress.setValue(0)
             self.progress.setFormat("")
         self._enable()
 
     def _on_progress(self, label: str, fraction: float) -> None:
+        if fraction <= 0.0:
+            return  # started, and nothing yet to show for it
+        self.progress.setRange(0, 1000)
         self.progress.setValue(round(fraction * 1000))
         # The word as well as the bar: a bar alone does not say which of
         # erasing, programming and verifying it is part way through.

@@ -220,11 +220,17 @@ class Flasher(QObject):
         self._run("Reading the target's memory map", lambda: backend.regions(target), known, True)
 
     # --- connecting ------------------------------------------------------------------
-    def connect_to(self, probe: str, target: str, frequency: int | None = None) -> None:
+    def connect_to(
+        self,
+        probe: str,
+        target: str,
+        frequency: int | None = None,
+        interface: str | None = None,
+    ) -> None:
         backend = self.backend
 
         def work() -> tuple[Connection, list[Region]]:
-            connection = backend.connect(probe, target, frequency)
+            connection = backend.connect(probe, target, frequency, interface)
             try:
                 return connection, connection.regions()
             except Exception:

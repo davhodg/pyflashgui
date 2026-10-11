@@ -213,7 +213,13 @@ class PyocdBackend(Backend):
         # read from the pack as the target is made, which needs a connection.
         return regions_of(memory_map) if memory_map is not None else []
 
-    def connect(self, probe: str, target: str, frequency: int | None = None) -> Connection:
+    def connect(
+        self,
+        probe: str,
+        target: str,
+        frequency: int | None = None,
+        interface: str | None = None,
+    ) -> Connection:
         from pyocd.core.helpers import ConnectHelper
         from pyocd.core.session import Session
 

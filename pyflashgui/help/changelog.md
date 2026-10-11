@@ -16,6 +16,9 @@ since the last version, and comes out in the next one.
 - **Probe and target** in a bar across the top: the probe by its serial number, the
   target by name, the debug clock, and Connect. A simulated probe and target for trying
   pyflashgui with no hardware.
+- **J-Link Commander** as a second way to a probe: a J-Link, through SEGGER's own
+  software, for the devices beyond Cortex-M that it supports. SEGGER's software is not
+  included.
 - **Files**: a list of ELF, Intel HEX, S-record and raw binary files, read again at each
   use and whenever one changes on disc, with Program, Verify, Erase and Reset.
 - **Memory Map**: where the ticked files land on the chosen target, how full each flash

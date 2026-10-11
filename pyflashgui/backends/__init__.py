@@ -15,7 +15,7 @@ from pyflashgui.backends.base import Backend, BackendError
 DEFAULT = "pyocd"
 
 #: In the order they are offered.
-NAMES = ("pyocd", "simulated")
+NAMES = ("pyocd", "jlink", "simulated")
 
 _made: dict[str, Backend] = {}
 
@@ -27,6 +27,10 @@ def get(name: str = DEFAULT) -> Backend:
             from pyflashgui.backends.pyocd_backend import PyocdBackend
 
             _made[name] = PyocdBackend()
+        elif name == "jlink":
+            from pyflashgui.backends.jlink_backend import JLinkBackend
+
+            _made[name] = JLinkBackend()
         elif name == "simulated":
             from pyflashgui.backends.simulated import SimulatedBackend
 

@@ -38,4 +38,4 @@ Three ticks say what **Program** does besides writing:
 
 **Program and Erase ask first**, once a session for each target, because what they replace cannot be got back. The question can be told not to ask again; *Tools > Reset > Re-enable all confirmations* brings it back. The simulated target is not asked about.
 
-The bar beside the buttons says what is being done and how far along it is. **Cancel** stops a verify. Programming is not stopped part way: that would leave the target holding neither the old firmware nor the new.
+The bar beside the buttons says what is being done and how far along it is; where that cannot be told, it shows only that something is happening. **Cancel** stops a verify. Programming is not stopped part way: that would leave the target holding neither the old firmware nor the new.

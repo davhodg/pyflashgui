@@ -195,7 +195,13 @@ class SimulatedBackend(Backend):
     def regions(self, target: str) -> list[Region]:
         return list(TARGETS.get(target, ()))
 
-    def connect(self, probe: str, target: str, frequency: int | None = None) -> Connection:
+    def connect(
+        self,
+        probe: str,
+        target: str,
+        frequency: int | None = None,
+        interface: str | None = None,
+    ) -> Connection:
         if probe not in {p.unique_id for p in PROBES}:
             raise BackendError(f"There is no probe with the id {probe}.")
         if target not in TARGETS:

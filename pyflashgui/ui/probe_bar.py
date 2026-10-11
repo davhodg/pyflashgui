@@ -27,6 +27,7 @@ BACKEND_KEY = "probe.backend"
 PROBE_KEY = "probe.id"
 TARGET_KEY = "probe.target"
 FREQUENCY_KEY = "probe.frequency"
+INTERFACE_KEY = "probe.interface"
 
 #: The debug clock, in hertz, with None for whatever the probe chooses. Slow
 #: ones first: a long or untidy cable is the usual reason for needing one.
@@ -42,8 +43,11 @@ FREQUENCIES = (
 NO_PROBES = "No probe found"
 
 BACKEND_TIP = (
-    "What pyflashgui reaches the probe through. Simulated is a probe and a\n"
-    "target that exist only in memory, for trying things with no hardware."
+    "What pyflashgui reaches the probe through. pyOCD works with many probes\n"
+    "and Cortex-M devices. J-Link Commander works with a J-Link and every\n"
+    "device SEGGER's software knows, and needs that software installed.\n"
+    "Simulated is a probe and a target that exist only in memory, for\n"
+    "trying things with no hardware."
 )
 PROBE_TIP = "The debug probe to connect through. Refresh looks for them again."
 TARGET_TIP = (
@@ -53,6 +57,11 @@ TARGET_TIP = (
 FREQUENCY_TIP = (
     "How fast the probe clocks the debug port. Lower it if connecting is\n"
     "unreliable: a long cable, or a target running from a slow clock."
+)
+INTERFACE_TIP = (
+    "How the probe is wired to the device's debug port. SWD is the two-wire\n"
+    "one most Cortex-M boards bring out; the device's documentation says\n"
+    "which it has."
 )
 CONNECT_TIP = (
     "Attach the probe to the target. The target is stopped while it is\n"
@@ -106,6 +115,12 @@ class ProbeBar(QToolBar):
         for label, hertz in FREQUENCIES:
             self.frequency.addItem(label, hertz)
 
+        # Only for a backend that can be told: the others choose, and a
+        # box that does nothing is a box somebody will set and wonder about.
+        self.interface = QComboBox()
+        self.interface.setToolTip(INTERFACE_TIP)
+        self.interface.setAccessibleName("Interface")
+
         self.button = QPushButton("Connect")
         self.button.setCheckable(True)
         self.button.setToolTip(CONNECT_TIP)
@@ -116,11 +131,14 @@ class ProbeBar(QToolBar):
             (None, self.refresh),
             ("Target", self.target),
             ("Speed", self.frequency),
-            (None, self.button),
         ):
             if label is not None:
                 self.addWidget(QLabel(f" {label}: "))
             self.addWidget(widget)
+        # Kept as actions, which is what a toolbar can show and hide.
+        self._interface_label = self.addWidget(QLabel(" Interface: "))
+        self._interface_action = self.addWidget(self.interface)
+        self.addWidget(self.button)
 
         self._restore()
         self.backend.currentIndexChanged.connect(self._on_backend)
@@ -128,6 +146,7 @@ class ProbeBar(QToolBar):
         self.refresh.clicked.connect(self.flasher.refresh_probes)
         self.target.currentTextChanged.connect(self._on_target)
         self.frequency.currentIndexChanged.connect(self._on_frequency)
+        self.interface.currentIndexChanged.connect(self._on_interface)
         self.button.toggled.connect(self._on_toggled)
         flasher.probes_changed.connect(self._show_probes)
         flasher.targets_changed.connect(self._show_targets)
@@ -148,6 +167,7 @@ class ProbeBar(QToolBar):
         # window should not wait for that to say what was chosen.
         self.target.setEditText(str(self.ctx.settings.get(TARGET_KEY, "")))
         self._loading = False
+        self._show_interfaces()
 
     def start(self) -> None:
         """Ask for the probes and the targets. Once the window is up."""
@@ -169,6 +189,21 @@ class ProbeBar(QToolBar):
 
     def chosen_frequency(self) -> int | None:
         return self.frequency.currentData()
+
+    def chosen_interface(self) -> str | None:
+        return self.interface.currentText() or None
+
+    def _show_interfaces(self) -> None:
+        """The interfaces the chosen backend can be asked for, or no box at all."""
+        offered = backends.get(self.backend.currentData()).interfaces
+        self._loading = True
+        self.interface.clear()
+        self.interface.addItems(offered)
+        saved = str(self.ctx.settings.get(INTERFACE_KEY, ""))
+        self.interface.setCurrentIndex(max(self.interface.findText(saved), 0))
+        self._loading = False
+        for action in (self._interface_label, self._interface_action):
+            action.setVisible(bool(offered))
 
     # --- filling the boxes -----------------------------------------------------------
     def _show_probes(self, probes: list[ProbeInfo]) -> None:
@@ -206,6 +241,7 @@ class ProbeBar(QToolBar):
             return
         name = self.backend.currentData()
         self.ctx.settings.set(BACKEND_KEY, name)
+        self._show_interfaces()
         self.flasher.set_backend(name)
 
     def _on_probe(self, _index: int) -> None:
@@ -224,6 +260,10 @@ class ProbeBar(QToolBar):
             self.flasher.set_target(target)
         self._enable()
 
+    def _on_interface(self, _index: int) -> None:
+        if not self._loading and self.chosen_interface():
+            self.ctx.settings.set(INTERFACE_KEY, self.chosen_interface())
+
     def _on_frequency(self, _index: int) -> None:
         if not self._loading:
             self.ctx.settings.set(FREQUENCY_KEY, self.chosen_frequency())
@@ -234,7 +274,10 @@ class ProbeBar(QToolBar):
             return
         if on:
             self.flasher.connect_to(
-                self.chosen_probe(), self.chosen_target(), self.chosen_frequency()
+                self.chosen_probe(),
+                self.chosen_target(),
+                self.chosen_frequency(),
+                self.chosen_interface(),
             )
         else:
             self.flasher.disconnect()
@@ -259,7 +302,14 @@ class ProbeBar(QToolBar):
 
     def _enable(self) -> None:
         connected, busy = self.flasher.connected, self.flasher.busy
-        for widget in (self.backend, self.probe, self.refresh, self.target, self.frequency):
+        for widget in (
+            self.backend,
+            self.probe,
+            self.refresh,
+            self.target,
+            self.frequency,
+            self.interface,
+        ):
             widget.setEnabled(not connected and not busy)
         can_connect = bool(self.chosen_probe() and self.chosen_target())
         self.button.setEnabled(not busy and (connected or can_connect))

@@ -29,6 +29,7 @@ SELFTEST_MODULES = (
     "pyflashgui.core.images",
     "pyflashgui.core.memory_map",
     "pyflashgui.backends.pyocd_backend",
+    "pyflashgui.backends.jlink_backend",
     "pyflashgui.backends.simulated",
     "pyflashgui.ui.main_window",
 )
