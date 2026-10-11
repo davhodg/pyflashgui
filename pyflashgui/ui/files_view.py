@@ -160,8 +160,8 @@ class FilesView(QWidget):
         self.reset_button.clicked.connect(self.flasher.reset)
         self.read_button = QPushButton("Read...")
         self.read_button.setToolTip(
-            "Read part of the target's memory back and show it in the Memory\n"
-            "pane, changing nothing in the target. It can be saved from there."
+            "Read part of the target's memory back and show it in a Memory pane\n"
+            "of its own, changing nothing in the target. It can be saved from there."
         )
         self.read_button.clicked.connect(self.read_requested.emit)
 

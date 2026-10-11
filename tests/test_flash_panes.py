@@ -366,11 +366,9 @@ def test_the_window_opens_with_the_three_panes_and_the_bar(window):
     assert [d.windowTitle() for d in window.panes.docks.values()] == [
         "Files",
         "Memory Map",
-        "Memory",
         "Event Log",
     ]
-    shown = [name for name, dock in window.panes.docks.items() if dock.isVisible()]
-    assert shown == ["files", "map", "log"], "Memory waits until something is read"
+    assert all(dock.isVisible() for dock in window.panes.docks.values())
     assert window.probe_bar.isVisible()
 
 

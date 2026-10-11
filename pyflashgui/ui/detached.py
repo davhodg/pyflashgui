@@ -16,6 +16,8 @@ whole of the way back -- there is no dock to drag it into while it is out.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QVBoxLayout, QWidget
 
@@ -33,6 +35,13 @@ class DetachedPane(QWidget):
         # out of the taskbar, and the taskbar entry is half the point.
         super().__init__(None)
         self.name = name
+        #: Asked before the window closes, where the pane in it would be
+        #: lost by closing: False keeps the window open. None to close
+        #: without asking, which is what closing means for most panes.
+        self.may_close: Callable[[], bool] | None = None
+        #: Set when it was asked and the answer was yes: the pane is to
+        #: go, and not to be put away where it can be brought back.
+        self.for_good = False
         self.setWindowTitle(f"{title} - {APP_NAME}")
         self.resize(widget.size() if widget.size().isValid() else self.size())
         layout = QVBoxLayout(self)
@@ -81,5 +90,12 @@ class DetachedPane(QWidget):
         return widget
 
     def closeEvent(self, event) -> None:
+        # Asked only of a close somebody made: whatever closes this
+        # window for its own reasons clears ``may_close`` first.
+        if self.may_close is not None:
+            if not self.may_close():
+                event.ignore()
+                return
+            self.for_good = True
         self.closed.emit(self.name)
         super().closeEvent(event)

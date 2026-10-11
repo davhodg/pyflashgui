@@ -189,6 +189,15 @@ class PaneKind:
     #: What it needs to be worth looking at, when it opens in front. A tree
     #: and a table beside each other want more than the default window.
     floating_size: tuple[int, int] | None = None
+    #: A pane that holds something which exists only while it is open: a
+    #: read of a target's memory, not yet saved. Such a pane is not kept
+    #: with the workspace, since there would be nothing to put in it; and
+    #: closing one closes it for good, the first of its kind included,
+    #: rather than putting it away to be brought back.
+    transient: bool = False
+    #: Asked, with the pane, before a transient one is closed. False
+    #: keeps it open: this is where somebody is told what they would lose.
+    may_close: Callable[[QWidget], bool] | None = None
 
 
 class Panes(QObject):
@@ -267,6 +276,25 @@ class Panes(QObject):
     def extras(self) -> list[str]:
         """The instances beyond the first of their kind -- the removable ones."""
         return [name for name in self.docks if name != self._kind_of.get(name)]
+
+    def _transient(self, name: str) -> bool:
+        kind = self.kinds.get(self._kind_of.get(name, ""))
+        return kind is not None and kind.transient
+
+    def may_close(self, name: str) -> bool:
+        """Whether this pane may be closed, asking whoever it is that knows.
+
+        Always yes for a pane that is only put away by closing it.
+        """
+        kind = self.kinds.get(self._kind_of.get(name, ""))
+        if kind is None or not kind.transient or kind.may_close is None:
+            return True
+        view = self._views.get(name)
+        return view is None or bool(kind.may_close(view))
+
+    def may_close_all(self) -> bool:
+        """Ask of every pane that would be lost. False at the first to say no."""
+        return all(self.may_close(name) for name in list(self.docks))
 
     def instances(self, kind: str) -> list[str]:
         return [name for name, k in self._kind_of.items() if k == kind]
@@ -423,9 +451,11 @@ class Panes(QObject):
         which is why it is not on the title bar.
         """
         kind = self.kinds.get(self._kind_of.get(name, ""))
-        if kind is None or name == kind.name:
+        if kind is None or (name == kind.name and not kind.transient):
             return
+        self._arranged.discard(name)  # the next of this name is a new pane
         if (window := self.detached.pop(name, None)) is not None:
+            window.may_close = None  # it has been asked, or is not to be
             # Closing it would otherwise hand the pane back to a dock that is
             # on its way out, and show it there.
             window.closed.disconnect(self._reattach)
@@ -672,6 +702,15 @@ class Panes(QObject):
         """Put "always on top" and the buttons back after Qt has moved a pane."""
         if event.type() in (BLOCKED, UNBLOCKED):
             self._suspend_on_top(watched, event.type() == BLOCKED)
+        if isinstance(watched, QDockWidget) and event.type() == QEvent.Close:
+            name = self._name_of(watched)
+            if name and self._transient(name):
+                if not self.may_close(name):
+                    event.ignore()
+                    return True
+                # Once Qt has finished closing it: the dock is part way
+                # through an event of its own.
+                QTimer.singleShot(0, lambda n=name: self.remove(n))
         if isinstance(watched, QDockWidget) and event.type() in REAPPLY_AFTER:
             # Deferred: Qt is part way through whatever it is doing to this
             # pane, and setWindowFlags hides and re-shows the widget.
@@ -785,6 +824,8 @@ class Panes(QObject):
             dock.setWidget(None)
             dock.hide()
             window = DetachedPane(name, dock.windowTitle(), widget, on_top=name in self.on_top)
+            if self._transient(name):
+                window.may_close = lambda n=name: self.may_close(n)
             self._place_detached(name, window, widget)
             window.closed.connect(self._reattach)
             window.installEventFilter(self)  # so a dialog can get in front of it
@@ -843,6 +884,8 @@ class Panes(QObject):
     def _remember_detached(self) -> None:
         """Note where each detached window is, while there is one to ask."""
         for name, window in self.detached.items():
+            if self._transient(name):
+                continue
             where = window.geometry()
             self.ctx.settings.set(
                 f"panes.detached_at.{name}",
@@ -864,6 +907,10 @@ class Panes(QObject):
         dock = self.docks.get(name)
         if window is None or dock is None:
             return
+        if window.for_good:
+            # Closed by somebody who was told what closing it loses: it
+            # goes, once the pane has been handed back to go with it.
+            QTimer.singleShot(0, lambda n=name: self.remove(n))
         if not show:
             self.closed_detached.add(name)
         self._moving.add(name)
@@ -886,6 +933,7 @@ class Panes(QObject):
         """Bring a detached pane back into the window, and show it."""
         self._note_arranged(name)  # put here by choice, so it stays here
         if (window := self.detached.get(name)) is not None:
+            window.may_close = None  # it is coming back, not going
             window.close()  # its closed signal hands the widget back
         self.closed_detached.discard(name)  # back in the window is where it stays
         self._reattach(name, show=True)
@@ -918,7 +966,9 @@ class Panes(QObject):
     def close_detached(self) -> None:
         """On the way out: they are parentless windows and would outlive us."""
         for name in list(self.detached):
-            self.detached.pop(name).close()
+            window = self.detached.pop(name)
+            window.may_close = None  # asked already, by whoever is closing us
+            window.close()
 
     # --- what is remembered -------------------------------------------------------------
     def save(self) -> None:
@@ -946,6 +996,8 @@ class Panes(QObject):
                     "title": self.default_title(name),
                 }
                 for name in self.extras()
+                # Nothing to open again: what it held went when it closed.
+                if not self._transient(name)
             ],
         )
 
@@ -956,9 +1008,14 @@ class Panes(QObject):
         on a second monitor came back closed, because putting it away on the
         way out was the last thing saved about it.
         """
-        self.ctx.settings.set("panes.detached", sorted(self.detached))
-        self.ctx.settings.set("panes.on_top", sorted(self.on_top))
-        self.ctx.settings.set("panes.closed_detached", sorted(self.closed_detached))
+        # Not the transient ones: there will be no such pane next time.
+        kept = [
+            sorted(n for n in names if not self._transient(n))
+            for names in (self.detached, self.on_top, self.closed_detached)
+        ]
+        self.ctx.settings.set("panes.detached", kept[0])
+        self.ctx.settings.set("panes.on_top", kept[1])
+        self.ctx.settings.set("panes.closed_detached", kept[2])
         self._remember_detached()
 
     def restore_instances(self) -> None:

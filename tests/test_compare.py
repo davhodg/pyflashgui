@@ -159,13 +159,17 @@ def window(app, tmp_path, monkeypatch):
     made.show()
     wait_for(lambda: made.probe_bar.chosen_probe() == PROBE and made.flasher.regions)
     yield made
+    # What a test read it has no use for: gone without the question a
+    # person would be asked.
+    for view in made.memory_views:
+        view.unsaved = False
     made.close()
 
 
 @pytest.fixture
 def memory(window):
-    """The Memory pane holding 256 bytes of a pattern, as if just read."""
-    window.memory_view.show_memory(BASE, pattern(0x100), "sim_single")
+    """A Memory pane holding 256 bytes of a pattern, as if just read."""
+    window._show_memory(BASE, pattern(0x100), "sim_single")
     return window.memory_view
 
 
@@ -189,7 +193,9 @@ def test_nothing_about_a_comparison_shows_until_there_is_one(window, memory):
 
 
 def test_there_is_nothing_to_compare_before_anything_is_read(window):
-    assert not window.memory_view.compare_button.isEnabled()
+    from pyflashgui.ui.memory_view import MemoryView
+
+    assert not MemoryView(window.flasher, window.ctx).compare_button.isEnabled()
 
 
 def test_a_file_that_matches_says_so_and_has_nowhere_to_go(window, memory, tmp_path):

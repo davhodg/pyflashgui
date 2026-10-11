@@ -34,7 +34,7 @@ from pyflashgui.core.events import PROBLEMS, EventLog
 from pyflashgui.core.excepthook import ExceptionLogger
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.memory_map import FLASH, RAM, Region
-from pyflashgui.ui import event_colours, folders, theme
+from pyflashgui.ui import event_colours, folders, memory_view, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.files_view import FilesView
 from pyflashgui.ui.help_menu import HelpMenu
@@ -59,12 +59,12 @@ def window_title() -> str:
 # Bumped whenever the set of docks changes. restoreState declines a state
 # saved under a different version, so an old layout is replaced by the current
 # default instead of being restored with panes missing.
-LAYOUT_VERSION = 3
+LAYOUT_VERSION = 4
 
 #: Open on a first run. Everything else is one click away in the View menu.
 DEFAULT_VISIBLE = ("files", "map", "log")
 
-#: What the Memory pane opens at, in a window of its own: wide enough for
+#: What a Memory pane opens at, in front of the window: wide enough for
 #: an address, sixteen bytes and their text.
 MEMORY_PANE_SIZE = (760, 560)
 
@@ -160,7 +160,6 @@ class MainWindow(QMainWindow):
         # what it will do, and what the tool has to say for itself.
         self.files_view = self.panes.view(self.panes.add("files"))
         self.map_view = self.panes.view(self.panes.add("map"))
-        self.memory_view = self.panes.view(self.panes.add("memory"))
         self.panes.add("log")
         self._arrange_default()
         # The map is of the ticked files on the chosen target, so either
@@ -173,9 +172,7 @@ class MainWindow(QMainWindow):
         self._targets: dict[str, TargetInfo] = {}
         self.flasher.targets_changed.connect(self._on_targets)
         self.files_view.changed.connect(self._refresh_map)
-        # Asked for from either pane, shown in the one.
         self.files_view.read_requested.connect(self._read_memory)
-        self.memory_view.read_requested.connect(self._read_memory)
         self.flasher.memory_read.connect(self._show_memory)
         self.flasher.regions_changed.connect(self._refresh_map)
         self._refresh_map()
@@ -304,10 +301,12 @@ class MainWindow(QMainWindow):
                 "Memory",
                 Qt.RightDockWidgetArea,
                 lambda _name: MemoryView(self.flasher, self.ctx),
-                # Not there until something is read, and then beside the
-                # window rather than taking room from the panes in it.
-                detached_first=True,
-                floating_size=MEMORY_PANE_SIZE,
+                # One for each read: Memory, Memory 2, and so on. What is
+                # in one exists nowhere else until it is saved, so it is
+                # not kept with the workspace, and closing one asks first.
+                several=True,
+                transient=True,
+                may_close=memory_view.may_close,
             ),
             PaneKind("log", "Event Log", Qt.BottomDockWidgetArea, lambda _name: self.log),
         ):
@@ -470,6 +469,11 @@ class MainWindow(QMainWindow):
             )
             event.ignore()
             return
+        # Each pane that holds something not saved is asked about it, and
+        # one that is to be kept keeps the whole of pyflashgui open.
+        if not self._closing and not self.panes.may_close_all():
+            event.ignore()
+            return
         # Everything is about to be hidden, and reporting each pane going away
         # on the way out would be a paragraph nobody asked for.
         self._closing = True
@@ -537,9 +541,52 @@ class MainWindow(QMainWindow):
         self.flasher.read_memory(*asked, skip_setup=dialog.skips_setup())
 
     def _show_memory(self, address: int, data: bytes, target: str) -> None:
-        """Put what was read in the Memory pane, and bring the pane out."""
-        self.memory_view.show_memory(address, data, target)
-        self.panes.show("memory")
+        """Open a Memory pane of its own for what has just been read.
+
+        Tabbed with the last one, where that is docked in the window: once
+        one has been put somewhere, that is where the rest are wanted. In
+        front of the window otherwise, each a step from the last.
+        """
+        before = self._memory_panes()
+        name = self.panes.add("memory", floating=True)
+        if not name:
+            return
+        view = self.panes.view(name)
+        view.read_requested.connect(self._read_memory)
+        view.show_memory(address, data, target)
+        # After the number, what it is of: "Memory 2: 10000000, 4.0 KiB".
+        self.panes.set_default_title(name, f"{self.panes.default_title(name)}: {view.title()}")
+        dock = self.panes.docks[name]
+        docked = [
+            self.panes.docks[n]
+            for n in before
+            if n not in self.panes.detached
+            and not self.panes.docks[n].isFloating()
+            and not self.panes.docks[n].isHidden()
+        ]
+        if docked:
+            dock.setFloating(False)
+            self.tabifyDockWidget(docked[-1], dock)
+        else:
+            dock.resize(
+                max(dock.width(), MEMORY_PANE_SIZE[0]), max(dock.height(), MEMORY_PANE_SIZE[1])
+            )
+        dock.show()
+        dock.raise_()
+
+    def _memory_panes(self) -> list[str]:
+        """The Memory panes that are open, by name, oldest first."""
+        return [name for name in self.panes.instances("memory") if name in self.panes.docks]
+
+    @property
+    def memory_views(self) -> list[MemoryView]:
+        return [self.panes.view(name) for name in self._memory_panes()]
+
+    @property
+    def memory_view(self) -> MemoryView | None:
+        """What the newest Memory pane shows, or None when there are none."""
+        views = self.memory_views
+        return views[-1] if views else None
 
     def _forget_folders(self) -> None:
         count = folders.forget_all(self.ctx)

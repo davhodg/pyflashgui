@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""The Memory pane: what was last read from a target, to look at and to save.
+"""A Memory pane: what one read of a target found, to look at and to save.
 
 A read goes into memory and is shown here, as addresses, bytes and the
 characters they spell. Saving it is a second step, taken when it has been
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -37,7 +38,7 @@ from pyflashgui.core.compare import DIFFERENT, Comparison, compare
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import ImageError
-from pyflashgui.ui import folders, fonts
+from pyflashgui.ui import folders, fonts, messages
 from pyflashgui.ui.files_view import parse_address
 
 #: Bytes shown on a row.
@@ -217,6 +218,9 @@ class MemoryView(QWidget):
         self.ctx = ctx
         #: What the read was of, for the summary and for a file's name.
         self.target = ""
+        #: Whether what is shown is anywhere but here. True from the
+        #: moment something is read until it has been saved.
+        self.unsaved = False
 
         self.summary = QLabel(NOTHING)
         self.summary.setWordWrap(True)
@@ -346,14 +350,27 @@ class MemoryView(QWidget):
         layout.addWidget(self.table, 1)
         layout.addLayout(buttons)
 
-        flasher.connection_changed.connect(lambda _on: self._enable())
-        flasher.busy_changed.connect(lambda _busy: self._enable())
+        # To methods and not to lambdas: a pane of these is thrown away
+        # when it is closed, and Qt lets go of a method of an object that
+        # has gone where it would go on calling a lambda that held one.
+        flasher.connection_changed.connect(self._on_flasher)
+        flasher.busy_changed.connect(self._on_flasher)
         self._show_comparison(None)
         self._enable()
+
+    def title(self) -> str:
+        """What the read is of, for the pane's title: where, and how much.
+
+        Not the target as well. A tab shows the start of a title and no
+        more, and several panes that all began with the same name would
+        be several tabs the same; the line inside says which target.
+        """
+        return f"{self.model.address:08X}, {size_text(len(self.model.data_read))}"
 
     def show_memory(self, address: int, data: bytes, target: str) -> None:
         """Show what has just been read, in place of what was read before."""
         self.target = target
+        self.unsaved = True
         self.model.show(address, data)
         self.table.scrollToTop()
         # What was found was found in what was read before.
@@ -365,6 +382,9 @@ class MemoryView(QWidget):
             f"{target}: {size_text(len(data))} from {address:08X} to "
             f"{address + len(data) - 1:08X}, read at {datetime.now():%H:%M:%S}."
         )
+        self._enable()
+
+    def _on_flasher(self, _state: bool) -> None:
         self._enable()
 
     def _enable(self) -> None:
@@ -559,14 +579,15 @@ class MemoryView(QWidget):
         data = self.model.data_read
         return data.rstrip(b"\xff") if self.trim.isChecked() else data
 
-    def save(self) -> None:
+    def save(self) -> bool:
+        """Ask where, and save what is shown there. Whether it was saved."""
         data = self.to_save()
         if not data:
             self.ctx.events.warning(
                 "All of what was read is erased, so there is nothing to save. "
                 "Untick the box to save it as it is."
             )
-            return
+            return False
         address = self.model.address
         path = folders.save_file(
             self,
@@ -580,12 +601,37 @@ class MemoryView(QWidget):
             suggested=folders.stamped(f"{self.target}_{address:08X}", ".bin"),
         )
         if not path:
-            return
+            return False
         try:
             fmt = images.write(path, address, data)
         except ImageError as exc:
             self.ctx.events.error(f"Saving to {path} failed: {exc}")
-            return
+            return False
+        self.unsaved = False
         self.ctx.events.good(
             f"Saved {size_text(len(data))} from {address:08X} of {self.target} as {fmt} in {path}."
         )
+        return True
+
+
+def may_close(view: MemoryView) -> bool:
+    """Whether a Memory pane may be closed: asked, if what is in it is not saved.
+
+    What was read is only in the pane until it is saved, so closing one that
+    has not been says so first. It can then be saved, thrown away, or kept
+    open; and a Save that was cancelled, or failed, has saved nothing, and
+    keeps it open too.
+    """
+    if not view.unsaved:
+        return True
+    answer = messages.warning(
+        view,
+        "Close without saving?",
+        f"What was read from {view.target} is only in this pane. Closing it without saving "
+        "throws it away.",
+        QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
+        QMessageBox.Cancel,
+    )
+    if answer == QMessageBox.Save:
+        return view.save()
+    return answer == QMessageBox.Discard

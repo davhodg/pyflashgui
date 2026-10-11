@@ -29,7 +29,7 @@ These need a probe [connected](probe.md) to a target.
 - **Verify** reads the flash back and compares it with the ticked files, changing nothing. If they differ, it says how many bytes do and where the first one is.
 - **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
 - **Reset** restarts the target.
-- **Read...** reads part of the target's memory back and shows it in the [Memory](memory.md) pane, changing nothing in the target. It can be saved to a file from there.
+- **Read...** reads part of the target's memory back and shows it in a [Memory](memory.md) pane of its own, changing nothing in the target. It can be saved to a file from there.
 
 Three ticks say what **Program** does besides writing:
 

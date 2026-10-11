@@ -2,17 +2,21 @@
 
 # Memory
 
-The **Memory** pane shows what was last read from a target: sixteen bytes to a row, with the address of the first, the bytes in hexadecimal, and the characters they spell. It opens in a window of its own the first time something is read, and can be docked like any other pane.
+Each read of a target opens a **Memory** pane of its own, showing what was read: sixteen bytes to a row, with the address of the first, the bytes in hexadecimal, and the characters they spell. The first is called *Memory*, the next *Memory 2*, and so on, each with the address it was read from and how much. A second read leaves the first as it was, so two reads can be looked at side by side.
+
+A Memory pane opens in front of the window, and is a pane like any other: it can be docked at an edge, tabbed with another pane, or given a window of its own, and **View** lists it. **Once one is docked in the window, the next read opens as a tab beside it**, so putting the first where it is wanted puts the rest there too.
+
+**What is in a Memory pane is nowhere else until it is saved.** It is not kept with the workspace, and closing the pane closes it for good, where closing another pane only puts it away. So closing one that has not been saved says so first, and offers to save it, to discard it, or to leave it open. Closing pyflashgui asks the same of each one that is open.
 
 ## Reading
 
-**Read...**, here or in the [Files](files.md) pane, asks what to read. It needs a probe [connected](probe.md) to a target, and changes nothing in the target.
+**Read...**, in the [Files](files.md) pane or in a Memory pane, asks what to read. It needs a probe [connected](probe.md) to a target, and changes nothing in the target.
 
 - **Region** offers the target's own regions, the flash first, and fills in the address and the length. Both can be typed over, in hexadecimal: what is wanted is as often the first few kilobytes as the whole region.
 - Where the target's memory is not known, as for a device whose name was typed and is not on the backend's list, there are no regions to choose and the range is typed.
 - **Leave the device as it is (skip J-Link's own set-up)** is offered with J-Link Commander only. On connecting, SEGGER's software sets some devices up in ways that change them: on an S32K3 it fills the RAM, so a read made to see what a running program left there finds it gone. With this ticked, that set-up is left out for this read. It is not ticked to begin with, and wants leaving alone unless that is the trouble: on a part whose set-up is what lets it be read at all, a read without it fails. Programming and erasing always have the set-up.
 
-What is read is kept in memory and shown, in place of whatever was read before. The line above the bytes says which target it came from, the range and when. The bar in the Files pane shows how far along a read is, and **Cancel** there stops it.
+What is read is kept in memory and shown in a new pane. The line above the bytes says which target it came from, the range and when. The bar in the Files pane shows how far along a read is, and **Cancel** there stops it.
 
 A device that protects its flash from being read gives an error from the probe, or reads as something other than what it holds. pyflashgui does not try to get round that.
 
@@ -31,7 +35,7 @@ The line under the boxes says the address of what was found. The row is selected
 | F3, Shift+F3 | The next, and the one before |
 | Ctrl+G | Go to an address |
 
-The keys work while the Memory pane is the one being used.
+The keys work in the Memory pane that is being used.
 
 ## Comparing with a file
 
@@ -42,11 +46,11 @@ The keys work while the Memory pane is the one being used.
 - **A File column appears**, with something in it on each row that differs: the file's own bytes where they differ, `..` for a byte that agrees and `--` for one the file does not mention. A row that agrees throughout is left blank.
 - **Next difference** and **Previous difference** go from one stretch of differing bytes to the next, going round, and say where it is and what each side has.
 
-A raw binary has no addresses of its own, so it is taken to start where what was read starts. Reading again puts the comparison away.
+A raw binary has no addresses of its own, so it is taken to start where what was read starts. The comparison is that pane's: another read, in another pane, has none until it is compared for itself.
 
 ## Saving
 
-**Save...** writes what is shown to a file: a raw binary, Intel HEX or Motorola S-record, by the name it is given. Nothing is saved until this is pressed, so a read made only to look costs no file.
+**Save...** writes what is shown to a file: a raw binary, Intel HEX or Motorola S-record, by the name it is given. Nothing is saved until this is pressed, so a read made only to look costs no file. Once it has been saved, the pane closes without asking.
 
 - A raw binary is the bytes and nothing else, so it does not record where they came from. The other two do, and can be put on the [Files](files.md) list and programmed back as they are.
 - An S-record file is given addresses wide enough for what it holds, whatever its name: flash at `08000000` saved as `.s19` has 32-bit addresses.
