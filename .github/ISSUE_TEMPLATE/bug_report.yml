@@ -1,0 +1,78 @@
+name: Bug report
+description: Something in pyflashgui does not work the way the manual says it should.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        Connected to an STM32F103 through an ST-Link and pressed Program with
+        one Intel HEX file ticked. Expected it to be written and verified; the
+        Event Log says the flash could not be erased.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to make it happen again
+      placeholder: |
+        1.
+        2.
+        3.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        *Help > Diagnostics...* copies a report to the clipboard: the versions of pyflashgui, Python, PySide6, pyOCD and what came with them, and the platform. Paste it here.
+        If pyflashgui will not start at all, say so, and paste whatever it printed instead.
+      render: text
+
+  - type: dropdown
+    id: through
+    attributes:
+      label: Through
+      description: What is chosen under Through in the bar across the top.
+      options:
+        - pyOCD
+        - J-Link Commander
+        - Simulated
+    validations:
+      required: true
+
+  - type: input
+    id: probe
+    attributes:
+      label: Probe
+      description: The debug probe, or the board it is built into. Its serial number is not needed.
+      placeholder: Raspberry Pi Debug Probe, the ST-Link on a Nucleo-F411RE, J-Link EDU Mini, XDS110
+
+  - type: input
+    id: target
+    attributes:
+      label: Target
+      description: The name chosen under Target, and the device itself if that is something else.
+      placeholder: stm32f411re
+
+  - type: dropdown
+    id: installed
+    attributes:
+      label: Installed with
+      options:
+        - The Windows installer
+        - The launcher (pyflashgui.cmd or pyflashgui.sh)
+        - pip
+        - A source checkout, for development
+    validations:
+      required: true
+
+  - type: textarea
+    id: event-log
+    attributes:
+      label: Event Log
+      description: What the Event Log said around the time -- warnings and errors especially. A traceback is worth more than any description of one.
+      render: text

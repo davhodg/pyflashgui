@@ -1,0 +1,38 @@
+name: Feature request
+description: Something pyflashgui does not do yet, and you would like it to.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: job
+    attributes:
+      label: What you are trying to do
+      description: The job rather than the feature -- "see what a bootloader left in one flash sector", not "add a button".
+    validations:
+      required: true
+
+  - type: textarea
+    id: today
+    attributes:
+      label: How you do it now
+      description: Another tool, a script, by hand, or not at all.
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help
+      description: If you have an idea of how it could work.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - Probe and target
+        - Files and the memory map
+        - Program, Verify, Erase and Reset
+        - Reading back and the Memory panes
+        - Comparing
+        - A probe or a device that is not supported
+        - Installing
+        - Something else
