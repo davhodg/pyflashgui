@@ -9,7 +9,7 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
-## [0.1.0] - not yet released
+## [0.1.0] - 2026-10-11
 
 ### Added
 
@@ -42,5 +42,5 @@ since the last version, and comes out in the next one.
   for updates.
 - Launchers for a source folder on Windows and Linux, and the build of the Windows installer.
 
-[Unreleased]: https://github.com/davhodg/pyflashgui/commits/master
-[0.1.0]: https://github.com/davhodg/pyflashgui/commits/master
+[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/davhodg/pyflashgui/releases/tag/v0.1.0
