@@ -13,8 +13,6 @@
 
 A graphical flash programming tool. It works with any debug probe [pyOCD](https://pyocd.io) supports, for Arm Cortex-M targets: CMSIS-DAP probes such as the Raspberry Pi Debug Probe, DAPLink, NXP MCU-Link and Atmel-ICE, TI XDS110 and the probes built into many development boards, as well as ST-Link and J-Link. With a J-Link it can also use SEGGER's J-Link Commander, for the many other devices that supports.
 
-**pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. On hardware, only reading through J-Link Commander has been tried so far, on one board; programming a real device has not.
-
 **It is a tool for the bench**: for development, debugging and hobby use. It is not meant for production programming.
 
 ## Install and run

@@ -7,7 +7,7 @@ name = "pyflashgui"
 # From __version__ in pyflashgui/__init__.py, the one copy -- read without
 # importing the package. The installer takes it from there too.
 dynamic = ["version"]
-description = "Graphical flash programming tool for Arm Cortex-M targets, with any debug probe pyOCD supports"
+description = "Graphical flash programming tool: Arm Cortex-M with any probe pyOCD supports, and more through J-Link Commander"
 # The page shown on PyPI: shorter than the README, which is written for
 # GitHub, and with every link absolute, since PyPI has no repository behind it.
 readme = "PYPI.md"
@@ -27,7 +27,7 @@ keywords = [
 # release. No licence classifier: the licence expression above replaces them,
 # and setuptools refuses both.
 classifiers = [
-    "Development Status :: 2 - Pre-Alpha",
+    "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Natural Language :: English",
     "Operating System :: Microsoft :: Windows",
