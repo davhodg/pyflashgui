@@ -17,12 +17,15 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
+    QComboBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QLineEdit,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -34,6 +37,7 @@ from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import ImageError
 from pyflashgui.ui import folders, fonts
+from pyflashgui.ui.files_view import parse_address
 
 #: Bytes shown on a row.
 WIDTH = 16
@@ -46,6 +50,40 @@ TRIM_TIP = (
     "byte that holds something are not saved, so the file is the size of\n"
     "what is there and not the size of what was read."
 )
+
+
+#: What Find looks for: bytes written in hexadecimal, or the characters
+#: themselves.
+AS_BYTES, AS_TEXT = "Bytes", "Text"
+
+GOTO_TIP = (
+    "An address in what was read, in hexadecimal. Enter goes to the row it\n"
+    "is on. Ctrl+G comes here."
+)
+FIND_TIP = (
+    "Bytes in hexadecimal, such as DE AD BE EF, or text as it is spelled.\n"
+    "Enter finds the next, and the search goes round from the end to the\n"
+    "start. Ctrl+F comes here; F3 and Shift+F3 find the next and the one\n"
+    "before."
+)
+
+
+def parse_bytes(text: str) -> bytes | None:
+    """Bytes as somebody would type them in hexadecimal, or None if they are not.
+
+    Spaces, commas and 0x in front of any of them are all let through:
+    DEADBEEF, DE AD BE EF and 0xDE, 0xAD are the same four bytes.
+    """
+    digits = "".join(
+        part[2:] if part.lower().startswith("0x") else part
+        for part in text.replace(",", " ").replace("_", "").split()
+    )
+    if not digits or len(digits) % 2:
+        return None
+    try:
+        return bytes.fromhex(digits)
+    except ValueError:
+        return None
 
 
 def text_of(data: bytes) -> str:
@@ -128,6 +166,56 @@ class MemoryView(QWidget):
             self.table.setColumnWidth(column, fonts.width_for(self.table, sample))
         header.setStretchLastSection(True)
 
+        self.goto = QLineEdit()
+        self.goto.setFont(fonts.mono())
+        self.goto.setAccessibleName("Go to address")
+        self.goto.setToolTip(GOTO_TIP)
+        self.goto.setMaximumWidth(fonts.width_for(self.goto, "00000000") + 24)
+        self.goto.returnPressed.connect(self.go_to)
+        self.find_as = QComboBox()
+        self.find_as.addItems([AS_BYTES, AS_TEXT])
+        self.find_as.setAccessibleName("Find bytes or text")
+        self.find = QLineEdit()
+        self.find.setAccessibleName("Find")
+        self.find.setToolTip(FIND_TIP)
+        self.find.returnPressed.connect(self.find_next)
+        self.previous_button = QPushButton("Previous")
+        self.previous_button.setToolTip("Find the one before. Shift+F3.")
+        self.previous_button.clicked.connect(self.find_previous)
+        self.next_button = QPushButton("Next")
+        self.next_button.setToolTip("Find the next. F3.")
+        self.next_button.clicked.connect(self.find_next)
+        #: What going to an address or finding something came to, in
+        #: words: the row is selected as well, but a row does not say
+        #: which of its sixteen bytes was meant.
+        self.found = QLabel()
+        #: Where the last thing found starts, as an offset into what was
+        #: read, for the next search to carry on from. None before any.
+        self._found_at: int | None = None
+        #: What that was a search for. Something else looked for starts from
+        #: the top, and is not the next of what was looked for before.
+        self._looked_for = b""
+        for keys, slot in (
+            (QKeySequence.Find, self._focus_find),
+            (QKeySequence("Ctrl+G"), self._focus_goto),
+            (QKeySequence.FindNext, self.find_next),
+            (QKeySequence.FindPrevious, self.find_previous),
+        ):
+            shortcut = QShortcut(keys, self)
+            # In this pane and not the whole window: Ctrl+F means this
+            # only while it is this that is being looked at.
+            shortcut.setContext(Qt.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(slot)
+
+        looking = QHBoxLayout()
+        looking.addWidget(QLabel("Go to:"))
+        looking.addWidget(self.goto)
+        looking.addWidget(QLabel("Find:"))
+        looking.addWidget(self.find_as)
+        looking.addWidget(self.find, 1)
+        looking.addWidget(self.previous_button)
+        looking.addWidget(self.next_button)
+
         self.read_button = QPushButton("Read...")
         self.read_button.setToolTip(
             "Read part of the connected target's memory, changing nothing in the target."
@@ -148,6 +236,8 @@ class MemoryView(QWidget):
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary)
+        layout.addLayout(looking)
+        layout.addWidget(self.found)
         layout.addWidget(self.table, 1)
         layout.addLayout(buttons)
 
@@ -160,6 +250,9 @@ class MemoryView(QWidget):
         self.target = target
         self.model.show(address, data)
         self.table.scrollToTop()
+        # What was found was found in what was read before.
+        self._found_at = None
+        self.found.setText("")
         self.summary.setText(
             f"{target}: {size_text(len(data))} from {address:08X} to "
             f"{address + len(data) - 1:08X}, read at {datetime.now():%H:%M:%S}."
@@ -168,7 +261,105 @@ class MemoryView(QWidget):
 
     def _enable(self) -> None:
         self.read_button.setEnabled(self.flasher.connected and not self.flasher.busy)
-        self.save_button.setEnabled(bool(self.model.data_read))
+        anything = bool(self.model.data_read)
+        for widget in (
+            self.save_button,
+            self.goto,
+            self.find_as,
+            self.find,
+            self.previous_button,
+            self.next_button,
+        ):
+            widget.setEnabled(anything)
+
+    # --- looking for something -------------------------------------------------------
+    def _focus_find(self) -> None:
+        self.find.setFocus()
+        self.find.selectAll()
+
+    def _focus_goto(self) -> None:
+        self.goto.setFocus()
+        self.goto.selectAll()
+
+    def _show_offset(self, offset: int) -> None:
+        """Bring the row this byte is on into view, and select it."""
+        row = offset // WIDTH
+        self.table.selectRow(row)
+        self.table.scrollTo(self.model.index(row, 0), QAbstractItemView.PositionAtCenter)
+
+    def go_to(self) -> None:
+        """Go to the address typed, if it is one that was read."""
+        data, start = self.model.data_read, self.model.address
+        if not data:
+            return
+        typed = self.goto.text().strip()
+        address = parse_address(typed)
+        if address is None:
+            self.found.setText(f"{typed!r} is not an address: it wants hexadecimal.")
+        elif not start <= address < start + len(data):
+            self.found.setText(
+                f"{address:08X} is not in what was read, which is {start:08X} to "
+                f"{start + len(data) - 1:08X}."
+            )
+        else:
+            self._show_offset(address - start)
+            self.found.setText(f"At {address:08X}.")
+
+    def _wanted(self) -> bytes | None:
+        """The bytes Find is to look for; None, having said why, if there are none."""
+        typed = self.find.text()
+        if not typed:
+            self.found.setText("")
+            return None
+        if self.find_as.currentText() == AS_TEXT:
+            # As the Text column shows them: one byte to a character.
+            return typed.encode("latin-1", "replace")
+        wanted = parse_bytes(typed)
+        if wanted is None:
+            self.found.setText(
+                f"{typed!r} is not bytes in hexadecimal: two digits to a byte, such as "
+                "DE AD BE EF. To look for the letters themselves, choose Text."
+            )
+        return wanted
+
+    def _find(self, forwards: bool) -> None:
+        data = self.model.data_read
+        if not data or (wanted := self._wanted()) is None:
+            return
+        if wanted != self._looked_for:
+            self._looked_for, self._found_at = wanted, None
+        last = self._found_at
+        if forwards:
+            at = data.find(wanted, 0 if last is None else last + 1)
+            wrapped = at < 0
+            if wrapped:
+                at = data.find(wanted)
+        else:
+            # rfind's end is where a match may not reach past, so one
+            # that starts before the last found ends before this.
+            at = -1 if last is None else data.rfind(wanted, 0, last + len(wanted) - 1)
+            wrapped = at < 0
+            if wrapped:
+                at = data.rfind(wanted)
+        if at < 0:
+            self._found_at = None
+            self.found.setText("Not found in what was read.")
+            return
+        # Said only when there was somewhere to go round from: the first
+        # search of all starts at the start and goes round nothing.
+        went_round = wrapped and last is not None
+        self._found_at = at
+        self._show_offset(at)
+        where = f"Found at {self.model.address + at:08X}"
+        if went_round:
+            where += ", having gone round from the " + ("end" if forwards else "start")
+        self.found.setText(where + ".")
+
+    def find_next(self) -> None:
+        self._find(forwards=True)
+
+    def find_previous(self) -> None:
+        self._find(forwards=False)
 
     def to_save(self) -> bytes:
         """What is shown, less the erased bytes at the end if that is ticked."""

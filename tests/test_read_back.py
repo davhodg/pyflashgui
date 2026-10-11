@@ -18,7 +18,7 @@ from pyflashgui.core.events import EventLog
 from pyflashgui.core.flasher import Flasher
 from pyflashgui.core.images import Segment
 from pyflashgui.core.memory_map import FLASH, RAM, Region
-from pyflashgui.ui.memory_view import MemoryModel, text_of
+from pyflashgui.ui.memory_view import MemoryModel, parse_bytes, text_of
 from pyflashgui.ui.read_dialog import ReadDialog, parse_number
 
 PROBE = "SIM0001"
@@ -452,6 +452,156 @@ def test_cancelling_the_dialog_reads_nothing(window, monkeypatch):
     monkeypatch.setattr(ReadDialog, "exec", lambda dialog: ReadDialog.Rejected)
     window.files_view.read_button.click()
     assert not window.flasher.busy and not window.memory_view.model.data_read
+
+
+# --- going to an address, and finding something ---------------------------------------
+BASE = 0x0800_0000
+
+
+@pytest.fixture
+def memory(window):
+    """The Memory pane holding 4 KiB: mostly a pattern, with three things to find."""
+    data = bytearray(pattern(0x1000))
+    data[0x0123:0x0127] = b"\xde\xad\xbe\xef"
+    data[0x0800:0x0804] = b"\xde\xad\xbe\xef"
+    data[0x0A00:0x0A08] = b"Firmware"
+    view = window.memory_view
+    view.show_memory(BASE, bytes(data), "sim_single")
+    return view
+
+
+def selected_row(view) -> int:
+    return view.table.selectionModel().selectedRows()[0].row()
+
+
+def test_nothing_can_be_looked_for_until_something_is_read(window):
+    view = window.memory_view
+    assert not view.goto.isEnabled() and not view.find.isEnabled()
+    assert not view.next_button.isEnabled() and not view.previous_button.isEnabled()
+    view.show_memory(BASE, bytes(16), "sim_single")
+    assert view.goto.isEnabled() and view.find.isEnabled() and view.next_button.isEnabled()
+
+
+def test_go_to_selects_the_row_an_address_is_on(memory):
+    memory.goto.setText("0800_0A07")
+    memory.go_to()
+    assert selected_row(memory) == 0xA0 and memory.found.text() == "At 08000A07."
+    memory.goto.setText("0x08000000")
+    memory.go_to()
+    assert selected_row(memory) == 0
+
+
+def test_an_address_that_was_not_read_is_said_with_what_was(memory):
+    memory.goto.setText("08001000")
+    memory.go_to()
+    assert memory.found.text() == (
+        "08001000 is not in what was read, which is 08000000 to 08000FFF."
+    )
+    memory.goto.setText("up a bit")
+    memory.go_to()
+    assert memory.found.text() == "'up a bit' is not an address: it wants hexadecimal."
+
+
+def test_bytes_are_found_however_they_are_typed(memory):
+    for typed in ("DE AD BE EF", "deadbeef", "0xDE, 0xAD, 0xBE, 0xEF", "DE_AD BEEF"):
+        memory.show_memory(BASE, memory.model.data_read, "sim_single")
+        memory.find.setText(typed)
+        memory.find_next()
+        assert memory.found.text() == "Found at 08000123.", typed
+        assert selected_row(memory) == 0x12
+
+
+def test_next_goes_on_and_round_and_previous_goes_back(memory):
+    memory.find.setText("DE AD BE EF")
+    memory.find_next()
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000800." and selected_row(memory) == 0x80
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000123, having gone round from the end."
+    memory.find_previous()
+    assert memory.found.text() == "Found at 08000800, having gone round from the start."
+    memory.find_previous()
+    assert memory.found.text() == "Found at 08000123."
+
+
+def test_previous_before_anything_is_found_is_the_last_there_is(memory):
+    memory.find.setText("DEADBEEF")
+    memory.find_previous()
+    assert memory.found.text() == "Found at 08000800."
+
+
+def test_text_is_found_as_it_is_spelled(memory):
+    memory.find_as.setCurrentText("Text")
+    memory.find.setText("Firmware")
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000A00." and selected_row(memory) == 0xA0
+    memory.find.setText("firmware")
+    memory.find_next()
+    assert memory.found.text() == "Not found in what was read.", "capitals are part of it"
+
+
+def test_text_that_looks_like_hexadecimal_is_looked_for_as_what_was_chosen(memory):
+    data = bytearray(0x40)
+    data[0x10:0x14] = b"BEEF"
+    data[0x20:0x22] = b"\xbe\xef"
+    memory.show_memory(BASE, bytes(data), "sim_single")
+    memory.find.setText("BEEF")
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000020.", "as bytes, which is what it opens on"
+    memory.find_as.setCurrentText("Text")
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000010."
+
+
+def test_what_is_not_bytes_says_so_and_points_at_text(memory):
+    for typed in ("DE A", "Firmware", "0x"):
+        memory.find.setText(typed)
+        memory.find_next()
+        assert "is not bytes in hexadecimal" in memory.found.text(), typed
+        assert "choose Text" in memory.found.text()
+
+
+def test_a_match_across_two_rows_is_found_and_shown_where_it_starts(memory):
+    data = bytearray(0x40)
+    data[0x0E:0x12] = b"\x11\x22\x33\x44"
+    memory.show_memory(BASE, bytes(data), "sim_single")
+    memory.find.setText("11 22 33 44")
+    memory.find_next()
+    assert memory.found.text() == "Found at 0800000E." and selected_row(memory) == 0
+
+
+def test_a_new_read_starts_the_search_again(memory):
+    memory.find.setText("DEADBEEF")
+    memory.find_next()
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000800."
+    memory.show_memory(BASE, memory.model.data_read, "sim_single")
+    assert memory.found.text() == ""
+    memory.find_next()
+    assert memory.found.text() == "Found at 08000123."
+
+
+def test_enter_in_either_box_does_what_the_box_is_for(memory):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    memory.goto.setText("08000800")
+    QTest.keyClick(memory.goto, Qt.Key_Return)
+    assert memory.found.text() == "At 08000800."
+    memory.find.setText("DEADBEEF")
+    QTest.keyClick(memory.find, Qt.Key_Return)
+    assert memory.found.text() == "Found at 08000123."
+    memory.next_button.click()
+    assert memory.found.text() == "Found at 08000800."
+    memory.previous_button.click()
+    assert memory.found.text() == "Found at 08000123."
+
+
+def test_bytes_typed_are_read_as_bytes_or_not_at_all():
+    assert parse_bytes("DE AD") == b"\xde\xad" and parse_bytes("0x01,0x02") == b"\x01\x02"
+    assert parse_bytes("") is None and parse_bytes("   ") is None
+    assert parse_bytes("ABC") is None, "half a byte is not a byte"
+    assert parse_bytes("GG") is None
 
 
 # --- an S-record wide enough ----------------------------------------------------------

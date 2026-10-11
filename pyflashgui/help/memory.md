@@ -16,6 +16,23 @@ What is read is kept in memory and shown, in place of whatever was read before. 
 
 A device that protects its flash from being read gives an error from the probe, or reads as something other than what it holds. pyflashgui does not try to get round that.
 
+## Finding your way about
+
+Both of these work on what was read, and read nothing more from the target.
+
+- **Go to** takes an address in hexadecimal and, on Enter, goes to the row it is on. An address outside what was read is said, with the range that was.
+- **Find** looks for **Bytes**, typed in hexadecimal, or for **Text**, as it is spelled. Bytes can be typed however is convenient: `DE AD BE EF`, `DEADBEEF` and `0xDE, 0xAD, 0xBE, 0xEF` are the same four. Text is matched exactly, capitals included. Enter or **Next** finds the next, **Previous** the one before, and the search goes round from the end to the start, saying so when it does.
+
+The line under the boxes says the address of what was found. The row is selected as well, but a row is sixteen bytes and the address is the one that was meant.
+
+| | |
+|---|---|
+| Ctrl+F | Find |
+| F3, Shift+F3 | The next, and the one before |
+| Ctrl+G | Go to an address |
+
+The keys work while the Memory pane is the one being used.
+
 ## Saving
 
 **Save...** writes what is shown to a file: a raw binary, Intel HEX or Motorola S-record, by the name it is given. Nothing is saved until this is pressed, so a read made only to look costs no file.
