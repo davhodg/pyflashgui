@@ -2,6 +2,8 @@
 
 pyflashgui is a graphical flash programming tool: for Arm Cortex-M targets with any debug probe pyOCD supports, and for the many other devices a J-Link reaches through SEGGER's J-Link Commander.
 
+![pyflashgui on its simulated probe: the Files pane with a firmware file and a read, the memory map under them, the bytes of the read beside them, and the Event Log below](main-window.png)
+
 **It is a tool for the bench**: for development, debugging and hobby use. It is not meant for production programming.
 
 ## Contents

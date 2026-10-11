@@ -81,6 +81,10 @@ Linux, and the oldest supported Python on Linux as well, since bugs that only ap
 are real but rarely platform specific. The installer is built only for a release -- push a `v*`
 tag, or start the workflow by hand from the Actions tab.
 
+`python build/screenshots.py` regenerates `pyflashgui/help/main-window.png`, the screenshot in the
+README, on PyPI and in the manual, from the simulated probe. Run it when what the main window
+shows has changed.
+
 ## Building the Windows installer
 
 Only needed to check the packaging itself: releases are built by CI from a tag.
