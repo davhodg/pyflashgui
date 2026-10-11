@@ -17,9 +17,10 @@ A graphical flash programming tool for Arm Cortex-M targets that works with any 
 
 ## What it is for
 
+**It is a tool for the bench**: for development, debugging and hobby use. It is not meant for production programming.
+
 - **Any probe.** A low-cost CMSIS-DAP probe or the ST-Link on a development board does the job a dedicated programmer does.
 - **Workspaces.** The target, the probe, its speed and the files to program are kept together, one workspace per product, so programming a board is one click.
-- **Production.** Programming as each board is connected, with a pass or fail logged for every one.
 - **Files.** ELF, Intel HEX, Motorola S-record and raw binary, with a map of what will be written where.
 
 ## Installing

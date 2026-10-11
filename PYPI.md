@@ -15,6 +15,8 @@ A graphical flash programming tool for Arm Cortex-M targets that works with any 
 
 **pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device through pyOCD has not yet been tried on hardware.
 
+**It is a tool for the bench**: for development, debugging and hobby use. It is not meant for production programming.
+
 ## Install and run
 
 To install it:

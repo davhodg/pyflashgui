@@ -4,7 +4,7 @@
 
 Documentation shows the manual that ships inside the package, rendered here
 rather than opened in a browser. A Help menu that needs the internet is worth
-nothing on a bench or a production line, which is where it is most wanted; the
+nothing on a bench or in a workshop, which is where it is most wanted; the
 web copy is the fallback for a build that somehow arrived without one.
 """
 

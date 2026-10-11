@@ -4,8 +4,8 @@
 
 Inside the package rather than beside the README so that it survives a
 ``pip install`` and lands in the frozen build. A Help menu that needs the
-internet is worth nothing on a bench, in a workshop or on a production line,
-which is where somebody is most likely to want it.
+internet is worth nothing on a bench or in a workshop, which is where
+somebody is most likely to want it.
 
 Markdown, because it is the same text the repository serves on the web and Qt
 renders it directly -- ``QTextBrowser.setMarkdown`` with the GitHub dialect,

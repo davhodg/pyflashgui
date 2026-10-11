@@ -4,6 +4,8 @@ pyflashgui is a graphical flash programming tool for Arm Cortex-M targets, for a
 
 **pyflashgui is new.** Reading files, the memory map and everything on screen are tested against a simulated probe. Programming a real device through pyOCD has not yet been tried on hardware.
 
+**It is a tool for the bench**: for development, debugging and hobby use. It is not meant for production programming.
+
 ## Contents
 
 - [Probe and target](probe.md): the bar across the top, connecting, and which probes need what
