@@ -19,12 +19,15 @@ since the last version, and comes out in the next one.
 - **J-Link Commander** as a second way to a probe: a J-Link, through SEGGER's own
   software, for the devices beyond Cortex-M that it supports. SEGGER's software is not
   included.
-- **Files**: a list of ELF, Intel HEX, S-record and raw binary files, read again at each
-  use and whenever one changes on disc, with Program, Verify, Erase and Reset.
-- **Memory**: part of a target's memory read back and shown as addresses, bytes and text,
-  each read in a pane of its own -- Memory, Memory 2 -- that can be docked and tabbed,
-  and asks before it is closed unsaved, with a search for bytes or text, a way to an address and a comparison with a file,
-  and saved from there as a raw binary, Intel HEX or S-record file.
+- **Files**: a list of what is open -- ELF, Intel HEX, S-record and raw binary files, read
+  again at each use and whenever one changes on disc, and what has been read from a
+  target -- with a map underneath of where the ticked ones land, and Program, Verify,
+  Erase, Reset and Read. A read can be ticked and written like a file, and any two
+  entries can be compared.
+- **Memory**: the bytes of each file and each read, as addresses, bytes and text, in a
+  pane of its own that can be docked and tabbed, with a search for
+  bytes or text and a way to an address. A read is saved from there as a raw binary,
+  Intel HEX or S-record file, and is asked about before it is let go of unsaved.
   Through J-Link Commander, a read can leave out SEGGER's own setting up of the device, for
   a part where that changes its RAM.
 - **Erase...**: all of a target's flash, some of its regions, or a range of addresses.

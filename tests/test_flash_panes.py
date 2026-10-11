@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""The probe bar, the Files pane and the Memory Map, on the simulated probe."""
+"""The probe bar and the Files pane with its memory map, on the simulated probe."""
 
 import time
 
@@ -12,7 +12,7 @@ from PySide6.QtWidgets import QMessageBox
 from pyflashgui import backends
 from pyflashgui.core.events import ERROR, GOOD, WARNING
 from pyflashgui.ui import files_view, probe_bar
-from pyflashgui.ui.files_view import ADDRESS, FILE, FORMAT, SIZE, parse_address
+from pyflashgui.ui.files_view import ADDRESS, END, FILE, FORMAT, SIZE, parse_address
 
 PROBE = "SIM0001"
 FLASH_AT = 0x0800_0000
@@ -55,6 +55,8 @@ def window(app, tmp_path, monkeypatch):
     wait_for(lambda: made.probe_bar.chosen_probe() == PROBE and made.flasher.regions)
     yield made
     wait_for(lambda: not made.flasher.busy)
+    for entry in made.files_view.entries:
+        entry.unsaved = False
     made.close()
 
 
@@ -313,6 +315,85 @@ def test_the_window_does_not_close_part_way_through_a_target(window, tmp_path):
     idle(window)
 
 
+# --- files and reads alike ------------------------------------------------------------
+def test_a_file_is_shown_in_a_memory_pane_like_a_read(window, tmp_path):
+    window.files_view.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, bytes(range(48)))])
+    assert window.panes.instances("memory") == ["memory"]
+    dock = window.panes.docks["memory"]
+    assert dock.windowTitle() == "app.hex" and not dock.isFloating()
+    view = window.memory_view
+    assert view.summary.text() == "app.hex: Intel HEX, 48 bytes from 08000000 to 0800002F."
+    assert view.model.row(1)[0] == "08000010" and view.model.row(1)[1].startswith("10 11 12")
+    assert not view.unsaved, "it is on disc already"
+    cells = [window.files_view.table.item(0, c).text() for c in (FILE, FORMAT, ADDRESS, END, SIZE)]
+    assert cells == ["app.hex", "Intel HEX", "08000000", "0800002F", "48 bytes"]
+
+
+def test_the_pane_of_a_file_follows_the_file(window, tmp_path):
+    path = hex_file(tmp_path, "app.hex", FLASH_AT, bytes(16))
+    window.files_view.add_files([path])
+    hex_file(tmp_path, "app.hex", FLASH_AT, bytes(range(32)))
+    wait_for(lambda: len(window.memory_view.model.data_read) == 32, timeout=10.0)
+    assert window.memory_view.model.row(1)[1].startswith("10 11")
+
+
+def test_removing_a_file_closes_its_pane(window, tmp_path):
+    window.files_view.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, bytes(16))])
+    window.files_view.table.selectRow(0)
+    window.files_view.remove_button.click()
+    assert window.memory_views == []
+
+
+def test_the_files_of_a_workspace_have_their_panes_when_it_opens(window, tmp_path):
+    from pyflashgui.ui.main_window import MainWindow
+
+    window.files_view.add_files(
+        [
+            hex_file(tmp_path, "boot.hex", FLASH_AT, bytes(16)),
+            hex_file(tmp_path, "app.hex", FLASH_AT + 0x1000, bytes(16)),
+        ]
+    )
+    again = MainWindow()
+    try:
+        titles = [again.panes.docks[n].windowTitle() for n in again.panes.instances("memory")]
+        assert titles == ["boot.hex", "app.hex"]
+    finally:
+        again.close()
+
+
+def test_a_ticked_read_is_written_like_a_file(window, tmp_path):
+    connect(window)
+    window._show_memory(FLASH_AT + 0x2000, b"from a read", "sim_single")
+    files = window.files_view
+    files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"from a file")])
+    assert [image.name for image in files.loaded()] == ["app.hex"], "a read starts unticked"
+    files.table.item(0, FILE).setCheckState(Qt.Checked)
+    assert window.map_view.summary.text() == "sim_single: Everything fits."
+    assert {window.map_view.pieces.item(r, 0).text() for r in range(2)} == {"Read 1", "app.hex"}
+    files.program_button.click()
+    idle(window)
+    assert said(window, ERROR) == []
+    for address in (FLASH_AT, FLASH_AT + 0x2000):
+        window.flasher.read_memory(address, 11)
+        idle(window)
+    assert [e.image.segments[0].data for e in files.entries[-2:]] == [
+        b"from a file",
+        b"from a read",
+    ]
+
+
+def test_a_read_and_a_file_for_the_same_addresses_are_not_both_written(window, tmp_path):
+    connect(window)
+    window._show_memory(FLASH_AT, bytes(64), "sim_single")
+    files = window.files_view
+    files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT + 0x20, bytes(64))])
+    files.table.item(0, FILE).setCheckState(Qt.Checked)
+    assert "1 error" in window.map_view.summary.text()
+    files.program_button.click()
+    idle(window)
+    assert said(window, ERROR)[-1] == "Not programmed: the Memory Map says what is wrong."
+
+
 # --- the memory map -------------------------------------------------------------------
 def test_the_map_follows_the_files_and_the_target(window, tmp_path):
     view = window.map_view
@@ -362,12 +443,9 @@ def test_a_target_whose_memory_is_not_known_says_nothing_was_checked(window, tmp
 
 
 # --- the window -----------------------------------------------------------------------
-def test_the_window_opens_with_the_three_panes_and_the_bar(window):
-    assert [d.windowTitle() for d in window.panes.docks.values()] == [
-        "Files",
-        "Memory Map",
-        "Event Log",
-    ]
+def test_the_window_opens_with_its_two_panes_and_the_bar(window):
+    assert [d.windowTitle() for d in window.panes.docks.values()] == ["Files", "Event Log"]
+    assert window.map_view.isVisible(), "the map is part of the Files pane"
     assert all(dock.isVisible() for dock in window.panes.docks.values())
     assert window.probe_bar.isVisible()
 

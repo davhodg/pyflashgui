@@ -1,9 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""The Memory Map pane: what the ticked files will write, and where.
+"""The memory map, in the Files pane: what is ticked there will write, and where.
 
-Three things, top to bottom: what is wrong, how much of each flash region the
-files take up, and every piece of every file with the region it lands in.
+Three things, top to bottom: what is wrong, how much of each flash region is
+taken up, and every piece of every file and read with the region it lands in.
 What is wrong comes first, because it is the reason to look.
 
 It shows what ``core/memory_map.py`` worked out and decides nothing itself,
@@ -35,7 +35,7 @@ from pyflashgui.core.images import Image
 from pyflashgui.core.memory_map import Layout, Region, lay_out
 from pyflashgui.ui import event_colours, fonts
 
-HEADINGS = ("File", "From", "To", "Size", "Region")
+HEADINGS = ("Name", "From", "To", "Size", "Region")
 
 NOTHING = "No file is ticked, so there is nothing to place."
 UNCHECKED = (

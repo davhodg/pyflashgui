@@ -2,7 +2,7 @@
 
 # Memory Map
 
-The **Memory Map** pane shows what the ticked [files](files.md) will write, and where, on the [target](probe.md) that is chosen. It is worked out before anything is sent, from the same bytes that will be sent, so a file linked for the wrong part is found here and not half way through programming a board.
+The **memory map** is the lower part of the [Files](files.md) pane. It shows what the ticked entries of the list above it -- files, and reads that have been ticked -- will write, and where, on the [target](probe.md) that is chosen. It is worked out before anything is sent, from the same bytes that will be sent, so a file linked for the wrong part is found here and not half way through programming a board. The bar between the list and the map can be dragged to give either more room.
 
 From top to bottom:
 
@@ -16,7 +16,7 @@ From top to bottom:
 |---|---|
 | **Error:** outside the target's memory | The file has bytes at addresses this target does not have. It was probably built for another part, or a raw binary has the wrong address. |
 | **Error:** in memory that cannot be written | The bytes land in ROM, or in a region that is another address for the flash and takes no writes. |
-| **Error:** two files write the same addresses | Whichever was written second would win, and which is second is not something anybody chose. |
+| **Error:** two write the same addresses | Two files, or a file and a read. Whichever was written second would win, and which is second is not something anybody chose. Untick one of them. |
 | **Warning:** in RAM | The bytes are written, and lost at the next reset. Loading a program into RAM to run it is a real thing to do; it is not what a file meant for flash should be doing. |
 
 With an error showing, **Program** refuses. A warning does not stop it.

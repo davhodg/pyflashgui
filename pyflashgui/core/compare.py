@@ -17,9 +17,10 @@ Nothing here touches a probe or Qt.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 
-from pyflashgui.core.images import Image
+from pyflashgui.core.images import Image, Segment
 
 SAME, DIFFERENT = 0, 1
 
@@ -133,4 +134,24 @@ def compare(address: int, data: bytes, image: Image) -> Comparison:
         covered=bytes(covered),
         file=bytes(file),
         outside=outside,
+    )
+
+
+def compare_all(segments: Sequence[Segment], image: Image) -> Comparison:
+    """Lay a file over several runs of memory, one after another.
+
+    For what is shown in pieces, as a file with gaps in it is. The marks
+    are for the pieces end to end, in the order given, and ``address`` is
+    where the first starts: where a later byte is, is for whoever holds the
+    pieces to say.
+    """
+    made = [compare(segment.address, segment.data, image) for segment in segments]
+    covered = b"".join(one.covered for one in made)
+    return Comparison(
+        name=image.name,
+        address=segments[0].address if segments else 0,
+        differs=b"".join(one.differs for one in made),
+        covered=covered,
+        file=b"".join(one.file for one in made),
+        outside=image.size - covered.count(1),
     )

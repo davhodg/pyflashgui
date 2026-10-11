@@ -2,11 +2,17 @@
 
 # Files
 
-The **Files** pane is the list of what is to be programmed, and the buttons that do it.
+The **Files** pane is the list of what is open, a map of where it lands, and the buttons that use it. What is open is firmware files and what has been read from a target, and the two are treated alike: each is bytes at addresses, to look at, to compare and to write.
 
 ## The list
 
-**Add...** puts a firmware file on the list; **Remove** takes the selected ones off, and leaves the files themselves alone. Each file has a tick: only ticked files are programmed, verified and shown in the [Memory Map](memory-map.md). The list is kept in the workspace, so programming a product is choosing its workspace and pressing **Program**.
+**Add...** puts a firmware file on the list, and **Read...** puts what it reads from the target there, as *Read 1*, *Read 2* and so on. Each row says what it is, where it came from, the addresses it runs from and to, and its size. **Remove** takes the selected ones off: a file itself is left alone, and a read that has not been saved is asked about first.
+
+Each has a tick: only what is ticked is programmed, verified and shown in the [memory map](memory-map.md) underneath. A file is ticked when it is added. **A read is not**, since most are made to be looked at; tick one to write it to a target like a file, beside the files or instead of them. The files are kept in the workspace, so programming a product is choosing its workspace and pressing **Program**. What was read is in memory until it is saved, and is not kept.
+
+**Show**, or a double click, shows the bytes of an entry in a [Memory](memory.md) pane. One opens by itself for each file and each read as it joins the list.
+
+**Compare** compares the two entries that are selected -- two reads, two files, or one of each -- and marks where they differ in a Memory pane. Ctrl+click selects the second. See [Comparing](memory.md).
 
 | Format | Addresses |
 |---|---|
@@ -19,17 +25,17 @@ The format is told from what is in the file, not from its name.
 
 **A raw binary cannot be read until it has an address.** It is bytes and nothing else, and pyflashgui does not guess at zero. Double-click its **Address** and type one, such as `08000000`.
 
-**A file is read again every time it is used**, and whenever it changes on disc, so the list and the Memory Map follow each build and **Program** always sends what the file holds now. A file that cannot be read says *Cannot be read* in the list; hover over it for why.
+**A file is read again every time it is used**, and whenever it changes on disc, so the list, the memory map and the file's Memory pane follow each build and **Program** always sends what the file holds now. A file that cannot be read says *Cannot be read* in the list; hover over it for why.
 
 ## Program, Verify, Erase, Reset, Read
 
 These need a probe [connected](probe.md) to a target.
 
-- **Program** writes the ticked files. Before it starts, the files are checked against the target's memory, as the [Memory Map](memory-map.md) shows: if anything is an error there, nothing is programmed and the [Event Log](manual.md) says why.
-- **Verify** reads the flash back and compares it with the ticked files, changing nothing. If they differ, it says how many bytes do and where the first one is.
+- **Program** writes what is ticked: files, reads, or both. Before it starts, they are checked against the target's memory and against each other, as the [memory map](memory-map.md) shows: if anything is an error there -- two of them writing the same addresses is one -- nothing is programmed and the [Event Log](manual.md) says why.
+- **Verify** reads the flash back and compares it with what is ticked, changing nothing. If they differ, it says how many bytes do and where the first one is.
 - **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
 - **Reset** restarts the target.
-- **Read...** reads part of the target's memory back and shows it in a [Memory](memory.md) pane of its own, changing nothing in the target. It can be saved to a file from there.
+- **Read...** reads part of the target's memory back, changing nothing in the target. What is read joins the list and is shown in a [Memory](memory.md) pane of its own. It can be saved to a file from there.
 
 Three ticks say what **Program** does besides writing:
 

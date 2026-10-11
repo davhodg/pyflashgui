@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 
 import pytest
-from PySide6.QtCore import QCoreApplication, QSettings
-from PySide6.QtWidgets import QFileDialog
+from PySide6.QtCore import QCoreApplication, QItemSelectionModel, QSettings, Qt
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 
 from pyflashgui import backends
 from pyflashgui.backends import jlink_backend
@@ -18,6 +18,7 @@ from pyflashgui.core.events import EventLog
 from pyflashgui.core.flasher import Flasher
 from pyflashgui.core.images import Segment
 from pyflashgui.core.memory_map import FLASH, RAM, Region
+from pyflashgui.ui import files_view
 from pyflashgui.ui.memory_view import MemoryModel, parse_bytes, text_of
 from pyflashgui.ui.read_dialog import ReadDialog, parse_number
 
@@ -323,8 +324,8 @@ def window(app, tmp_path, monkeypatch):
     wait_for(lambda: not made.flasher.busy)
     # What a test read it has no use for: gone without the question a
     # person would be asked.
-    for view in made.memory_views:
-        view.unsaved = False
+    for entry in made.files_view.entries:
+        entry.unsaved = False
     made.close()
 
 
@@ -362,8 +363,8 @@ def test_there_is_no_memory_pane_until_something_is_read(window, monkeypatch):
     read(window, monkeypatch, "08000000", "20")
     assert window.panes.instances("memory") == ["memory"]
     dock = window.panes.docks["memory"]
-    assert dock.windowTitle() == "Memory: 08000000, 32 bytes"
-    assert dock.isVisible() and dock.isFloating(), "in front of the window, to begin with"
+    assert dock.windowTitle() == "Read 1"
+    assert dock.isVisible() and not dock.isFloating(), "beside the Files pane"
     view = window.memory_view
     assert view.model.row(0)[2].startswith("firmware")
     assert view.summary.text().startswith(
@@ -381,9 +382,9 @@ def test_each_read_has_a_pane_of_its_own_numbered_as_it_comes(window, monkeypatc
     assert window.panes.instances("memory") == ["memory", "memory 2", "memory 3"]
     titles = [window.panes.docks[n].windowTitle() for n in window.panes.instances("memory")]
     assert titles == [
-        "Memory: 08000000, 16 bytes",
-        "Memory 2: 08000004, 4 bytes",
-        "Memory 3: 08000000, 2 bytes",
+        "Read 1",
+        "Read 2",
+        "Read 3",
     ]
     first, second, third = window.memory_views
     assert first.model.data_read[:8] == b"firmware", "the first is as it was"
@@ -410,7 +411,7 @@ def test_a_memory_pane_is_in_the_view_menu_like_any_other(window, monkeypatch):
     QCoreApplication.processEvents()  # the menu is rebuilt a turn of the loop later
     window._tick_view_menu()
     listed = {action.text(): action for action in window.view_menu.actions()}
-    assert listed["Memory: 08000000, 16 bytes"].isChecked()
+    assert listed["Read 1"].isChecked()
 
 
 def test_what_was_read_is_not_kept_with_the_workspace(window, monkeypatch):
@@ -426,11 +427,9 @@ def test_what_was_read_is_not_kept_with_the_workspace(window, monkeypatch):
     assert settings.get("panes.detached_at.memory 2") is None
 
 
-# --- closing one ----------------------------------------------------------------------
+# --- the list it joins, closing its pane, and letting go of it ------------------------
 def answer_with(monkeypatch, button) -> list[tuple[str, str]]:
     """Answer every question with this button, and note what was asked."""
-    from PySide6.QtWidgets import QMessageBox
-
     asked = []
 
     def answer(box):
@@ -446,47 +445,58 @@ def gone(window, name: str) -> None:
     wait_for(lambda: name not in window.panes.docks)
 
 
-def test_closing_a_read_that_was_not_saved_says_so_first(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
+def select(files, *rows: int) -> None:
+    """Select these rows of the Files list, and no others."""
+    files.table.clearSelection()
+    for row in rows:
+        files.table.selectionModel().select(
+            files.table.model().index(row, 0),
+            QItemSelectionModel.Select | QItemSelectionModel.Rows,
+        )
 
+
+def test_what_is_read_joins_the_list_unticked_and_not_saved(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "10")
+    files = window.files_view
+    cells = [files.table.item(0, c).text() for c in range(files.table.columnCount())]
+    assert cells[0] == "Read 1"
+    assert cells[1].startswith("sim_single, read ") and cells[1].endswith(", not saved")
+    assert cells[2:] == ["08000000", "0800000F", "16 bytes"]
+    assert files.table.item(0, 0).checkState() == Qt.Unchecked, "a read is made to be looked at"
+    assert files.loaded() == []
+    assert not files.table.item(0, 2).flags() & Qt.ItemIsEditable, "it was read from where it is"
+    assert window.ctx.settings.get(files_view.FILES_KEY, []) == [], "and is not kept"
+
+
+def test_closing_a_pane_asks_nothing_and_what_it_showed_can_be_shown_again(window, monkeypatch):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "10")
     asked = answer_with(monkeypatch, QMessageBox.Cancel)
-    assert window.panes.docks["memory"].close() is False, "Cancel keeps it"
-    assert asked == [
-        (
-            "Close without saving?",
-            "What was read from sim_single is only in this pane. Closing it without "
-            "saving throws it away.",
-        )
-    ]
-    QCoreApplication.processEvents()
+    assert window.panes.docks["memory"].close() is True and asked == []
+    gone(window, "memory")
+    files = window.files_view
+    assert [e.name for e in files.entries] == ["Read 1"] and files.entries[0].unsaved
+    assert not files.show_button.isEnabled(), "nothing is selected to show"
+    select(files, 0)
+    files.show_button.click()
     assert window.panes.instances("memory") == ["memory"]
-    assert window.memory_view.model.data_read and window.panes.docks["memory"].isVisible()
+    assert window.memory_view.model.data_read[:8] == b"firmware"
 
 
-def test_discard_throws_it_away_and_the_pane_with_it(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
+def test_one_that_is_shown_already_is_brought_forward_and_not_shown_twice(window, monkeypatch):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "10")
-    asked = answer_with(monkeypatch, QMessageBox.Discard)
-    assert window.panes.docks["memory"].close() is True
-    gone(window, "memory")
-    assert len(asked) == 1 and window.memory_views == [] and window.memory_view is None
-    # The first of the kind went like any other, and its name is free again.
-    read(window, monkeypatch, "08000000", "4")
-    assert window.panes.instances("memory") == ["memory"]
-    assert window.memory_view.model.data_read == b"firm"
+    read(window, monkeypatch, "08000000", "8")
+    files = window.files_view
+    files.table.itemDoubleClicked.emit(files.table.item(0, 0))
+    assert window.panes.instances("memory") == ["memory", "memory 2"]
 
 
 def test_closing_one_leaves_the_others_and_their_numbers(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
     connect_and_program(window, b"firmware")
     for _ in range(3):
         read(window, monkeypatch, "08000000", "10")
-    answer_with(monkeypatch, QMessageBox.Discard)
     window.panes.docks["memory 2"].close()
     gone(window, "memory 2")
     assert window.panes.instances("memory") == ["memory", "memory 3"]
@@ -494,87 +504,111 @@ def test_closing_one_leaves_the_others_and_their_numbers(window, monkeypatch):
     assert window.panes.instances("memory") == ["memory", "memory 3", "memory 2"], (
         "the next takes the number that was given up"
     )
+    assert [e.name for e in window.files_view.entries] == ["Read 1", "Read 2", "Read 3", "Read 4"]
 
 
-def test_save_saves_it_and_then_closes(window, monkeypatch, tmp_path):
-    from PySide6.QtWidgets import QMessageBox
+def test_removing_a_read_that_was_not_saved_says_so_first(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "10")
+    files = window.files_view
+    asked = answer_with(monkeypatch, QMessageBox.Cancel)
+    select(files, 0)
+    files.remove_button.click()
+    assert asked == [
+        (
+            "Remove without saving?",
+            "Read 1 is what was read from sim_single, and has not been saved. "
+            "Without saving, it is thrown away.",
+        )
+    ]
+    QCoreApplication.processEvents()
+    assert len(files.entries) == 1 and window.panes.docks["memory"].isVisible(), "Cancel keeps it"
 
+
+def test_discard_throws_it_away_and_its_pane_with_it(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "10")
+    files = window.files_view
+    asked = answer_with(monkeypatch, QMessageBox.Discard)
+    select(files, 0)
+    files.remove_button.click()
+    gone(window, "memory")
+    assert len(asked) == 1 and files.entries == [] and window.memory_view is None
+    read(window, monkeypatch, "08000000", "4")
+    assert [e.name for e in files.entries] == ["Read 2"], "a name is not used twice"
+    assert window.panes.instances("memory") == ["memory"]
+
+
+def test_save_saves_it_and_then_removes_it(window, monkeypatch, tmp_path):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
     saved_as = tmp_path / "kept.bin"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(saved_as), ""))
     answer_with(monkeypatch, QMessageBox.Save)
-    assert window.panes.docks["memory"].close() is True
+    select(window.files_view, 0)
+    window.files_view.remove_button.click()
     gone(window, "memory")
-    assert saved_as.read_bytes() == b"firmware"
+    assert saved_as.read_bytes() == b"firmware" and window.files_view.entries == []
 
 
-def test_a_save_that_was_cancelled_has_saved_nothing_so_it_stays_open(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
+def test_a_save_that_was_cancelled_has_saved_nothing_so_it_stays(window, monkeypatch):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: ("", ""))
     answer_with(monkeypatch, QMessageBox.Save)
-    assert window.panes.docks["memory"].close() is False
+    select(window.files_view, 0)
+    window.files_view.remove_button.click()
     QCoreApplication.processEvents()
     assert window.panes.instances("memory") == ["memory"] and window.memory_view.unsaved
 
 
-def test_a_read_that_was_saved_closes_without_a_word(window, monkeypatch, tmp_path):
-    from PySide6.QtWidgets import QMessageBox
-
+def test_a_read_that_was_saved_says_so_and_is_removed_without_a_word(window, monkeypatch, tmp_path):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
+    files = window.files_view
     saved_as = tmp_path / "kept.hex"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(saved_as), ""))
     window.memory_view.save_button.click()
     assert not window.memory_view.unsaved
+    assert not files.table.item(0, 1).text().endswith("not saved")
     asked = answer_with(monkeypatch, QMessageBox.Cancel)
-    assert window.panes.docks["memory"].close() is True and asked == []
+    select(files, 0)
+    files.remove_button.click()
+    assert asked == [] and files.entries == []
     gone(window, "memory")
 
 
-def test_a_pane_in_a_window_of_its_own_asks_just_the_same(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
+def test_a_pane_in_a_window_of_its_own_closes_the_same_way(window, monkeypatch):
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
     window.panes.detach("memory")
-    detached = window.panes.detached["memory"]
     asked = answer_with(monkeypatch, QMessageBox.Cancel)
-    assert detached.close() is False and len(asked) == 1
-    assert "memory" in window.panes.detached, "kept, and still in its window"
-
-    answer_with(monkeypatch, QMessageBox.Discard)
-    assert detached.close() is True
+    assert window.panes.detached["memory"].close() is True and asked == []
     gone(window, "memory")
-    assert window.memory_views == []
+    assert window.memory_views == [] and len(window.files_view.entries) == 1
 
 
 def test_putting_a_detached_pane_back_in_the_window_is_not_closing_it(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
     window.panes.detach("memory")
-    asked = answer_with(monkeypatch, QMessageBox.Cancel)
     window.panes.attach("memory")
     QCoreApplication.processEvents()
-    assert asked == [], "nothing is being thrown away"
     assert window.panes.instances("memory") == ["memory"]
     assert window.memory_view.model.data_read == b"firmware"
 
 
 def test_closing_pyflashgui_asks_about_each_and_one_kept_keeps_it_open(window, monkeypatch):
-    from PySide6.QtWidgets import QMessageBox
-
     connect_and_program(window, b"firmware")
     read(window, monkeypatch, "08000000", "8")
     read(window, monkeypatch, "08000000", "4")
+    # Whether or not its pane is still open: it is the read that would be lost.
+    window.panes.docks["memory"].close()
+    gone(window, "memory")
     asked = answer_with(monkeypatch, QMessageBox.Cancel)
     assert window.close() is False, "a read that is kept keeps the whole of it open"
-    assert len(asked) == 1 and len(window.memory_views) == 2
+    assert len(asked) == 1 and asked[0][0] == "Close without saving?"
+    assert len(window.files_view.entries) == 2
 
     asked = answer_with(monkeypatch, QMessageBox.Discard)
     assert window.close() is True

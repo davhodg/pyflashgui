@@ -1,11 +1,16 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""A Memory pane: what one read of a target found, to look at and to save.
+"""A Memory pane: the bytes of one entry in the Files list, to look at and to save.
 
-A read goes into memory and is shown here, as addresses, bytes and the
-characters they spell. Saving it is a second step, taken when it has been
-looked at and found worth keeping: most reads are to see what is there, and
-a file for each would be a folder of files nobody opens again.
+What a file holds and what was read from a target are shown the same way, as
+addresses, bytes and the characters they spell. A read goes into memory and
+is shown here; saving it is a second step, taken when it has been looked at
+and found worth keeping: most reads are to see what is there, and a file for
+each would be a folder of files nobody opens again.
+
+A file can be in several pieces with nothing between them. Each piece starts
+a row of its own at its own address, and the rows of one follow the rows of
+the one before: the gaps are not shown, since there is nothing in them.
 
 The rows are worked out as they are drawn. A whole flash is a million of
 them, and making each one in advance would take longer than reading it did.
@@ -13,8 +18,9 @@ them, and making each one in advance would take longer than reading it did.
 
 from __future__ import annotations
 
+from bisect import bisect_right
+from collections.abc import Callable, Sequence
 from datetime import datetime
-from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
@@ -26,7 +32,6 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
-    QMessageBox,
     QPushButton,
     QTableView,
     QVBoxLayout,
@@ -34,17 +39,17 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.core import images
-from pyflashgui.core.compare import DIFFERENT, Comparison, compare
+from pyflashgui.core.compare import DIFFERENT, Comparison, compare_all
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
-from pyflashgui.core.images import ImageError
-from pyflashgui.ui import folders, fonts, messages
-from pyflashgui.ui.files_view import parse_address
+from pyflashgui.core.images import Image, Segment
+from pyflashgui.ui import fonts
+from pyflashgui.ui.files_view import Entry, parse_address, save_entry
 
 #: Bytes shown on a row.
 WIDTH = 16
 ADDRESS, BYTES, TEXT, FILE = range(4)
-HEADINGS = ("Address", "Bytes", "Text", "File")
+HEADINGS = ("Address", "Bytes", "Text", "Compared with")
 
 #: In the File column, a byte the file agrees about and one it says
 #: nothing about. What is left to read is what differs.
@@ -52,7 +57,7 @@ AGREES, UNMENTIONED = "..", "--"
 #: How many bytes of a difference are spelled out in the line about it.
 MOST_SHOWN = 8
 
-NOTHING = "Nothing has been read yet. Read... reads part of the connected target's memory."
+NOTHING = "Nothing is shown yet. Read... reads part of the connected target's memory."
 TRIM_TIP = (
     "Erased flash reads as FF. With this ticked, the FF bytes after the last\n"
     "byte that holds something are not saved, so the file is the size of\n"
@@ -94,41 +99,49 @@ def parse_bytes(text: str) -> bytes | None:
         return None
 
 
-def comparison_text(made: Comparison) -> str:
-    """What comparing found, in a sentence or two."""
+def comparison_text(made: Comparison, address_of: Callable[[int], int] | None = None) -> str:
+    """What comparing found, in a sentence or two.
+
+    ``address_of`` says where a byte of what was compared is, for what is
+    in more pieces than one. Without it, they follow from where it starts.
+    """
     if made.compared == 0:
         return (
-            f"Compared with {made.name}: none of it is at the addresses that were read, "
+            f"Compared with {made.name}: none of it is at the addresses shown here, "
             "so there was nothing to compare."
         )
     if made.different:
+        first = address_of(made.first) if address_of else made.address + made.first
         count = "1 byte differs" if made.different == 1 else f"{made.different} bytes differ"
         said = (
             f"Compared with {made.name}: {count} of {size_text(made.compared)}, the first "
-            f"at {made.address + made.first:08X}."
+            f"at {first:08X}."
         )
     else:
         said = f"Compared with {made.name}: {size_text(made.compared)} compared, all the same."
     # What each has that the other does not is said, and is not a
-    # difference: the file was not wrong about what it does not mention.
+    # difference: neither is wrong about what it does not mention.
     if made.outside:
-        said += f" {size_text(made.outside)} of the file are outside what was read."
+        said += f" {size_text(made.outside)} of {made.name} are outside what is shown here."
     if made.unmentioned:
-        said += f" {size_text(made.unmentioned)} of what was read are not in the file."
+        said += f" {size_text(made.unmentioned)} of what is shown here are not in {made.name}."
     return said
 
 
-def difference_text(made: Comparison, data: bytes, at: int) -> str:
+def difference_text(
+    made: Comparison, data: bytes, at: int, address_of: Callable[[int], int] | None = None
+) -> str:
     """One stretch of differing bytes: where, how long, and both sides of it."""
     length = made.run_from(at)
     shown = min(length, MOST_SHOWN)
     more = " ..." if length > shown else ""
-    file = " ".join(f"{b:02X}" for b in made.file[at : at + shown])
-    target = " ".join(f"{b:02X}" for b in data[at : at + shown])
+    theirs = " ".join(f"{b:02X}" for b in made.file[at : at + shown])
+    ours = " ".join(f"{b:02X}" for b in data[at : at + shown])
     size = "1 byte" if length == 1 else f"{length} bytes"
+    where = address_of(at) if address_of else made.address + at
     return (
-        f"Differs at {made.address + at:08X} for {size}: the file has {file}{more}, "
-        f"the target {target}{more}."
+        f"Differs at {where:08X} for {size}: here it is {ours}{more}, "
+        f"in {made.name} {theirs}{more}."
     )
 
 
@@ -142,17 +155,85 @@ class MemoryModel(QAbstractTableModel):
 
     def __init__(self) -> None:
         super().__init__()
-        self.address = 0
+        #: The pieces shown, in the order they are shown in.
+        self.segments: tuple[Segment, ...] = ()
+        #: All of them end to end. An offset into this is how a byte is
+        #: named everywhere here: finding, comparing and going to one.
         self.data_read = b""
-        #: What it was last compared with, if anything since it was read.
+        #: For each piece, the offset it starts at and the row it starts on.
+        self._starts: list[int] = []
+        self._first_rows: list[int] = []
+        self._rows = 0
+        #: What it was last compared with, if anything since it was shown.
         self.comparison: Comparison | None = None
 
+    @property
+    def address(self) -> int:
+        """Where the first piece starts."""
+        return self.segments[0].address if self.segments else 0
+
     def show(self, address: int, data: bytes) -> None:
+        self.show_segments((Segment(address, data),))
+
+    def show_segments(self, segments: Sequence[Segment]) -> None:
         self.beginResetModel()
-        self.address, self.data_read = address, data
-        # A comparison is of one read, and this is another.
+        self.segments = tuple(segments)
+        # One piece is shown as it is: a whole flash is not copied to be looked at.
+        self.data_read = (
+            self.segments[0].data
+            if len(self.segments) == 1
+            else b"".join(s.data for s in self.segments)
+        )
+        self._starts, self._first_rows = [], []
+        at = rows = 0
+        for segment in self.segments:
+            self._starts.append(at)
+            self._first_rows.append(rows)
+            at += len(segment)
+            rows += -(-len(segment) // WIDTH)
+        self._rows = rows
+        # A comparison is of what was shown, and this is something else.
         self.comparison = None
         self.endResetModel()
+
+    def _piece(self, offset: int) -> int:
+        """Which piece the byte at this offset is in."""
+        return max(0, bisect_right(self._starts, offset) - 1)
+
+    def span(self, row: int) -> tuple[int, int, int]:
+        """A row's address, and the offsets its bytes run from and to."""
+        piece = max(0, bisect_right(self._first_rows, row) - 1)
+        segment = self.segments[piece]
+        within = (row - self._first_rows[piece]) * WIDTH
+        start = self._starts[piece] + within
+        return (
+            segment.address + within,
+            start,
+            min(start + WIDTH, self._starts[piece] + len(segment)),
+        )
+
+    def row_of(self, offset: int) -> int:
+        piece = self._piece(offset)
+        return self._first_rows[piece] + (offset - self._starts[piece]) // WIDTH
+
+    def address_of(self, offset: int) -> int:
+        piece = self._piece(offset)
+        return self.segments[piece].address + offset - self._starts[piece]
+
+    def offset_of(self, address: int) -> int | None:
+        """The offset of the byte at this address, or None if no piece has it."""
+        for segment, start in zip(self.segments, self._starts, strict=True):
+            if segment.address <= address < segment.end:
+                return start + address - segment.address
+        return None
+
+    def crosses(self, offset: int, length: int) -> bool:
+        """Whether this many bytes from here run out of one piece into the next.
+
+        Those are side by side here and not in the memory they came from.
+        """
+        piece = self._piece(offset)
+        return offset + length > self._starts[piece] + len(self.segments[piece])
 
     def show_comparison(self, comparison: Comparison | None) -> None:
         self.beginResetModel()
@@ -167,8 +248,10 @@ class MemoryModel(QAbstractTableModel):
         reader to find the one that is not the same.
         """
         made = self.comparison
-        start, stop = row * WIDTH, (row + 1) * WIDTH
-        if made is None or DIFFERENT not in made.differs[start:stop]:
+        if made is None:
+            return ""
+        _address, start, stop = self.span(row)
+        if DIFFERENT not in made.differs[start:stop]:
             return ""
         cells = [
             f"{made.file[at]:02X}"
@@ -182,23 +265,26 @@ class MemoryModel(QAbstractTableModel):
         return "  ".join(" ".join(half) for half in halves if half)
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
-        return 0 if parent.isValid() else -(-len(self.data_read) // WIDTH)
+        return 0 if parent.isValid() else self._rows
 
     def columnCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else len(HEADINGS)
 
     def headerData(self, section: int, orientation, role: int = Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            if section == FILE and self.comparison is not None:
+                return self.comparison.name  # whose bytes that column has
             return HEADINGS[section]
         return None
 
     def row(self, row: int) -> tuple[str, str, str]:
         """One row as it is shown: its address, its bytes and their text."""
-        chunk = self.data_read[row * WIDTH : (row + 1) * WIDTH]
+        address, start, stop = self.span(row)
+        chunk = self.data_read[start:stop]
         # A gap after the eighth, so that a byte can be found by eye.
         halves = (chunk[: WIDTH // 2], chunk[WIDTH // 2 :])
         shown = "  ".join(" ".join(f"{b:02X}" for b in half) for half in halves if half)
-        return f"{self.address + row * WIDTH:08X}", shown, text_of(chunk)
+        return f"{address:08X}", shown, text_of(chunk)
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
         if role == Qt.DisplayRole and index.isValid():
@@ -211,16 +297,20 @@ class MemoryModel(QAbstractTableModel):
 class MemoryView(QWidget):
     #: Read... was pressed: somebody else asks what to read and reads it.
     read_requested = Signal()
+    #: What is shown has been saved: the list it is on says so no longer.
+    saved = Signal()
 
     def __init__(self, flasher: Flasher, ctx: Context) -> None:
         super().__init__()
         self.flasher = flasher
         self.ctx = ctx
-        #: What the read was of, for the summary and for a file's name.
+        #: The entry of the Files list whose bytes these are. None until
+        #: there is one.
+        self.entry: Entry | None = None
+        #: What it holds as it was last shown, to tell when that has changed.
+        self._shown: Image | None = None
+        #: What it is of, to say so: the target of a read, a file's name.
         self.target = ""
-        #: Whether what is shown is anywhere but here. True from the
-        #: moment something is read until it has been saved.
-        self.unsaved = False
 
         self.summary = QLabel(NOTHING)
         self.summary.setWordWrap(True)
@@ -235,7 +325,7 @@ class MemoryView(QWidget):
         # shows half as many, and these are read a screenful at a time.
         self.table.verticalHeader().setDefaultSectionSize(fonts.text_height() + 6)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.table.setAccessibleName("Memory read from the target")
+        self.table.setAccessibleName("The bytes of a file or a read")
         header = self.table.horizontalHeader()
         # Sized once from a full row, not from the contents: asking a
         # million rows how wide they are is asking a million rows.
@@ -310,16 +400,12 @@ class MemoryView(QWidget):
         self.read_button.clicked.connect(self.read_requested.emit)
         self.save_button = QPushButton("Save...")
         self.save_button.setToolTip(
-            "Save what is shown here in a file: raw binary, Intel HEX or S-record."
+            "Save what is shown here in a file: raw binary, Intel HEX or S-record.\n"
+            "For what is in one piece, as everything read from a target is."
         )
         self.save_button.clicked.connect(self.save)
-        self.compare_button = QPushButton("Compare...")
-        self.compare_button.setToolTip(
-            "Compare what is shown here with a firmware file, and mark where\n"
-            "they differ. Nothing is read from the target."
-        )
-        self.compare_button.clicked.connect(self.compare_with_file)
-        #: What comparing found, in words.
+        #: What comparing found, in words. Compare, in the Files pane, is
+        #: what compares: this with another entry of that list.
         self.compared = QLabel()
         self.compared.setWordWrap(True)
         self.previous_difference = QPushButton("Previous difference")
@@ -339,7 +425,6 @@ class MemoryView(QWidget):
         buttons = QHBoxLayout()
         buttons.addWidget(self.read_button)
         buttons.addWidget(self.save_button)
-        buttons.addWidget(self.compare_button)
         buttons.addWidget(self.trim)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
@@ -358,31 +443,74 @@ class MemoryView(QWidget):
         self._show_comparison(None)
         self._enable()
 
-    def title(self) -> str:
-        """What the read is of, for the pane's title: where, and how much.
+    @property
+    def unsaved(self) -> bool:
+        """Whether what is shown is a read that is nowhere but in memory."""
+        return self.entry is not None and self.entry.unsaved
 
-        Not the target as well. A tab shows the start of a title and no
-        more, and several panes that all began with the same name would
-        be several tabs the same; the line inside says which target.
-        """
-        return f"{self.model.address:08X}, {size_text(len(self.model.data_read))}"
+    @unsaved.setter
+    def unsaved(self, unsaved: bool) -> None:
+        if self.entry is not None:
+            self.entry.unsaved = unsaved
+
+    def title(self) -> str:
+        """What is shown, for the pane's title: its name in the Files list."""
+        return self.entry.name if self.entry is not None else ""
 
     def show_memory(self, address: int, data: bytes, target: str) -> None:
-        """Show what has just been read, in place of what was read before."""
-        self.target = target
-        self.unsaved = True
-        self.model.show(address, data)
+        """Show these bytes as what has just been read from a target."""
+        self.show_entry(
+            Entry(
+                path="Read",
+                enabled=False,
+                image=Image("Read", images.BINARY, (Segment(address, data),)),
+                target=target,
+                when=f"{datetime.now():%H:%M:%S}",
+                unsaved=True,
+            )
+        )
+
+    def show_entry(self, entry: Entry) -> None:
+        """Show what this entry of the Files list holds, in place of what was shown."""
+        self.entry = entry
+        self.target = entry.target or entry.name
+        self._show(entry.image)
         self.table.scrollToTop()
-        # What was found was found in what was read before.
+
+    def refresh(self) -> None:
+        """Show the entry again if what it holds has changed: a build wrote its file."""
+        if self.entry is None or self.entry.image is self._shown:
+            return
+        bar = self.table.verticalScrollBar()
+        at = bar.value()
+        self._show(self.entry.image)
+        bar.setValue(at)
+
+    def _show(self, image: Image | None) -> None:
+        self._shown = image
+        self.model.show_segments(image.segments if image is not None else ())
+        # What was found was found in what was shown before.
         self._found_at = None
         self.found.setText("")
         # And what it was compared with was compared with that.
         self._show_comparison(None)
-        self.summary.setText(
-            f"{target}: {size_text(len(data))} from {address:08X} to "
-            f"{address + len(data) - 1:08X}, read at {datetime.now():%H:%M:%S}."
-        )
+        self.summary.setText(self._summary())
         self._enable()
+
+    def _summary(self) -> str:
+        entry, pieces = self.entry, self.model.segments
+        if entry is None:
+            return NOTHING
+        if entry.image is None:
+            return f"{entry.name} cannot be read: {entry.problem}"
+        if not pieces:
+            return f"{entry.name} holds nothing."
+        size = size_text(len(self.model.data_read))
+        span = f"from {pieces[0].address:08X} to {max(s.end for s in pieces) - 1:08X}"
+        if entry.is_read:
+            return f"{entry.target}: {size} {span}, read at {entry.when}."
+        said = f"{entry.name}: {entry.image.format}, {size} {span}"
+        return said + (f", in {len(pieces)} pieces." if len(pieces) > 1 else ".")
 
     def _on_flasher(self, _state: bool) -> None:
         self._enable()
@@ -390,9 +518,8 @@ class MemoryView(QWidget):
     def _enable(self) -> None:
         self.read_button.setEnabled(self.flasher.connected and not self.flasher.busy)
         anything = bool(self.model.data_read)
+        self.save_button.setEnabled(anything and len(self.model.segments) == 1)
         for widget in (
-            self.save_button,
-            self.compare_button,
             self.goto,
             self.find_as,
             self.find,
@@ -412,26 +539,29 @@ class MemoryView(QWidget):
 
     def _show_offset(self, offset: int) -> None:
         """Bring the row this byte is on into view, and select it."""
-        row = offset // WIDTH
+        row = self.model.row_of(offset)
         self.table.selectRow(row)
         self.table.scrollTo(self.model.index(row, 0), QAbstractItemView.PositionAtCenter)
 
     def go_to(self) -> None:
-        """Go to the address typed, if it is one that was read."""
-        data, start = self.model.data_read, self.model.address
+        """Go to the address typed, if it is one that is shown."""
+        data, pieces = self.model.data_read, self.model.segments
         if not data:
             return
         typed = self.goto.text().strip()
         address = parse_address(typed)
         if address is None:
             self.found.setText(f"{typed!r} is not an address: it wants hexadecimal.")
-        elif not start <= address < start + len(data):
+        elif (offset := self.model.offset_of(address)) is None:
+            start, end = pieces[0].address, max(s.end for s in pieces) - 1
             self.found.setText(
-                f"{address:08X} is not in what was read, which is {start:08X} to "
-                f"{start + len(data) - 1:08X}."
+                f"{address:08X} is not in what was read, which is {start:08X} to {end:08X}."
+                if len(pieces) == 1
+                else f"{address:08X} is in none of the {len(pieces)} pieces shown, which are "
+                f"between {start:08X} and {end:08X}."
             )
         else:
-            self._show_offset(address - start)
+            self._show_offset(offset)
             self.found.setText(f"At {address:08X}.")
 
     def _wanted(self) -> bytes | None:
@@ -451,6 +581,22 @@ class MemoryView(QWidget):
             )
         return wanted
 
+    def _next(self, wanted: bytes, start: int) -> int:
+        """Where these bytes are next, at or after ``start``, within one piece. -1 if nowhere."""
+        data = self.model.data_read
+        at = data.find(wanted, start)
+        while at >= 0 and self.model.crosses(at, len(wanted)):
+            at = data.find(wanted, at + 1)
+        return at
+
+    def _before(self, wanted: bytes, end: int) -> int:
+        """Where they last are, ending at or before ``end``, within one piece."""
+        data = self.model.data_read
+        at = data.rfind(wanted, 0, end)
+        while at >= 0 and self.model.crosses(at, len(wanted)):
+            at = data.rfind(wanted, 0, at + len(wanted) - 1)
+        return at
+
     def _find(self, forwards: bool) -> None:
         data = self.model.data_read
         if not data or (wanted := self._wanted()) is None:
@@ -459,17 +605,17 @@ class MemoryView(QWidget):
             self._looked_for, self._found_at = wanted, None
         last = self._found_at
         if forwards:
-            at = data.find(wanted, 0 if last is None else last + 1)
+            at = self._next(wanted, 0 if last is None else last + 1)
             wrapped = at < 0
             if wrapped:
-                at = data.find(wanted)
+                at = self._next(wanted, 0)
         else:
-            # rfind's end is where a match may not reach past, so one
-            # that starts before the last found ends before this.
-            at = -1 if last is None else data.rfind(wanted, 0, last + len(wanted) - 1)
+            # The end is where a match may not reach past, so one that
+            # starts before the last found ends before this.
+            at = -1 if last is None else self._before(wanted, last + len(wanted) - 1)
             wrapped = at < 0
             if wrapped:
-                at = data.rfind(wanted)
+                at = self._before(wanted, len(data))
         if at < 0:
             self._found_at = None
             self.found.setText("Not found in what was read.")
@@ -479,7 +625,7 @@ class MemoryView(QWidget):
         went_round = wrapped and last is not None
         self._found_at = at
         self._show_offset(at)
-        where = f"Found at {self.model.address + at:08X}"
+        where = f"Found at {self.model.address_of(at):08X}"
         if went_round:
             where += ", having gone round from the " + ("end" if forwards else "start")
         self.found.setText(where + ".")
@@ -490,7 +636,7 @@ class MemoryView(QWidget):
     def find_previous(self) -> None:
         self._find(forwards=False)
 
-    # --- comparing with a file -------------------------------------------------------
+    # --- comparing with another ------------------------------------------------------
     def _show_comparison(self, made: Comparison | None) -> None:
         self.model.show_comparison(made)
         self._difference_at = None
@@ -502,7 +648,9 @@ class MemoryView(QWidget):
             button.setVisible(made is not None)
             button.setEnabled(differs)
         self.compared.setVisible(made is not None)
-        self.compared.setText(comparison_text(made) if made is not None else "")
+        self.compared.setText(
+            comparison_text(made, self.model.address_of) if made is not None else ""
+        )
 
     def _make_room(self) -> None:
         """Widen a window of the pane's own until every column can be seen.
@@ -523,33 +671,13 @@ class MemoryView(QWidget):
         if top.width() < wanted:
             top.resize(wanted, top.height())
 
-    def compare_with_file(self) -> None:
-        """Ask for a file, and mark where what is shown differs from it."""
+    def compare_with(self, image: Image) -> None:
+        """Mark where what is shown differs from another file or read."""
         if not self.model.data_read:
             return
-        path = folders.open_file(
-            self,
-            self.ctx,
-            folders.IMAGE,
-            "Compare with a firmware file",
-            images.READ_FILTER,
-            Path.home(),
-        )
-        if path:
-            self.compare_with(path)
-
-    def compare_with(self, path: str) -> None:
-        try:
-            # A raw binary has no addresses of its own, so it is taken to
-            # start where what was read starts: that is what it would be
-            # a copy of.
-            image = images.read(path, address=self.model.address)
-        except ImageError as exc:
-            self.ctx.events.error(f"{Path(path).name} cannot be read: {exc}")
-            return
-        made = compare(self.model.address, self.model.data_read, image)
+        made = compare_all(self.model.segments, image)
         self._show_comparison(made)
-        said = comparison_text(made)
+        said = f"{self.title()}: " + comparison_text(made, self.model.address_of)
         if made.compared == 0:
             self.ctx.events.warning(said)
         elif made.different:
@@ -572,7 +700,7 @@ class MemoryView(QWidget):
             return
         self._difference_at = at
         self._show_offset(at)
-        self.found.setText(difference_text(made, self.model.data_read, at))
+        self.found.setText(difference_text(made, self.model.data_read, at, self.model.address_of))
 
     def to_save(self) -> bytes:
         """What is shown, less the erased bytes at the end if that is ticked."""
@@ -581,6 +709,8 @@ class MemoryView(QWidget):
 
     def save(self) -> bool:
         """Ask where, and save what is shown there. Whether it was saved."""
+        if self.entry is None or len(self.model.segments) != 1:
+            return False
         data = self.to_save()
         if not data:
             self.ctx.events.warning(
@@ -588,50 +718,7 @@ class MemoryView(QWidget):
                 "Untick the box to save it as it is."
             )
             return False
-        address = self.model.address
-        path = folders.save_file(
-            self,
-            self.ctx,
-            folders.EXPORT,
-            "Save what was read",
-            images.WRITE_FILTER,
-            Path.home(),
-            # The time in the name: a read is saved to be kept, and the
-            # next one must not offer to overwrite it.
-            suggested=folders.stamped(f"{self.target}_{address:08X}", ".bin"),
-        )
-        if not path:
+        if not save_entry(self, self.ctx, self.entry, data):
             return False
-        try:
-            fmt = images.write(path, address, data)
-        except ImageError as exc:
-            self.ctx.events.error(f"Saving to {path} failed: {exc}")
-            return False
-        self.unsaved = False
-        self.ctx.events.good(
-            f"Saved {size_text(len(data))} from {address:08X} of {self.target} as {fmt} in {path}."
-        )
+        self.saved.emit()
         return True
-
-
-def may_close(view: MemoryView) -> bool:
-    """Whether a Memory pane may be closed: asked, if what is in it is not saved.
-
-    What was read is only in the pane until it is saved, so closing one that
-    has not been says so first. It can then be saved, thrown away, or kept
-    open; and a Save that was cancelled, or failed, has saved nothing, and
-    keeps it open too.
-    """
-    if not view.unsaved:
-        return True
-    answer = messages.warning(
-        view,
-        "Close without saving?",
-        f"What was read from {view.target} is only in this pane. Closing it without saving "
-        "throws it away.",
-        QMessageBox.Save | QMessageBox.Discard | QMessageBox.Cancel,
-        QMessageBox.Cancel,
-    )
-    if answer == QMessageBox.Save:
-        return view.save()
-    return answer == QMessageBox.Discard
