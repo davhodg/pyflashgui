@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import platform
 import sys
+from importlib import metadata
 from pathlib import Path
 from typing import NamedTuple
 
@@ -78,7 +79,9 @@ def _find(name: str) -> Path | None:
 
     Three places, because the same code runs from a checkout and from an
     installed build, where PyInstaller puts data next to the executable or in
-    its _internal folder depending on the version.
+    its _internal folder depending on the version. And a fourth for a copy
+    installed with pip, which has no folder of its own: a wheel carries its
+    licence files in the package's metadata.
     """
     roots = []
     if getattr(sys, "frozen", False):
@@ -90,6 +93,22 @@ def _find(name: str) -> Path | None:
         candidate = root / name
         if candidate.is_file():
             return candidate
+    return _find_in_metadata(name)
+
+
+def _find_in_metadata(name: str) -> Path | None:
+    """A licence file of an installed copy, from where pip put it."""
+    try:
+        installed = metadata.distribution(APP_NAME)
+    except metadata.PackageNotFoundError:
+        return None
+    for file in installed.files or []:
+        # Only among the licence files: a package may have a NOTICE of its
+        # own somewhere else that is not this one.
+        if file.name == name and "licenses" in file.parts and ".dist-info" in file.parts[0]:
+            candidate = Path(installed.locate_file(file))
+            if candidate.is_file():
+                return candidate
     return None
 
 

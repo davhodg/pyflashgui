@@ -603,3 +603,22 @@ def test_each_installation_asks_its_own_question(app, window, monkeypatch, froze
 
     assert len(asked) == 1 and asks in asked[0]
     assert ("pip install --upgrade pyflashgui" in questions[0]) is not frozen
+
+
+def test_a_copy_installed_with_pip_finds_its_licence_in_the_metadata(tmp_path, monkeypatch):
+    """A wheel has no folder beside it for LICENSE: found on TestPyPI, where
+    the licences window of the first upload said the file was not there."""
+    from importlib import metadata
+
+    from pyflashgui.ui import help_menu
+
+    info = tmp_path / "pyflashgui-0.1.0.dist-info"
+    (info / "licenses").mkdir(parents=True)
+    (info / "licenses" / "LICENSE").write_text("the licence")
+    (info / "METADATA").write_text("Name: pyflashgui\nVersion: 0.1.0\n")
+    (info / "RECORD").write_text(
+        "pyflashgui-0.1.0.dist-info/licenses/LICENSE,,\npyflashgui/NOTICE,,\n"
+    )
+    monkeypatch.setattr(metadata, "distribution", lambda _name: metadata.PathDistribution(info))
+    assert help_menu._find_in_metadata("LICENSE") == info / "licenses" / "LICENSE"
+    assert help_menu._find_in_metadata("NOTICE") is None, "not one from somewhere else"
