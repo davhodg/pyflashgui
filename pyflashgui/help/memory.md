@@ -33,6 +33,17 @@ The line under the boxes says the address of what was found. The row is selected
 
 The keys work while the Memory pane is the one being used.
 
+## Comparing with a file
+
+**Compare...** asks for a firmware file and marks where what is shown differs from it. It works on what was already read, and reads nothing more from the target. It is the question [Verify](files.md) asks, of any stretch of memory and at any time after it was read.
+
+- **Only where the two overlap is compared.** A file and a read rarely cover the same addresses. What the file has outside what was read, and what was read that the file says nothing about, are each counted and said, and neither is a difference.
+- **A line says what was found**: how many bytes were compared, how many differ and where the first is. The same line goes to the Event Log.
+- **A File column appears**, with something in it on each row that differs: the file's own bytes where they differ, `..` for a byte that agrees and `--` for one the file does not mention. A row that agrees throughout is left blank.
+- **Next difference** and **Previous difference** go from one stretch of differing bytes to the next, going round, and say where it is and what each side has.
+
+A raw binary has no addresses of its own, so it is taken to start where what was read starts. Reading again puts the comparison away.
+
 ## Saving
 
 **Save...** writes what is shown to a file: a raw binary, Intel HEX or Motorola S-record, by the name it is given. Nothing is saved until this is pressed, so a read made only to look costs no file.

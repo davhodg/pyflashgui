@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.core import images
+from pyflashgui.core.compare import DIFFERENT, Comparison, compare
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import ImageError
@@ -41,8 +42,14 @@ from pyflashgui.ui.files_view import parse_address
 
 #: Bytes shown on a row.
 WIDTH = 16
-ADDRESS, BYTES, TEXT = range(3)
-HEADINGS = ("Address", "Bytes", "Text")
+ADDRESS, BYTES, TEXT, FILE = range(4)
+HEADINGS = ("Address", "Bytes", "Text", "File")
+
+#: In the File column, a byte the file agrees about and one it says
+#: nothing about. What is left to read is what differs.
+AGREES, UNMENTIONED = "..", "--"
+#: How many bytes of a difference are spelled out in the line about it.
+MOST_SHOWN = 8
 
 NOTHING = "Nothing has been read yet. Read... reads part of the connected target's memory."
 TRIM_TIP = (
@@ -86,6 +93,44 @@ def parse_bytes(text: str) -> bytes | None:
         return None
 
 
+def comparison_text(made: Comparison) -> str:
+    """What comparing found, in a sentence or two."""
+    if made.compared == 0:
+        return (
+            f"Compared with {made.name}: none of it is at the addresses that were read, "
+            "so there was nothing to compare."
+        )
+    if made.different:
+        count = "1 byte differs" if made.different == 1 else f"{made.different} bytes differ"
+        said = (
+            f"Compared with {made.name}: {count} of {size_text(made.compared)}, the first "
+            f"at {made.address + made.first:08X}."
+        )
+    else:
+        said = f"Compared with {made.name}: {size_text(made.compared)} compared, all the same."
+    # What each has that the other does not is said, and is not a
+    # difference: the file was not wrong about what it does not mention.
+    if made.outside:
+        said += f" {size_text(made.outside)} of the file are outside what was read."
+    if made.unmentioned:
+        said += f" {size_text(made.unmentioned)} of what was read are not in the file."
+    return said
+
+
+def difference_text(made: Comparison, data: bytes, at: int) -> str:
+    """One stretch of differing bytes: where, how long, and both sides of it."""
+    length = made.run_from(at)
+    shown = min(length, MOST_SHOWN)
+    more = " ..." if length > shown else ""
+    file = " ".join(f"{b:02X}" for b in made.file[at : at + shown])
+    target = " ".join(f"{b:02X}" for b in data[at : at + shown])
+    size = "1 byte" if length == 1 else f"{length} bytes"
+    return (
+        f"Differs at {made.address + at:08X} for {size}: the file has {file}{more}, "
+        f"the target {target}{more}."
+    )
+
+
 def text_of(data: bytes) -> str:
     """The characters these bytes spell, with a dot for each that spells none."""
     return "".join(chr(b) if 0x20 <= b < 0x7F else "." for b in data)
@@ -98,11 +143,42 @@ class MemoryModel(QAbstractTableModel):
         super().__init__()
         self.address = 0
         self.data_read = b""
+        #: What it was last compared with, if anything since it was read.
+        self.comparison: Comparison | None = None
 
     def show(self, address: int, data: bytes) -> None:
         self.beginResetModel()
         self.address, self.data_read = address, data
+        # A comparison is of one read, and this is another.
+        self.comparison = None
         self.endResetModel()
+
+    def show_comparison(self, comparison: Comparison | None) -> None:
+        self.beginResetModel()
+        self.comparison = comparison
+        self.endResetModel()
+
+    def file_row(self, row: int) -> str:
+        """What the file has on a row where it differs, and nothing where it does not.
+
+        Only the bytes that differ are spelled out, with a mark in place
+        of each that agrees: sixteen bytes beside sixteen bytes leaves the
+        reader to find the one that is not the same.
+        """
+        made = self.comparison
+        start, stop = row * WIDTH, (row + 1) * WIDTH
+        if made is None or DIFFERENT not in made.differs[start:stop]:
+            return ""
+        cells = [
+            f"{made.file[at]:02X}"
+            if made.differs[at]
+            else AGREES
+            if made.covered[at]
+            else UNMENTIONED
+            for at in range(start, min(stop, len(made.differs)))
+        ]
+        halves = (cells[: WIDTH // 2], cells[WIDTH // 2 :])
+        return "  ".join(" ".join(half) for half in halves if half)
 
     def rowCount(self, parent: QModelIndex = QModelIndex()) -> int:
         return 0 if parent.isValid() else -(-len(self.data_read) // WIDTH)
@@ -125,6 +201,8 @@ class MemoryModel(QAbstractTableModel):
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
         if role == Qt.DisplayRole and index.isValid():
+            if index.column() == FILE:
+                return self.file_row(index.row())
             return self.row(index.row())[index.column()]
         return None
 
@@ -161,10 +239,15 @@ class MemoryView(QWidget):
         for column, sample in (
             (ADDRESS, "00000000"),
             (BYTES, "00 " * WIDTH + " "),
-            (TEXT, "M" * WIDTH),
+            (TEXT, "M" * WIDTH + " "),
+            (FILE, "00 " * WIDTH + " "),
         ):
             self.table.setColumnWidth(column, fonts.width_for(self.table, sample))
         header.setStretchLastSection(True)
+        # There only while there is a comparison for it to show, and then
+        # beside the bytes it is to be read against rather than past the text.
+        header.moveSection(FILE, TEXT)
+        self.table.setColumnHidden(FILE, True)
 
         self.goto = QLineEdit()
         self.goto.setFont(fonts.mono())
@@ -226,23 +309,46 @@ class MemoryView(QWidget):
             "Save what is shown here in a file: raw binary, Intel HEX or S-record."
         )
         self.save_button.clicked.connect(self.save)
+        self.compare_button = QPushButton("Compare...")
+        self.compare_button.setToolTip(
+            "Compare what is shown here with a firmware file, and mark where\n"
+            "they differ. Nothing is read from the target."
+        )
+        self.compare_button.clicked.connect(self.compare_with_file)
+        #: What comparing found, in words.
+        self.compared = QLabel()
+        self.compared.setWordWrap(True)
+        self.previous_difference = QPushButton("Previous difference")
+        self.previous_difference.clicked.connect(lambda: self._to_difference(False))
+        self.next_difference = QPushButton("Next difference")
+        self.next_difference.clicked.connect(lambda: self._to_difference(True))
+        #: Where the difference last gone to starts, as an offset.
+        self._difference_at: int | None = None
+        differences = QHBoxLayout()
+        differences.addWidget(self.compared, 1)
+        differences.addWidget(self.previous_difference)
+        differences.addWidget(self.next_difference)
+
         self.trim = QCheckBox("Leave off the erased bytes at the end")
         self.trim.setToolTip(TRIM_TIP)
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.read_button)
         buttons.addWidget(self.save_button)
+        buttons.addWidget(self.compare_button)
         buttons.addWidget(self.trim)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary)
         layout.addLayout(looking)
         layout.addWidget(self.found)
+        layout.addLayout(differences)
         layout.addWidget(self.table, 1)
         layout.addLayout(buttons)
 
         flasher.connection_changed.connect(lambda _on: self._enable())
         flasher.busy_changed.connect(lambda _busy: self._enable())
+        self._show_comparison(None)
         self._enable()
 
     def show_memory(self, address: int, data: bytes, target: str) -> None:
@@ -253,6 +359,8 @@ class MemoryView(QWidget):
         # What was found was found in what was read before.
         self._found_at = None
         self.found.setText("")
+        # And what it was compared with was compared with that.
+        self._show_comparison(None)
         self.summary.setText(
             f"{target}: {size_text(len(data))} from {address:08X} to "
             f"{address + len(data) - 1:08X}, read at {datetime.now():%H:%M:%S}."
@@ -264,6 +372,7 @@ class MemoryView(QWidget):
         anything = bool(self.model.data_read)
         for widget in (
             self.save_button,
+            self.compare_button,
             self.goto,
             self.find_as,
             self.find,
@@ -360,6 +469,90 @@ class MemoryView(QWidget):
 
     def find_previous(self) -> None:
         self._find(forwards=False)
+
+    # --- comparing with a file -------------------------------------------------------
+    def _show_comparison(self, made: Comparison | None) -> None:
+        self.model.show_comparison(made)
+        self._difference_at = None
+        self.table.setColumnHidden(FILE, made is None)
+        if made is not None:
+            self._make_room()
+        differs = made is not None and made.different > 0
+        for button in (self.previous_difference, self.next_difference):
+            button.setVisible(made is not None)
+            button.setEnabled(differs)
+        self.compared.setVisible(made is not None)
+        self.compared.setText(comparison_text(made) if made is not None else "")
+
+    def _make_room(self) -> None:
+        """Widen a window of the pane's own until every column can be seen.
+
+        The File column is as wide again as the bytes. In the main window the
+        room is the user's to arrange; a window that holds only this pane is
+        the pane's to size, and one that hid half of what was asked for would
+        be sized wrongly.
+        """
+        top = self.window()
+        if top is None or top.inherits("QMainWindow"):
+            return
+        header = self.table.horizontalHeader()
+        columns = sum(
+            self.table.columnWidth(c) for c in range(len(HEADINGS)) if not header.isSectionHidden(c)
+        )
+        wanted = columns + self.table.verticalScrollBar().sizeHint().width() + 48
+        if top.width() < wanted:
+            top.resize(wanted, top.height())
+
+    def compare_with_file(self) -> None:
+        """Ask for a file, and mark where what is shown differs from it."""
+        if not self.model.data_read:
+            return
+        path = folders.open_file(
+            self,
+            self.ctx,
+            folders.IMAGE,
+            "Compare with a firmware file",
+            images.READ_FILTER,
+            Path.home(),
+        )
+        if path:
+            self.compare_with(path)
+
+    def compare_with(self, path: str) -> None:
+        try:
+            # A raw binary has no addresses of its own, so it is taken to
+            # start where what was read starts: that is what it would be
+            # a copy of.
+            image = images.read(path, address=self.model.address)
+        except ImageError as exc:
+            self.ctx.events.error(f"{Path(path).name} cannot be read: {exc}")
+            return
+        made = compare(self.model.address, self.model.data_read, image)
+        self._show_comparison(made)
+        said = comparison_text(made)
+        if made.compared == 0:
+            self.ctx.events.warning(said)
+        elif made.different:
+            self.ctx.events.error(said)
+            self._to_difference(True)
+        else:
+            self.ctx.events.good(said)
+
+    def _to_difference(self, forwards: bool) -> None:
+        """Go to the next stretch of bytes that differ, or the one before."""
+        made = self.model.comparison
+        if made is None:
+            return
+        at = (
+            made.next_run(self._difference_at)
+            if forwards
+            else made.previous_run(self._difference_at)
+        )
+        if at is None:
+            return
+        self._difference_at = at
+        self._show_offset(at)
+        self.found.setText(difference_text(made, self.model.data_read, at))
 
     def to_save(self) -> bytes:
         """What is shown, less the erased bytes at the end if that is ticked."""

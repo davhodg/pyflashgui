@@ -22,8 +22,8 @@ since the last version, and comes out in the next one.
 - **Files**: a list of ELF, Intel HEX, S-record and raw binary files, read again at each
   use and whenever one changes on disc, with Program, Verify, Erase and Reset.
 - **Memory**: part of a target's memory read back and shown as addresses, bytes and text,
-  in a window of its own, with a search for bytes or text and a way to an address, and saved
-  from there as a raw binary, Intel HEX or S-record file.
+  in a window of its own, with a search for bytes or text, a way to an address and a comparison with a file,
+  and saved from there as a raw binary, Intel HEX or S-record file.
   Through J-Link Commander, a read can leave out SEGGER's own setting up of the device, for
   a part where that changes its RAM.
 - **Erase...**: all of a target's flash, some of its regions, or a range of addresses.

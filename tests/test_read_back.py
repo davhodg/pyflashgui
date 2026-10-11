@@ -283,7 +283,7 @@ def test_the_tick_reaches_the_backend_through_the_window(app, tmp_path, monkeypa
 def test_a_row_is_an_address_sixteen_bytes_and_what_they_spell():
     model = MemoryModel()
     model.show(0x0800_0000, b"pyflashgui\x00\x01\xff rows" + bytes(range(0x30, 0x35)))
-    assert model.rowCount() == 2 and model.columnCount() == 3
+    assert model.rowCount() == 2 and model.columnCount() == 4
     assert model.row(0) == (
         "08000000",
         "70 79 66 6C 61 73 68 67  75 69 00 01 FF 20 72 6F",
