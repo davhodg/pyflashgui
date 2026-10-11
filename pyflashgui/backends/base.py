@@ -42,6 +42,8 @@ ERASE_CHIP = "chip"
 #: cancel is noticed; large enough that the probe is not asked a thousand
 #: times for one sector.
 VERIFY_CHUNK = 4096
+#: What reading back asks for at a time, for the same two reasons.
+READ_CHUNK = 0x4000
 
 
 class BackendError(Exception):
@@ -143,6 +145,27 @@ class Connection(ABC):
     @abstractmethod
     def close(self) -> None:
         """Let go of the probe. Safe to call twice."""
+
+    def read_range(
+        self,
+        address: int,
+        length: int,
+        progress: Progress = _nothing,
+        cancelled: Cancelled = _never,
+    ) -> bytes:
+        """A long run of the target's memory, a piece at a time.
+
+        In pieces so that there is progress to report and a cancel is
+        noticed: a megabyte asked for in one go is a window that says
+        nothing for as long as it takes.
+        """
+        out = bytearray()
+        while len(out) < length:
+            if cancelled():
+                raise CancelledError("Reading was cancelled.")
+            out += self.read(address + len(out), min(READ_CHUNK, length - len(out)))
+            progress(len(out) / length)
+        return bytes(out)
 
     def verify(
         self,

@@ -299,6 +299,21 @@ class JLinkConnection(Connection):
             )
         return data
 
+    def read_range(
+        self,
+        address: int,
+        length: int,
+        progress: Progress = _nothing,
+        cancelled: Cancelled = _never,
+    ) -> bytes:
+        """All of it in one run of Commander, which is quicker than many."""
+        if cancelled():
+            raise CancelledError("Reading was cancelled.")
+        progress(0.0)
+        data = self.read(address, length)
+        progress(1.0)
+        return data
+
     def verify(
         self,
         segments: Sequence[Segment],

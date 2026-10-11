@@ -21,7 +21,7 @@ The format is told from what is in the file, not from its name.
 
 **A file is read again every time it is used**, and whenever it changes on disc, so the list and the Memory Map follow each build and **Program** always sends what the file holds now. A file that cannot be read says *Cannot be read* in the list; hover over it for why.
 
-## Program, Verify, Erase, Reset
+## Program, Verify, Erase, Reset, Read
 
 These need a probe [connected](probe.md) to a target.
 
@@ -29,6 +29,7 @@ These need a probe [connected](probe.md) to a target.
 - **Verify** reads the flash back and compares it with the ticked files, changing nothing. If they differ, it says how many bytes do and where the first one is.
 - **Erase** erases all of the target's flash.
 - **Reset** restarts the target.
+- **Read...** reads part of the target's memory back into a file, changing nothing in the target. See *Reading back* below.
 
 Three ticks say what **Program** does besides writing:
 
@@ -38,4 +39,16 @@ Three ticks say what **Program** does besides writing:
 
 **Program and Erase ask first**, once a session for each target, because what they replace cannot be got back. The question can be told not to ask again; *Tools > Reset > Re-enable all confirmations* brings it back. The simulated target is not asked about.
 
-The bar beside the buttons says what is being done and how far along it is; where that cannot be told, it shows only that something is happening. **Cancel** stops a verify. Programming is not stopped part way: that would leave the target holding neither the old firmware nor the new.
+The bar beside the buttons says what is being done and how far along it is; where that cannot be told, it shows only that something is happening. **Cancel** stops a verify or a read. Programming is not stopped part way: that would leave the target holding neither the old firmware nor the new.
+
+## Reading back
+
+**Read...** asks what to read, then where to save it.
+
+- **Region** offers the target's own regions, the flash first, and fills in the address and the length. Both can be typed over, in hexadecimal: what is wanted is as often the first few kilobytes as the whole region. Where the target's memory is not known, as with J-Link Commander, the range is typed.
+- **Leave off the erased bytes at the end** is ticked to begin with. Erased flash reads as `FF`, so reading the whole of a 16 MiB flash that holds 100 KiB of firmware would otherwise save 16 MiB. With it ticked, the file ends at the last byte that holds something. An `FF` in the middle of what is there is kept. If everything read is erased, nothing is saved and the Event Log says so.
+
+The file is saved as a raw binary, Intel HEX or Motorola S-record, by the name it is given. A raw binary is the bytes and nothing else, so it does not record where they came from; the other two do. An S-record file is given addresses wide enough for what it holds, whatever its name: flash at `08000000` saved as `.s19` has 32-bit addresses.
+
+A device that protects its flash from being read gives an error from the probe, or reads as something other than what it holds. pyflashgui does not try to get round that.
+

@@ -30,8 +30,9 @@ from pyflashgui.backends.base import (
     Connection,
     Verification,
 )
+from pyflashgui.core import images
 from pyflashgui.core.events import EventLog
-from pyflashgui.core.images import Image, Segment
+from pyflashgui.core.images import Image, ImageError, Segment
 from pyflashgui.core.memory_map import Region
 from pyflashgui.core.worker import Worker
 
@@ -351,6 +352,43 @@ class Flasher(QObject):
             return result.ok
 
         self._run("Verifying", work, done)
+
+    def read_back(self, address: int, length: int, path: str, trim: bool = False) -> None:
+        """Read this much of the target's memory and save it in this file.
+
+        ``trim`` leaves off the erased bytes after the last one that holds
+        something, so that the file is the size of what is there.
+        """
+        if (connection := self._connection("Reading")) is None:
+            return
+        target = self.target
+
+        def work() -> tuple[str, int] | None:
+            data = connection.read_range(
+                address, length, self._progress("Reading"), self._cancel.is_set
+            )
+            if trim:
+                data = data.rstrip(b"\xff")
+            if not data:
+                return None
+            try:
+                return images.write(path, address, data), len(data)
+            except ImageError as exc:
+                raise BackendError(f"Saving to {path} failed: {exc}") from exc
+
+        def done(result: tuple[str, int] | None) -> bool:
+            where = f"{size_text(length)} at {address:08X} of {target}"
+            if result is None:
+                self.events.warning(
+                    f"Read {where}: all of it is erased, so there was nothing to save."
+                )
+                return True
+            fmt, saved = result
+            self.events.good(f"Read {where}, and saved {size_text(saved)} as {fmt} in {path}.")
+            return True
+
+        if self._run("Reading", work, done):
+            self.events.information(f"Reading {size_text(length)} at {address:08X} of {target}...")
 
     def reset(self) -> None:
         if (connection := self._connection("Resetting")) is None:

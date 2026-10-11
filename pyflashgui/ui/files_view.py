@@ -40,6 +40,7 @@ from pyflashgui.core.memory_map import lay_out
 from pyflashgui.ui import folders, fonts
 from pyflashgui.ui.confirm import Confirmations
 from pyflashgui.ui.persist import remember
+from pyflashgui.ui.read_dialog import ReadDialog
 
 FILES_KEY = "files.list"
 
@@ -153,6 +154,12 @@ class FilesView(QWidget):
         self.reset_button = QPushButton("Reset")
         self.reset_button.setToolTip("Restart the target.")
         self.reset_button.clicked.connect(self.flasher.reset)
+        self.read_button = QPushButton("Read...")
+        self.read_button.setToolTip(
+            "Read part of the target's memory back and save it in a file,\n"
+            "changing nothing in the target."
+        )
+        self.read_button.clicked.connect(self.read_back)
 
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
@@ -160,7 +167,7 @@ class FilesView(QWidget):
         self.progress.setFormat("")
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setToolTip(
-            "Stop verifying. Programming is not stopped part way: that would\n"
+            "Stop verifying or reading. Programming is not stopped part way: that would\n"
             "leave the target holding neither the old firmware nor the new."
         )
         self.cancel_button.clicked.connect(self.flasher.cancel)
@@ -177,6 +184,7 @@ class FilesView(QWidget):
             self.verify_button,
             self.erase_button,
             self.reset_button,
+            self.read_button,
         ):
             actions_row.addWidget(widget)
         actions_row.addWidget(self.progress, 1)
@@ -416,6 +424,24 @@ class FilesView(QWidget):
         ):
             self.flasher.erase()
 
+    def read_back(self) -> None:
+        """Ask what to read and where to put it, and read it."""
+        dialog = ReadDialog(self.flasher.regions, self)
+        if dialog.exec() != ReadDialog.Accepted or (asked := dialog.values()) is None:
+            return
+        address, length, trim = asked
+        path = folders.save_file(
+            self,
+            self.ctx,
+            folders.EXPORT,
+            "Save what is read",
+            images.WRITE_FILTER,
+            Path.home(),
+            suggested=folders.stamped(f"{self.flasher.target}_{address:08X}", ".bin"),
+        )
+        if path:
+            self.flasher.read_back(address, length, path, trim)
+
     # --- following the flasher -------------------------------------------------------
     def _enable(self) -> None:
         connected, busy = self.flasher.connected, self.flasher.busy
@@ -425,6 +451,7 @@ class FilesView(QWidget):
         self.verify_button.setEnabled(ready and ticked)
         self.erase_button.setEnabled(ready)
         self.reset_button.setEnabled(ready)
+        self.read_button.setEnabled(ready)
         self.cancel_button.setEnabled(busy)
         self.add_button.setEnabled(not busy)
         self.remove_button.setEnabled(not busy and bool(self.table.selectedIndexes()))

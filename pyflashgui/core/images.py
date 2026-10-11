@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """Firmware images: ELF, Intel HEX, Motorola S-record and raw binary.
 
-Reading is bincopy's job. What is here is the part bincopy cannot decide:
+Reading and writing is bincopy's job. What is here is the part bincopy cannot decide:
 which format a file is, what its address is, and what to do when it does not
 have one.
 
@@ -52,6 +52,17 @@ READ_FILTER = (
     "Motorola S-record (*.s19 *.s28 *.s37 *.srec *.mot);;"
     "Raw binary (*.bin *.raw *.img);;"
     "All files (*)"
+)
+
+#: S-record address widths, by the suffix that names them. S19 is 16-bit
+#: addresses, S28 24-bit, S37 32-bit; the suffix is the usual way of saying so.
+SREC_SUFFIXES = {".s19": 16, ".s28": 24, ".s37": 32, ".srec": 32, ".mot": 32, ".sre": 32}
+IHEX_SUFFIXES = {".hex", ".ihex", ".ihx", ".i32", ".a90"}
+
+#: For saving what was read back. Raw binary first: it is what was read,
+#: with nothing added.
+WRITE_FILTER = (
+    "Raw binary (*.bin);;Intel HEX (*.hex);;Motorola S-record (*.s19 *.s28 *.s37);;All files (*)"
 )
 
 #: How an ELF file starts, whatever it is called.
@@ -228,3 +239,41 @@ def read(path: str, address: int | None = None) -> Image:
         ignored=ignored,
         entry=binfile.execution_start_address,
     )
+
+
+def _srec_width(suffix: str, address: int, size: int) -> int:
+    """How wide the addresses of an S-record file have to be.
+
+    What the suffix asks for, or wider where the addresses will not fit:
+    flash at 08000000 saved as .s19 is given 32-bit addresses rather
+    than refused, since a file that holds the data is what was wanted.
+    """
+    top = address + size
+    needed = 16 if top <= 0x1_0000 else 24 if top <= 0x100_0000 else 32
+    return max(SREC_SUFFIXES.get(suffix, needed), needed)
+
+
+def write(path: str, address: int, data: bytes) -> str:
+    """Write bytes read back from a target, in the format the name asks for.
+
+    Exactly what was read, at the address it was read from: nothing padded
+    and nothing filled in. Returns the format used, for the log.
+    """
+    import bincopy
+
+    binfile = bincopy.BinFile()
+    binfile.add_binary(data, address=address)
+    suffix = Path(path).suffix.lower()
+    try:
+        if suffix in IHEX_SUFFIXES:
+            fmt, text = IHEX, binfile.as_ihex()
+        elif suffix in SREC_SUFFIXES:
+            width = _srec_width(suffix, address, len(data))
+            fmt, text = SREC, binfile.as_srec(address_length_bits=width)
+        else:
+            Path(path).write_bytes(data)
+            return BINARY
+        Path(path).write_text(text, encoding="ascii")
+    except (OSError, bincopy.Error, ValueError) as exc:
+        raise ImageError(str(exc)) from exc
+    return fmt
