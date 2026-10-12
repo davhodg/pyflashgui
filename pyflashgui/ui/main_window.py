@@ -43,6 +43,7 @@ from pyflashgui.ui.memory_view import MemoryView
 from pyflashgui.ui.panes import PaneKind, Panes
 from pyflashgui.ui.probe_bar import ProbeBar
 from pyflashgui.ui.read_dialog import ReadDialog
+from pyflashgui.ui.workspace_menu import SWITCH_WHILE_CONNECTED, WorkspaceMenu
 
 
 def window_title() -> str:
@@ -194,6 +195,11 @@ class MainWindow(QMainWindow):
 
         # --- menus & layout persistence --------------------------------------
         file_menu = self.menuBar().addMenu("&File")
+        #: One workspace per product: new, save as, switch to and manage.
+        self.workspace_menu = WorkspaceMenu(self, self.ctx)
+        self.workspace_menu.install(file_menu)
+        self.workspace_menu.switch_requested.connect(self._switch_workspace)
+        file_menu.addSeparator()
         quit_action = file_menu.addAction("Exit", self.close)
         quit_action.setMenuRole(QAction.QuitRole)
         quit_action.setShortcut(QKeySequence.Quit)
@@ -527,6 +533,31 @@ class MainWindow(QMainWindow):
         super().closeEvent(event)
 
     # --- tools ---------------------------------------------------------------
+    def _switch_workspace(self, name: str) -> None:
+        """Open another workspace, once whoever is connected has agreed to it.
+
+        A workspace holds which probe and which target, so opening one
+        means letting go of the target this one is connected to. Worth a
+        question, and only when there is something to lose. Not at all
+        while a target is being written to: that is left to finish.
+        """
+        if name == self.ctx.workspace or not workspaces.exists(name):
+            return
+        if self.flasher.busy:
+            self.events.warning(
+                "pyflashgui is still working on the target. Open another workspace "
+                "when that has finished."
+            )
+            return
+        if self.flasher.connected and not self.confirm.ask(
+            self,
+            "workspace-switch",  # agreed once a session: it is the same loss each time
+            "Disconnect and open another workspace?",
+            SWITCH_WHILE_CONNECTED.format(target=self.flasher.target, name=name),
+        ):
+            return
+        self.reopen_requested.emit(name)
+
     def _open_workspace_folder(self) -> None:
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.workspace_dir)))
 

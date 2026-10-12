@@ -11,6 +11,8 @@ since the last version, and comes out in the next one.
 
 ### Added
 
+- *File > Workspace*: a new workspace, the one in use saved under another name, switching
+  between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
   installation too.
 

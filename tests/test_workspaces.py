@@ -9,13 +9,17 @@ in it.
 
 import json
 import shutil
+import time
 
 import pytest
-from PySide6.QtCore import QSettings
+from PySide6.QtCore import QSettings, Qt
+from PySide6.QtWidgets import QInputDialog, QMessageBox
 
+from pyflashgui import APP_NAME, __version__
 from pyflashgui.core import paths, workspaces
 from pyflashgui.core.context import Context
 from pyflashgui.core.layout import Layout
+from pyflashgui.ui import files_view, messages
 
 
 @pytest.fixture
@@ -210,7 +214,158 @@ def window(app, home):
 def switch_menu(window):
     """The Switch to submenu, rebuilt as opening the menu would rebuild it."""
     window.workspace_menu._build()
-    return window.workspace_menu.menu.actions()[1].menu()
+    return next(a.menu() for a in window.workspace_menu.menu.actions() if a.menu())
+
+
+def test_a_single_product_never_meets_the_word(window):
+    """The title says nothing while the workspace is the one everybody has."""
+    assert window.windowTitle() == f"{APP_NAME} {__version__}"
+    assert [a.text() for a in switch_menu(window).actions()] == [workspaces.DEFAULT]
+
+
+def test_the_workspace_menu_is_in_the_file_menu_above_exit(window):
+    file_menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "&File")
+    texts = [a.text() for a in file_menu.actions() if not a.isSeparator()]
+    assert texts == ["Workspace", "Exit"]
+    inside = [a.text() for a in window.workspace_menu.menu.actions()]
+    assert inside == ["New...", "Save as...", "Switch to", "Manage..."]
+
+
+def test_switch_to_lists_them_all_and_ticks_the_one_in_use(window):
+    workspaces.create("board")
+    actions = switch_menu(window).actions()
+    assert [a.text() for a in actions] == [workspaces.DEFAULT, "board"]
+    assert [a.isChecked() for a in actions] == [True, False]
+
+
+def test_new_on_the_menu_makes_an_empty_one_and_asks_to_open_it(window, monkeypatch):
+    window.ctx.settings.set(files_view.FILES_KEY, [{"path": "app.hex", "enabled": True}])
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Test rig", True))
+    asked: list[str] = []
+    window.workspace_menu.switch_requested.connect(asked.append)
+
+    window.workspace_menu.menu.aboutToShow.emit()  # it is rebuilt each time it opens
+    assert window.workspace_menu.new_action in window.workspace_menu.menu.actions()
+    window.workspace_menu.new_action.trigger()
+
+    assert asked == ["Test rig"]
+    made = workspaces.dir_for("Test rig") / "settings.json"
+    assert not made.exists() or files_view.FILES_KEY not in json.loads(made.read_text())
+
+
+def test_save_as_forks_what_is_on_screen_and_asks_to_open_it(window, monkeypatch):
+    window.ctx.settings.set(files_view.FILES_KEY, [{"path": "app.hex", "enabled": True}])
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("Pump controller", True))
+    asked: list[str] = []
+    window.workspace_menu.switch_requested.connect(asked.append)
+
+    window.workspace_menu._save_as()
+
+    assert asked == ["Pump controller"], "and switching to it is somebody else's job"
+    forked = workspaces.dir_for("Pump controller") / "settings.json"
+    assert json.loads(forked.read_text())[files_view.FILES_KEY][0]["path"] == "app.hex"
+
+
+def test_save_as_with_a_name_that_will_not_do_makes_nothing(window, monkeypatch):
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("../escape", True))
+    said: list[str] = []
+    monkeypatch.setattr(messages, "warning", lambda _p, _t, text, *a, **k: said.append(text))
+    asked: list[str] = []
+    window.workspace_menu.switch_requested.connect(asked.append)
+
+    window.workspace_menu._save_as()
+
+    assert asked == []
+    assert said and "folder name" in said[0], "told why, rather than quietly repaired"
+    assert workspaces.names() == [workspaces.DEFAULT]
+
+
+def test_cancelling_save_as_does_nothing(window, monkeypatch):
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("board", False))
+    window.workspace_menu._save_as()
+    assert workspaces.names() == [workspaces.DEFAULT]
+
+
+def test_switching_to_the_one_you_are_in_does_nothing(window):
+    asked: list[str] = []
+    window.reopen_requested.connect(asked.append)
+    window._switch_workspace(workspaces.DEFAULT)
+    assert asked == []
+
+
+def test_switching_with_nothing_connected_does_not_ask(window, monkeypatch):
+    monkeypatch.setattr(
+        QMessageBox, "exec", lambda *a, **k: pytest.fail("nothing to lose, nothing to ask")
+    )
+    workspaces.create("board")
+    asked: list[str] = []
+    window.reopen_requested.connect(asked.append)
+    window._switch_workspace("board")
+    assert asked == ["board"]
+
+
+def connect_simulated(window, app) -> None:
+    """Connect the window to the simulated probe, as pressing Connect would."""
+    window.flasher.set_backend("simulated")
+    window.flasher.connect_to("SIM0001", "sim_single")
+    deadline = time.monotonic() + 5
+    while not window.flasher.connected and time.monotonic() < deadline:
+        app.processEvents()
+        time.sleep(0.002)
+    assert window.flasher.connected
+
+
+def test_switching_away_from_a_connected_target_asks_first(window, app, monkeypatch):
+    """A workspace holds which probe and which target, so opening another one
+    lets go of the target this one is connected to."""
+    connect_simulated(window, app)
+    # Asked of the simulated target too: the question is about the switch.
+    workspaces.create("board")
+    seen: list[str] = []
+    monkeypatch.setattr(
+        QMessageBox,
+        "exec",
+        lambda box: (seen.append(box.text() + " " + box.informativeText()), QMessageBox.Cancel)[1],
+    )
+    asked: list[str] = []
+    window.reopen_requested.connect(asked.append)
+
+    window._switch_workspace("board")
+    assert asked == [], "cancelled means stay"
+    assert seen and "sim_single is connected" in seen[0] and "Open board anyway?" in seen[0]
+
+    monkeypatch.setattr(QMessageBox, "exec", lambda _box: QMessageBox.Yes)
+    window._switch_workspace("board")
+    assert asked == ["board"]
+
+
+def test_agreeing_once_covers_the_session(window, app, monkeypatch):
+    connect_simulated(window, app)
+    workspaces.create("board")
+    workspaces.create("other")
+    times: list[int] = []
+    monkeypatch.setattr(QMessageBox, "exec", lambda _box: (times.append(1), QMessageBox.Yes)[1])
+    window._switch_workspace("board")
+    window._switch_workspace("other")
+    assert len(times) == 1, "it is the same loss each time"
+
+
+def test_choosing_another_on_the_menu_opens_it(app, home):
+    """The whole way through: the menu, the window, and the session that swaps them."""
+    from pyflashgui.ui.main_window import MainWindow
+    from pyflashgui.ui.session import Session
+
+    QSettings().clear()
+    workspaces.create("board")
+    session = Session(MainWindow)
+    first = session.open()
+    first.workspace_menu._switch("board")
+    app.processEvents()
+    assert session.window is not first
+    assert session.window.ctx.workspace == "board"
+    assert session.window.windowTitle().endswith(" - board")
+    assert workspaces.active() == "board", "and it is the one opened next time"
+    session.window.close()
 
 
 def test_the_title_names_a_workspace_that_is_not_the_default(app, home):
@@ -278,6 +433,57 @@ def test_switching_to_a_workspace_that_is_not_there_stays_put(app, home):
 
 
 # --- managing them ----------------------------------------------------------------------------
+def rows_of(dialog) -> dict[str, int]:
+    return {dialog.list.item(i).data(Qt.UserRole): i for i in range(dialog.list.count())}
+
+
+def test_manage_will_not_offer_to_remove_the_ground_you_stand_on(app, home):
+    from pyflashgui.ui.workspace_menu import ManageWorkspaces
+
+    workspaces.create("board")
+    workspaces.create("spare")
+    dialog = ManageWorkspaces(None, current="board")
+    rows = rows_of(dialog)
+    for name, enabled, why in (
+        (workspaces.DEFAULT, False, "always there"),
+        ("board", False, "Switch to another one first"),
+        ("spare", True, ""),
+    ):
+        dialog.list.setCurrentRow(rows[name])
+        assert dialog.delete.isEnabled() == enabled, name
+        assert dialog.rename.isEnabled() == enabled, name
+        assert why in dialog.rename.toolTip()
+    dialog.deleteLater()
+
+
+def test_manage_deletes_one_that_is_not_in_use(app, home, monkeypatch):
+    from pyflashgui.ui.workspace_menu import ManageWorkspaces
+
+    workspaces.create("scrap")
+    dialog = ManageWorkspaces(None, current=workspaces.DEFAULT)
+    dialog.list.setCurrentRow(rows_of(dialog)["scrap"])
+    monkeypatch.setattr(messages, "warning", lambda *a, **k: QMessageBox.Cancel)
+    dialog._delete()
+    assert workspaces.exists("scrap"), "Cancel keeps it"
+    monkeypatch.setattr(messages, "warning", lambda *a, **k: QMessageBox.Yes)
+    dialog._delete()
+    assert not workspaces.exists("scrap")
+    dialog.deleteLater()
+
+
+def test_manage_renames_and_the_list_follows(app, home, monkeypatch):
+    from pyflashgui.ui.workspace_menu import ManageWorkspaces
+
+    workspaces.create("old")
+    dialog = ManageWorkspaces(None, current=workspaces.DEFAULT)
+    dialog.list.setCurrentRow(rows_of(dialog)["old"])
+    monkeypatch.setattr(QInputDialog, "getText", lambda *a, **k: ("new", True))
+    dialog._rename()
+    assert workspaces.exists("new") and not workspaces.exists("old")
+    assert "new" in rows_of(dialog)
+    dialog.deleteLater()
+
+
 def test_a_folder_is_made_once_and_left_alone_after(tmp_path, monkeypatch):
     """Making a directory is the expensive call on a watched or redirected
     profile, so it is asked about first; the folder still has to appear."""

@@ -50,4 +50,11 @@ class Session(QObject):
             return previous
         if name and workspaces.exists(name):
             workspaces.set_active(name)
+        if previous is not None:
+            # Closed is hidden, and no more than that. Its signals are
+            # connected to functions that hold it, which Python's collector
+            # cannot see round, so without this every window there has been
+            # this session stays for the rest of it. Later, not now: this
+            # is being run from inside one of its own methods.
+            previous.deleteLater()
         return self.open()
