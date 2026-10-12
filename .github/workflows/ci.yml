@@ -162,11 +162,15 @@ jobs:
   # files get attestations of where they were built. Each index needs a
   # publisher registered for workflow ci.yml and the environment named below.
   #
-  # After every test run, on Windows and Linux, *and* the installer
-  # build: a release is on both or on neither, never on PyPI with no
-  # installer beside it. A reviewer can be
-  # required on the pypi environment (repository Settings > Environments), and
-  # then the job waits for that approval before anything is uploaded.
+  # After every test run, on Windows and Linux, *and* the installer build, so
+  # nothing reaches PyPI with no installer beside it. The other way about can
+  # happen: the installer's release is made before this job starts, so a run
+  # that stops here leaves a release with no package behind it, and this job
+  # is run again rather than the tag pushed again.
+  #
+  # Both environments require a review (repository Settings > Environments),
+  # which only the maintainer can give, and the job waits for that approval
+  # before anything is uploaded.
   pypi:
     # A plain name: GitHub shows an expression here unevaluated whenever the
     # job is skipped, which is on every ordinary push.
