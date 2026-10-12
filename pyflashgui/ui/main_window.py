@@ -75,6 +75,9 @@ AT_END = 4
 
 #: What the window opens at, and what Reset layout puts it back to.
 DEFAULT_WIDTH = 1100
+#: In QSettings, not the workspace: whether this person has been told, on
+#: this machine, where a shortcut is made.
+SHORTCUT_TOLD_KEY = "shortcut/told"
 #: Where J-Link Commander is, when it is not where it is looked for.
 COMMANDER_SETTING = "jlink/commander"
 DEFAULT_HEIGHT = 720
@@ -243,20 +246,26 @@ class MainWindow(QMainWindow):
             "needed to use a J-Link through it."
         )
         # Below the line: not how pyflashgui behaves, but how this copy of it
-        # is set up on this machine. Only for a source folder: the installer
-        # makes its own entry.
-        self.shortcut_action = None
-        if shortcut.launcher() is not None:
+        # is set up on this machine. For a source folder and for pip: the
+        # installer makes its own entries.
+        self.shortcut_action = self.desktop_action = None
+        if shortcut.start() is not None:
             self.settings_menu.addSeparator()
-            self.shortcut_action = self.settings_menu.addAction(
-                f"Add shortcut to {shortcut.menu_name()}", self._add_shortcut
-            )
-            self.shortcut_action.setToolTip(
-                f"Start pyflashgui from the {shortcut.menu_name()}. The entry starts the\n"
-                "launcher in this folder, so after a pull it still picks up new\n"
-                "libraries, as double-clicking the launcher does. Replaces one\n"
-                "made before."
-            )
+            for place in shortcut.places():
+                name = shortcut.place_name(place)
+                action = self.settings_menu.addAction(
+                    f"Add shortcut to {name}", lambda place=place: self._add_shortcut(place)
+                )
+                action.setToolTip(
+                    f"Start pyflashgui from the {name}. From a source folder the entry\n"
+                    "starts the launcher, so after a pull it still picks up new\n"
+                    "libraries, as double-clicking the launcher does. Replaces one\n"
+                    "made before."
+                )
+                if place == shortcut.ON_DESKTOP:
+                    self.desktop_action = action
+                else:
+                    self.shortcut_action = action
         # Together, because "put something back the way it was" is one thing
         # to go looking for.
         self.reset_menu = tools_menu.addMenu("Reset")
@@ -275,6 +284,7 @@ class MainWindow(QMainWindow):
 
         self.help_menu = HelpMenu(self)
 
+        self._say_how_to_add_a_shortcut()
         self.panes.restore_instances()
         self._build_view_menu()
         self._restore_layout()
@@ -669,14 +679,30 @@ class MainWindow(QMainWindow):
         self.confirm.forget_everything()
         self.events.information("Every confirmation will be asked again.")
 
-    def _add_shortcut(self) -> None:
-        """Tools > Settings > Add shortcut to Start menu, to this folder's launcher."""
+    def _add_shortcut(self, place: str = shortcut.IN_MENU) -> None:
+        """Tools > Settings > Add shortcut to Start menu, or to desktop."""
+        name = shortcut.place_name(place)
         try:
-            path = shortcut.create()
+            path = shortcut.create(place=place)
         except OSError as exc:
-            self.events.error(f"Could not add pyflashgui to the {shortcut.menu_name()}: {exc}")
+            self.events.error(f"Could not add pyflashgui to the {name}: {exc}")
             return
-        self.events.good(f"Added pyflashgui to the {shortcut.menu_name()}: {path}")
+        self.events.good(f"Added pyflashgui to the {name}: {path}")
+
+    def _say_how_to_add_a_shortcut(self) -> None:
+        """Once for each person on a machine, for a source folder or pip: the
+        launcher no longer asks, and pip never did, so say where it is done.
+        Not where there is one already, nor for the installer, which made its own."""
+        if shortcut.start() is None or QSettings().value(SHORTCUT_TOLD_KEY) is not None:
+            return
+        QSettings().setValue(SHORTCUT_TOLD_KEY, True)
+        if shortcut.made():
+            return
+        names = " or the ".join(shortcut.place_name(place) for place in shortcut.places())
+        self.events.information(
+            f"To start pyflashgui from the {names}: Tools > Settings > Add shortcut. "
+            "This is said once."
+        )
 
     # --- the Event Log -------------------------------------------------------
     @Slot(str, str)

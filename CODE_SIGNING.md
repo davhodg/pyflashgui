@@ -79,7 +79,8 @@ The installer says what it will do before it does it: a desktop shortcut is a ta
 can be unticked, before anything is installed. It installs an uninstaller, which takes away
 the program and its shortcuts.
 
-Inside pyflashgui, a Start menu entry for a source folder is added only when asked for. The
+Inside pyflashgui, a Start menu entry and a desktop shortcut are added only from
+*Tools > Settings*, when asked for. The
 [README](README.md#uninstalling) says how to uninstall each way of installing pyflashgui.
 Your own files -- workspaces and their settings -- are never removed by uninstalling, and the
 README says where they are.
