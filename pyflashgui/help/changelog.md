@@ -18,8 +18,15 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- **Program and verify** is one button, with **Program** and **Verify** each on its own
+  under its arrow, in place of the Verify button and the Verify and Reset ticks: the
+  target is always restarted after programming.
 - The launchers no longer ask about a Start menu entry: the first start says in the Event
   Log where a shortcut is made.
+
+### Removed
+
+- The **Erase everything first** tick. **Erase...** erases all of the flash.
 
 ## [0.1.0] - 2026-10-11
 

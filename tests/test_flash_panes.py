@@ -214,7 +214,7 @@ def test_the_buttons_wait_for_a_connection_and_a_ticked_file(window, tmp_path):
     assert files.erase_button.isEnabled() and files.reset_button.isEnabled()
     assert not files.program_button.isEnabled(), "there is nothing to program yet"
     files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, bytes(16))])
-    assert files.program_button.isEnabled() and files.verify_button.isEnabled()
+    assert files.program_button.isEnabled()
 
 
 def test_program_sends_what_the_file_holds_now(window, tmp_path):
@@ -242,17 +242,33 @@ def test_program_refuses_what_the_memory_map_calls_an_error(window, tmp_path):
     assert errors[-1] == "Not programmed: the Memory Map says what is wrong."
 
 
-def test_the_ticks_say_what_program_does_besides(window, tmp_path):
+def test_the_button_verifies_and_program_alone_is_under_its_arrow(window, tmp_path):
     files = window.files_view
     files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"abcd")])
-    files.verify_after.setChecked(False)
-    files.reset_after.setChecked(False)
+    assert files.program_button.text() == "Program and verify"
+    assert [a.text() for a in files.program_button.menu().actions()] == ["Program", "Verify"]
     connect(window)
+
+    files.program_only.trigger()
+    idle(window)
+    assert said(window, GOOD)[-1].startswith(
+        "Programmed 1 file, 4 bytes, and reset the target, in "
+    )
+    assert backends.get("simulated").board(PROBE).resets == 1, "restarted either way"
+
     files.program_button.click()
     idle(window)
-    assert backends.get("simulated").board(PROBE).resets == 0
-    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, in ")
-    assert window.ctx.settings.get("files.verify") is False
+    assert said(window, GOOD)[-1].startswith(
+        "Programmed 1 file, 4 bytes, verified, and reset the target, in "
+    )
+    assert backends.get("simulated").board(PROBE).resets == 2
+
+
+def test_there_are_no_ticks_beside_the_list(window):
+    """What Program does is said on the button that does it."""
+    from PySide6.QtWidgets import QCheckBox
+
+    assert window.files_view.findChildren(QCheckBox) == []
 
 
 def test_verify_erase_and_reset_from_their_buttons(window, tmp_path, monkeypatch):
@@ -265,14 +281,14 @@ def test_verify_erase_and_reset_from_their_buttons(window, tmp_path, monkeypatch
     connect(window)
     files.program_button.click()
     idle(window)
-    files.verify_button.click()
+    files.verify_only.trigger()
     idle(window)
     assert said(window, GOOD)[-1] == "Verified: 4 bytes match the files."
     files.erase_button.click()
     idle(window)
     board = backends.get("simulated").board(PROBE)
     assert bytes(board.memory["flash"][:4]) == b"\xff" * 4
-    files.verify_button.click()
+    files.verify_only.trigger()
     idle(window)
     assert "4 bytes differ of 4" in said(window, ERROR)[-1]
     files.reset_button.click()

@@ -27,21 +27,18 @@ The format is told from what is in the file, not from its name.
 
 **A file is read again every time it is used**, and whenever it changes on disc, so the list, the memory map and the file's Memory pane follow each build and **Program** always sends what the file holds now. A file that cannot be read says *Cannot be read* in the list; hover over it for why.
 
-## Program, Verify, Erase, Reset, Read
+## Read, Erase, Program and verify, Reset
 
 These need a probe [connected](probe.md) to a target.
 
-- **Program** writes what is ticked: files, reads, or both. Before it starts, they are checked against the target's memory and against each other, as the [memory map](memory-map.md) shows: if anything is an error there -- two of them writing the same addresses is one -- nothing is programmed and the [Event Log](manual.md) says why.
-- **Verify** reads the flash back and compares it with what is ticked, changing nothing. If they differ, it says how many bytes do and where the first one is.
-- **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
-- **Reset** restarts the target.
 - **Read...** reads part of the target's memory back, changing nothing in the target. What is read joins the list and is shown in a [Memory](memory.md) pane of its own. It can be saved to a file from there.
+- **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
+- **Program and verify** writes what is ticked -- files, reads, or both -- then reads the flash back to check it holds what was written, and restarts the target so that the new firmware runs. Before it starts, what is ticked is checked against the target's memory and against each other, as the [memory map](memory-map.md) shows: if anything is an error there -- two of them writing the same addresses is one -- nothing is programmed and the [Event Log](manual.md) says why. The arrow beside it has each half on its own:
+  - **Program** writes and restarts without the check: quicker for a large image.
+  - **Verify** reads the flash back and compares it with what is ticked, changing nothing and restarting nothing. If they differ, it says how many bytes do and where the first one is.
+- **Reset** restarts the target.
 
-Three ticks say what **Program** does besides writing:
-
-- **Erase everything first** erases all of the flash before programming, so nothing of what was there is left. Without it, only the sectors the files write to are erased and the rest of the flash is kept.
-- **Verify** reads the flash back afterwards and compares it.
-- **Reset** restarts the target afterwards, so the new firmware runs. It is not reset if verifying failed.
+Programming erases only the sectors it writes to, and the rest of the flash is kept; to clear all of it first, use **Erase...**. The target is restarted afterwards, since programming leaves it halted, but not if the check failed.
 
 **Program and Erase ask first**, once a session for each target, because what they replace cannot be got back. The question can be told not to ask again; *Tools > Reset > Re-enable all confirmations* brings it back. The simulated target is not asked about.
 

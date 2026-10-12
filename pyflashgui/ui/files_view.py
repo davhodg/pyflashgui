@@ -25,7 +25,6 @@ from pathlib import Path
 from PySide6.QtCore import QFileSystemWatcher, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
     QHBoxLayout,
     QHeaderView,
     QMessageBox,
@@ -38,17 +37,17 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyflashgui.backends.base import ERASE_CHIP, ERASE_SECTORS
+from pyflashgui.backends.base import ERASE_SECTORS
 from pyflashgui.core import images
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import Image, ImageError, Segment
 from pyflashgui.core.memory_map import lay_out
 from pyflashgui.ui import folders, fonts, messages
+from pyflashgui.ui.buttons import SplitButton
 from pyflashgui.ui.confirm import Confirmations
 from pyflashgui.ui.erase_dialog import EraseDialog
 from pyflashgui.ui.map_view import MapView
-from pyflashgui.ui.persist import remember
 
 FILES_KEY = "files.list"
 
@@ -240,34 +239,30 @@ class FilesView(QWidget):
         )
         self.compare_button.clicked.connect(self.compare_selected)
 
-        self.chip_erase = QCheckBox("Erase everything first")
-        self.chip_erase.setToolTip(
-            "Erase all of the flash before programming, so that nothing of what\n"
-            "was there is left. Without it, only the sectors the ticked write to\n"
-            "are erased, and the rest of the flash is kept."
+        #: The press that is wanted nearly every time checks what it wrote;
+        #: writing without the check is under the arrow, for an image big
+        #: enough that reading it all back is not worth the wait.
+        self.program_button = SplitButton(
+            "Program and verify",
+            "Write the ticked files and reads to the target, read the flash back\n"
+            "to check it holds what was written, and restart the target so that\n"
+            "what was written runs. Only the sectors written to are erased.",
+            self.program,
         )
-        self.verify_after = QCheckBox("Verify")
-        self.verify_after.setChecked(True)
-        self.verify_after.setToolTip(
-            "Read the flash back after programming and compare it with what was written."
+        self.program_only = self.program_button.add(
+            "Program",
+            "Write and restart the target without reading the flash back to\n"
+            "check it. Quicker for a large image; Verify, below, can be chosen after.",
+            lambda: self.program(verify=False),
         )
-        self.reset_after = QCheckBox("Reset")
-        self.reset_after.setChecked(True)
-        self.reset_after.setToolTip(
-            "Restart the target after programming, so the new firmware runs."
+        #: The second half of the button on its own: for a target programmed
+        #: some other time, or by something else.
+        self.verify_only = self.program_button.add(
+            "Verify",
+            "Compare what is in the target with what is ticked, changing nothing\n"
+            "and restarting nothing.",
+            self.verify,
         )
-        remember(ctx, "files.chip_erase", self.chip_erase)
-        remember(ctx, "files.verify", self.verify_after)
-        remember(ctx, "files.reset", self.reset_after)
-
-        self.program_button = QPushButton("Program")
-        self.program_button.setToolTip("Write the ticked files and reads to the target.")
-        self.program_button.clicked.connect(self.program)
-        self.verify_button = QPushButton("Verify")
-        self.verify_button.setToolTip(
-            "Compare what is in the target with what is ticked, changing nothing."
-        )
-        self.verify_button.clicked.connect(self.verify)
         self.erase_button = QPushButton("Erase...")
         self.erase_button.setToolTip(
             "Erase the target's flash: all of it, some of its regions, or a range."
@@ -303,19 +298,22 @@ class FilesView(QWidget):
         ):
             files_row.addWidget(widget)
         files_row.addStretch(1)
-        for widget in (self.chip_erase, self.verify_after, self.reset_after):
-            files_row.addWidget(widget)
         actions_row = QHBoxLayout()
+        # In the order they are reached for: look at what is there, clear
+        # it, write what is wanted, and start it again.
         for widget in (
-            self.program_button,
-            self.verify_button,
-            self.erase_button,
-            self.reset_button,
             self.read_button,
+            self.erase_button,
+            self.program_button,
+            self.reset_button,
         ):
             actions_row.addWidget(widget)
-        actions_row.addWidget(self.progress, 1)
-        actions_row.addWidget(self.cancel_button)
+        actions_row.addStretch(1)
+        # A row of its own: beside the buttons, the bar made the pane wider
+        # than half the window it opens in, and the end of the row was cut off.
+        progress_row = QHBoxLayout()
+        progress_row.addWidget(self.progress, 1)
+        progress_row.addWidget(self.cancel_button)
         listed = QWidget()
         list_layout = QVBoxLayout(listed)
         list_layout.setContentsMargins(0, 0, 0, 0)
@@ -329,6 +327,7 @@ class FilesView(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self.splitter, 1)
         layout.addLayout(actions_row)
+        layout.addLayout(progress_row)
 
         #: Reads a file again when a build writes it. Once it has settled:
         #: see SETTLE_MS.
@@ -611,7 +610,14 @@ class FilesView(QWidget):
             return True  # nothing real is on the end of it
         return self.confirm.ask(self, f"{key}:{self.flasher.target}", title, text)
 
-    def program(self) -> None:
+    def program(self, verify: bool = True) -> None:
+        """Write what is ticked, check it unless told not to, and restart the target.
+
+        Only the sectors written to are erased: all of the flash is Erase...,
+        asked for by name. And the target is always restarted afterwards,
+        unless the check failed: it is left halted by being programmed, and
+        what was written is there to be run.
+        """
         if (files := self.reread()) is None:
             return
         if not files:
@@ -625,26 +631,15 @@ class FilesView(QWidget):
         if not layout.programmable:
             self.ctx.events.error("Not programmed: the Memory Map says what is wrong.")
             return
-        everything = self.chip_erase.isChecked()
         target = self.flasher.target
         if not self._may(
             "program",
             f"Program {target}?",
-            f"This replaces what {target} holds"
-            + (
-                ": all of its flash is erased first."
-                if everything
-                else " in the sectors that what is ticked writes to."
-            )
-            + " It cannot be undone.",
+            f"This replaces what {target} holds in the sectors that what is ticked writes "
+            "to. It cannot be undone.",
         ):
             return
-        self.flasher.program(
-            files,
-            erase=ERASE_CHIP if everything else ERASE_SECTORS,
-            verify=self.verify_after.isChecked(),
-            reset=self.reset_after.isChecked(),
-        )
+        self.flasher.program(files, erase=ERASE_SECTORS, verify=verify, reset=True)
 
     def verify(self) -> None:
         if (files := self.reread()) is not None:
@@ -681,7 +676,6 @@ class FilesView(QWidget):
         ready = connected and not busy
         ticked = any(e.enabled for e in self.entries)
         self.program_button.setEnabled(ready and ticked)
-        self.verify_button.setEnabled(ready and ticked)
         self.erase_button.setEnabled(ready)
         self.reset_button.setEnabled(ready)
         self.read_button.setEnabled(ready)

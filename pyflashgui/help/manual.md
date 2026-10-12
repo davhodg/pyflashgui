@@ -9,7 +9,7 @@ pyflashgui is a graphical flash programming tool: for Arm Cortex-M targets with 
 ## Contents
 
 - [Probe and target](probe.md): the bar across the top, connecting, and which probes need what
-- [Files](files.md): what is open, files and reads alike, and Program, Verify, Erase, Reset, Read and Compare
+- [Files](files.md): what is open, files and reads alike, and Read, Erase, Program and verify, Reset and Compare
 - [Memory map](memory-map.md): where what is ticked lands, checked before anything is sent
 - [Memory](memory.md): the bytes of a file or of what was read back, to look at, compare and save
 - [About, licences and updates](about.md)
@@ -20,7 +20,7 @@ pyflashgui is a graphical flash programming tool: for Arm Cortex-M targets with 
 1. Choose the **Probe** and the **Target** in the bar across the top.
 2. **Add...** the firmware files in the Files pane.
 3. Look at the memory map under the list: it says whether they fit the target.
-4. **Connect**, then **Program**.
+4. **Connect**, then **Program and verify**.
 
 With no hardware, choose *Simulated* under **Through** and the same steps work on a target that exists only in memory.
 
