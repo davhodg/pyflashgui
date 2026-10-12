@@ -41,8 +41,6 @@ Choosing *J-Link Commander* under **Through** uses a J-Link by way of SEGGER's o
 
 If pyflashgui does not find J-Link Commander, *Tools > Settings > J-Link Commander location...* says where it is.
 
-**Tried on one board so far.** Listing the probe, connecting and reading were tried on an XMC4500 through its on-board J-Link, and what was read matched SEGGER's own tool. Programming, erasing and resetting this way have not yet been tried on a probe.
-
 ## Probes with pyOCD
 
 With *pyOCD* chosen, every probe is reached through pyOCD, which has a driver for each of the ways a probe talks over USB. Which probes work is therefore pyOCD's list:

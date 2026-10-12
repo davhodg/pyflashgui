@@ -110,11 +110,9 @@ CMSIS-DAP is a protocol and not a product, so a great many probes speak it. Amon
 
 **With pyOCD, the target has to be an Arm Cortex-M, whichever probe it is.** The probe carries the debug port; what is on the far side of it is pyOCD's to understand, and Cortex-M is what it understands. A probe that can reach other kinds of processor with its maker's own software -- a Cortex-A or Cortex-R, a RISC-V core -- still reaches only Cortex-M here.
 
-pyflashgui has not yet been tried with any of these probes: this is what pyOCD says it supports, and how.
-
 ### Beyond Cortex-M, with a J-Link
 
-pyflashgui can instead drive a J-Link through SEGGER's own J-Link Commander, which comes with SEGGER's J-Link software. That reaches every device SEGGER's software knows -- Cortex-A and Cortex-R, RISC-V and others -- and works with a J-Link and nothing else. SEGGER's software is yours to install, under SEGGER's licence: it is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming. Of this, listing the probe, connecting and reading have been tried, on one board.
+pyflashgui can instead drive a J-Link through SEGGER's own J-Link Commander, which comes with SEGGER's J-Link software. That reaches every device SEGGER's software knows -- Cortex-A and Cortex-R, RISC-V and others -- and works with a J-Link and nothing else. SEGGER's software is yours to install, under SEGGER's licence: it is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming.
 
 On Linux a probe is usable without root once a udev rule allows it; pyOCD publishes [a set of them](https://github.com/pyocd/pyOCD/tree/main/udev). Vendor software is never bundled with pyflashgui: install the vendor's own, and pyflashgui finds it.
 
