@@ -2,10 +2,10 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """Tools > Device packs: find a device, and install the pack that describes it.
 
-Two lists. The upper one is a search of every device there is a pack for;
-the lower one is the packs on this computer. Between them is the whole of
-what there is to do: look a part up, install its pack, and choose it as the
-target.
+From the top down, in the order it is done. The list of every device there
+is a pack for is fetched, once; a part is looked up in it, as it is typed,
+since the list is on this computer by then; its pack is installed; and the
+device is chosen as the target. Below that are the packs already here.
 
 The dialog only asks. ``PackManager`` does the work, on a thread of its own,
 so the dialog can be closed while a pack is still coming down: the Event
@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -42,19 +42,23 @@ INTRODUCTION = (
     "is in the list of targets from then on. J-Link Commander has its own list of devices and "
     "needs none of this."
 )
-NEVER_FETCHED = "The list of devices has not been fetched yet."
+NEVER_FETCHED = "The list of devices has not been fetched yet. Fetch it to look a device up."
+FETCH = "Fetch the list"
+UPDATE = "Update the list"
+#: How long after the last letter typed the search is made.
+TYPING_MS = 250
 NOTHING_FOUND = (
     "No device has that in its name. If it is a new one, update the list: it may have been "
     "added since."
 )
 FIND_TIP = (
-    "Any part of the device's part number, in any case: xmc4500, f407,\n"
-    "nrf52. The search is of the list on this computer."
+    "Any part of the device's part number, in any case. The search is of\n"
+    "the list on this computer, and is made as you type."
 )
 UPDATE_TIP = (
-    "Download the list of every device there is a pack for, again. It is a\n"
-    "few megabytes and takes a little while. Needed once, and after that\n"
-    "only for a device newer than the list."
+    "Download the list of every device there is a pack for. It is a few\n"
+    "megabytes and takes a little while. Needed once, and after that only\n"
+    "for a device newer than the list."
 )
 INSTALL_TIP = "Download the pack the selected device is in. Every device in it comes with it."
 USE_TIP = "Choose the selected device as the target, in the bar across the top of the window."
@@ -83,21 +87,21 @@ class PacksDialog(QDialog):
         self.setWindowTitle("Device packs")
         self.manager = manager
         self.resize(680, 560)
-        #: A search asked for before there was a list to search, made once
-        #: the list has arrived.
-        self._find_after_fetch = False
+        #: Typing is not searching until it stops for a moment.
+        self._typing = QTimer(self)
+        self._typing.setSingleShot(True)
+        self._typing.setInterval(TYPING_MS)
+        self._typing.timeout.connect(self.find)
         self._never_fetched = True
 
         introduction = QLabel(INTRODUCTION)
         introduction.setWordWrap(True)
 
         self.text = QLineEdit()
-        self.text.setPlaceholderText("Part of a device's name, such as xmc4500")
+        self.text.setPlaceholderText("Part of a device's part number")
         self.text.setToolTip(FIND_TIP)
         self.text.setAccessibleName("Device")
         self.text.setClearButtonEnabled(True)
-        self.find_button = QPushButton("Find")
-        self.find_button.setToolTip(FIND_TIP)
 
         self.devices = QTreeWidget()
         self.devices.setHeaderLabels(["Device", "Maker", "Pack", "Version", "Installed"])
@@ -121,7 +125,7 @@ class PacksDialog(QDialog):
         self.remove_button.setToolTip(REMOVE_TIP)
 
         self.fetched = QLabel()
-        self.update_button = QPushButton("Update the list")
+        self.update_button = QPushButton(FETCH)
         self.update_button.setToolTip(UPDATE_TIP)
 
         self.status = QLabel()
@@ -135,7 +139,7 @@ class PacksDialog(QDialog):
 
         closer = QDialogButtonBox(QDialogButtonBox.Close)
         closer.rejected.connect(self.reject)
-        # Enter in the search box is Find, and must not also be Close.
+        # Enter in the search box searches, and must not also be Close.
         closer.button(QDialogButtonBox.Close).setAutoDefault(False)
         for button in (
             self.install_button,
@@ -144,11 +148,7 @@ class PacksDialog(QDialog):
             self.update_button,
         ):
             button.setAutoDefault(False)
-        self.find_button.setDefault(True)
 
-        search = QHBoxLayout()
-        search.addWidget(self.text, 1)
-        search.addWidget(self.find_button)
         found_row = QHBoxLayout()
         found_row.addWidget(self.install_button)
         found_row.addWidget(self.use_button)
@@ -162,19 +162,19 @@ class PacksDialog(QDialog):
 
         layout = QVBoxLayout(self)
         layout.addWidget(introduction)
-        layout.addLayout(search)
+        layout.addLayout(list_row)
+        layout.addWidget(self.text)
         layout.addWidget(self.devices, 3)
         layout.addWidget(self.result)
         layout.addLayout(found_row)
         layout.addWidget(QLabel("Installed on this computer:"))
         layout.addWidget(self.packs, 2)
         layout.addLayout(packs_row)
-        layout.addLayout(list_row)
         layout.addWidget(self.status)
         layout.addWidget(self.bar)
         layout.addWidget(closer)
 
-        self.find_button.clicked.connect(self.find)
+        self.text.textChanged.connect(lambda _text: self._typing.start())
         self.text.returnPressed.connect(self.find)
         self.install_button.clicked.connect(self._install)
         self.use_button.clicked.connect(self._use)
@@ -191,7 +191,7 @@ class PacksDialog(QDialog):
 
         self._on_busy(manager.busy)
         manager.refresh()
-        self.text.setFocus()
+        (self.update_button if self._never_fetched else self.text).setFocus()
 
     # --- what is selected ------------------------------------------------------------
     def selected_device(self) -> Device | None:
@@ -204,12 +204,14 @@ class PacksDialog(QDialog):
 
     # --- finding ---------------------------------------------------------------------
     def find(self) -> None:
-        if not self.text.text().strip():
+        """Search the list for what is typed. Nothing typed is nothing found."""
+        self._typing.stop()
+        if self._never_fetched:
             return
-        if self._never_fetched and not self.manager.busy:
-            # Nothing to search yet, and what was asked for is plain enough.
-            self._find_after_fetch = True
-            self.manager.fetch_list()
+        if not self.text.text().strip():
+            self.devices.clear()
+            self.result.setText("")
+            self._enable()
             return
         self.manager.find(self.text.text())
 
@@ -262,12 +264,11 @@ class PacksDialog(QDialog):
             self.packs.addTopLevelItem(item)
         self.packs.resizeColumnToContents(0)
         self.packs.setColumnWidth(0, self.packs.columnWidth(0) + GAP)
-        # What was found says which of it is installed, and that has changed.
-        if self.devices.topLevelItemCount() or self._find_after_fetch:
-            if not self.manager.busy and not self._never_fetched:
-                self._find_after_fetch = False
-                self.manager.find(self.text.text())
         self._enable()
+        # What was found says which of it is installed, and that has changed;
+        # and a list that has just arrived is one to search.
+        if not self.manager.busy:
+            self.find()
 
     def _install(self) -> None:
         if (device := self.selected_device()) is None:
@@ -316,3 +317,6 @@ class PacksDialog(QDialog):
         self.use_button.setEnabled(device is not None and device.installed)
         self.remove_button.setEnabled(not busy and self.selected_pack() is not None)
         self.update_button.setEnabled(not busy)
+        self.update_button.setText(FETCH if self._never_fetched else UPDATE)
+        # Nothing to search until there is a list.
+        self.text.setEnabled(not self._never_fetched)

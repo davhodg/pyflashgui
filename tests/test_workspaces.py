@@ -228,7 +228,7 @@ def test_the_workspace_menu_is_in_the_file_menu_above_exit(window):
     texts = [a.text() for a in file_menu.actions() if not a.isSeparator()]
     assert texts == ["Workspace", "Exit"]
     inside = [a.text() for a in window.workspace_menu.menu.actions()]
-    assert inside == ["New...", "Save as...", "Switch to", "Manage..."]
+    assert inside == ["New...", "Save as...", "Switch to", "Manage...", "", "Open folder"]
 
 
 def test_switch_to_lists_them_all_and_ticks_the_one_in_use(window):

@@ -6,10 +6,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QSettings, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import (
     QAction,
-    QDesktopServices,
     QFont,
     QKeySequence,
     QTextCharFormat,
@@ -238,11 +237,6 @@ class MainWindow(QMainWindow):
         self.packs_action.setToolTip(
             "Find a device that is not in the list of targets, and install the\n"
             "CMSIS-Pack that describes it. For devices used through pyOCD."
-        )
-        folder = tools_menu.addAction("Open workspace folder", self._open_workspace_folder)
-        folder.setToolTip(
-            "The folder this workspace keeps its settings and its arrangement\n"
-            "of panes in. One folder, so it can be copied or backed up whole."
         )
         tools_menu.addSeparator()
         # What is set and left, apart from what is done. A submenu rather
@@ -569,9 +563,6 @@ class MainWindow(QMainWindow):
         ):
             return
         self.reopen_requested.emit(name)
-
-    def _open_workspace_folder(self) -> None:
-        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.workspace_dir)))
 
     def _refresh_map(self) -> None:
         """Lay what is ticked over the target's memory again."""

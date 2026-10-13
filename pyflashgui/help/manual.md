@@ -54,4 +54,4 @@ Each workspace is a folder of its own, under pyflashgui's:
 | Windows | `%APPDATA%\pyflashgui` |
 | Linux | `~/.config/pyflashgui` |
 
-*Tools > Open workspace folder* opens the one in use.
+*File > Workspace > Open folder* opens the one in use.

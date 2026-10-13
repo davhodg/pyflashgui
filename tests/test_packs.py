@@ -248,17 +248,60 @@ def names(tree) -> list[str]:
     return [tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())]
 
 
-def test_find_fetches_the_list_the_first_time_and_then_finds(dialog, manager, store):
+def test_the_list_is_fetched_first_and_then_searched_as_it_is_typed(dialog, manager, store):
     assert dialog.fetched.text() == packs_dialog.NEVER_FETCHED
-    dialog.text.setText("xmc4500")
-    dialog.find_button.click()
+    assert dialog.update_button.text() == "Fetch the list"
+    assert not dialog.text.isEnabled(), "nothing to search yet"
+
+    dialog.update_button.click()
     assert manager.busy and not dialog.update_button.isEnabled()
     wait_for(lambda: not manager.busy)
+    assert dialog.fetched.text().startswith("The list of devices was fetched on ")
+    assert dialog.update_button.text() == "Update the list" and dialog.text.isEnabled()
+    assert store.downloaded == [], "the list, and no pack"
 
+    dialog.text.setText("xmc4500")
+    assert names(dialog.devices) == [], "not on every letter"
+    wait_for(lambda: dialog.devices.topLevelItemCount() == 2)
     assert names(dialog.devices) == ["XMC4500-F100x1024", "XMC4500-F144x768"]
     assert dialog.result.text() == "2 found."
-    assert dialog.fetched.text().startswith("The list of devices was fetched on ")
     assert dialog.install_button.isEnabled() and not dialog.use_button.isEnabled()
+
+    dialog.text.setText("")
+    dialog.find()
+    assert names(dialog.devices) == [] and dialog.result.text() == ""
+    assert not dialog.install_button.isEnabled()
+
+
+def test_what_was_typed_while_the_list_was_coming_is_searched_when_it_arrives(
+    dialog, manager, store
+):
+    pyocd_packs.fetch_list()
+    manager.refresh()
+    dialog.text.setText("f407")
+    manager.fetch_list()  # Update the list
+    wait_for(lambda: not manager.busy)
+    assert names(dialog.devices) == ["STM32F407VG"]
+
+
+def test_workspace_has_open_folder_and_tools_does_not(app, store, tmp_path, monkeypatch):
+    from PySide6.QtCore import QSettings
+
+    from pyflashgui.ui import workspace_menu
+    from pyflashgui.ui.main_window import MainWindow
+
+    monkeypatch.setenv("PYFLASHGUI_HOME", str(tmp_path / "home"))
+    QSettings().clear()
+    opened = []
+    monkeypatch.setattr(workspace_menu.QDesktopServices, "openUrl", opened.append)
+    window = MainWindow()
+    try:
+        window.workspace_menu.folder_action.trigger()
+        assert [Path(url.toLocalFile()) for url in opened] == [window.ctx.workspace_dir]
+        tools = next(m for m in window.menuBar().actions() if m.text() == "&Tools").menu()
+        assert "Open workspace folder" not in [a.text() for a in tools.actions()]
+    finally:
+        window.close()
 
 
 def test_a_name_no_device_has_says_to_update_the_list(dialog, fetched):

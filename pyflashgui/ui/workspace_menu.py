@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""File > Workspace: new, save as, switch to, and manage.
+"""File > Workspace: new, save as, switch to, manage, and its folder.
 
 Those are the whole of working with workspaces, and deliberately so. There is
 no Save and no unsaved-changes marker, because a workspace saves continuously
@@ -16,7 +16,8 @@ against it rather than an empty list inviting a decision.
 
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, Qt, Signal
+from PySide6.QtCore import QObject, Qt, QUrl, Signal
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
@@ -52,6 +53,10 @@ SWITCH_TIP = (
     "a time."
 )
 MANAGE_TIP = "Rename or delete a workspace."
+FOLDER_TIP = (
+    "The folder this workspace keeps its settings and its arrangement\n"
+    "of panes in. One folder, so it can be copied or backed up whole."
+)
 
 SWITCH_WHILE_CONNECTED = (
     "{target} is connected.\n\n"
@@ -97,6 +102,9 @@ class WorkspaceMenu(QObject):
 
         manage = self.menu.addAction("Manage...", self._manage)
         manage.setToolTip(MANAGE_TIP)
+        self.menu.addSeparator()
+        self.folder_action = self.menu.addAction("Open folder", self.open_folder)
+        self.folder_action.setToolTip(FOLDER_TIP)
 
     def install(self, file_menu: QMenu, before=None) -> None:
         """Put the submenu in the File menu, above ``before`` if that is given."""
@@ -137,6 +145,9 @@ class WorkspaceMenu(QObject):
     def _switch(self, name: str) -> None:
         if name != self.ctx.workspace:
             self.switch_requested.emit(name)
+
+    def open_folder(self) -> None:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.ctx.workspace_dir)))
 
     def _manage(self) -> None:
         dialog = ManageWorkspaces(self.window, self.ctx.workspace)

@@ -33,13 +33,14 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 
 *Tools > Device packs...* installs one:
 
-1. Type any part of the device's part number -- `xmc4500`, `f407` -- and press **Find**. The first time, the list of every device there is a pack for is downloaded first, which takes a little while.
-2. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be tens of megabytes.
-3. Press **Use as target**, or close the dialog and choose the device in the bar.
+1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once.
+2. Type any part of the device's part number. The devices with that in their name are listed as you type.
+3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be tens of megabytes.
+4. Press **Use as target**, or close the dialog and choose the device in the bar.
 
 The dialog can be closed while a pack is downloading: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
 
-**Update the list** downloads the list of devices again, for a device newer than the list. **Remove...** deletes a pack from this computer, and its devices leave the list of targets.
+Once fetched, the button is **Update the list**: it downloads the list again, for a device newer than the list. **Remove...** deletes a pack from this computer, and its devices leave the list of targets.
 
 Packs are kept in pyOCD's own folder for them, not in a workspace, so a pack installed here is also there for pyOCD's command line, and one installed with `pyocd pack install` is there for pyflashgui. Only pyOCD uses them: J-Link Commander has SEGGER's own list of devices.
 

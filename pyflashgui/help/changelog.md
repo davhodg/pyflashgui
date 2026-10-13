@@ -21,6 +21,8 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- *Open workspace folder* is *File > Workspace > Open folder*, with the rest of what is
+  done with a workspace.
 - **Program and verify** is one button, with **Program** and **Verify** each on its own
   under its arrow, in place of the Verify button and the Verify and Reset ticks: the
   target is always restarted after programming.
