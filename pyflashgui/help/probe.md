@@ -25,7 +25,23 @@ If connecting fails, the [Event Log](manual.md) says what the probe reported. Th
 
 ## Targets
 
-The list is every target pyOCD has built in, and every device in the CMSIS-Packs installed on this computer. A target that is built in has its memory known before anything is connected, so the [Memory Map](memory-map.md) can check the files against it straight away. One from a pack is checked once it is connected to.
+The list is every target pyOCD has built in, and every device in the CMSIS-Packs installed on this computer: see [Device packs](#device-packs) below for one that is not there. A target that is built in has its memory known before anything is connected, so the [Memory Map](memory-map.md) can check the files against it straight away. One from a pack is checked once it is connected to.
+
+### Device packs
+
+pyOCD has a few dozen targets built in. Every other Cortex-M device is described by a CMSIS-Pack, which the maker of the device publishes: it says where the device's memory is and holds the code that programs its flash. A device that is not in the list of targets is almost always in a pack that has not been installed.
+
+*Tools > Device packs...* installs one:
+
+1. Type any part of the device's part number -- `xmc4500`, `f407` -- and press **Find**. The first time, the list of every device there is a pack for is downloaded first, which takes a little while.
+2. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be tens of megabytes.
+3. Press **Use as target**, or close the dialog and choose the device in the bar.
+
+The dialog can be closed while a pack is downloading: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
+
+**Update the list** downloads the list of devices again, for a device newer than the list. **Remove...** deletes a pack from this computer, and its devices leave the list of targets.
+
+Packs are kept in pyOCD's own folder for them, not in a workspace, so a pack installed here is also there for pyOCD's command line, and one installed with `pyocd pack install` is there for pyflashgui. Only pyOCD uses them: J-Link Commander has SEGGER's own list of devices.
 
 ## J-Link Commander
 

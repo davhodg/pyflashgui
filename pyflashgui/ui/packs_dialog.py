@@ -1,0 +1,318 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: 2026 davhodg
+"""Tools > Device packs: find a device, and install the pack that describes it.
+
+Two lists. The upper one is a search of every device there is a pack for;
+the lower one is the packs on this computer. Between them is the whole of
+what there is to do: look a part up, install its pack, and choose it as the
+target.
+
+The dialog only asks. ``PackManager`` does the work, on a thread of its own,
+so the dialog can be closed while a pack is still coming down: the Event
+Log says when it has arrived.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QProgressBar,
+    QPushButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from pyflashgui.backends.pyocd_packs import MOST_FOUND, Device, Pack
+from pyflashgui.core.pack_manager import PackManager
+from pyflashgui.ui import messages
+
+INTRODUCTION = (
+    "pyOCD knows some devices by itself. The rest are described by CMSIS-Packs, which the "
+    "makers of the devices publish. Find a device here and install its pack, and the device "
+    "is in the list of targets from then on. J-Link Commander has its own list of devices and "
+    "needs none of this."
+)
+NEVER_FETCHED = "The list of devices has not been fetched yet."
+NOTHING_FOUND = (
+    "No device has that in its name. If it is a new one, update the list: it may have been "
+    "added since."
+)
+FIND_TIP = (
+    "Any part of the device's part number, in any case: xmc4500, f407,\n"
+    "nrf52. The search is of the list on this computer."
+)
+UPDATE_TIP = (
+    "Download the list of every device there is a pack for, again. It is a\n"
+    "few megabytes and takes a little while. Needed once, and after that\n"
+    "only for a device newer than the list."
+)
+INSTALL_TIP = "Download the pack the selected device is in. Every device in it comes with it."
+USE_TIP = "Choose the selected device as the target, in the bar across the top of the window."
+REMOVE_TIP = (
+    "Delete the selected pack from this computer. Its devices leave the\n"
+    "list of targets; it can be installed again."
+)
+
+
+#: Between one column and the next, beyond what the text itself needs.
+GAP = 16
+
+
+def fetched_text(when: datetime | None) -> str:
+    if when is None:
+        return NEVER_FETCHED
+    return f"The list of devices was fetched on {when:%d %B %Y}."
+
+
+class PacksDialog(QDialog):
+    #: A device was chosen as the target: its name as pyOCD has it.
+    chosen = Signal(str)
+
+    def __init__(self, manager: PackManager, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.setWindowTitle("Device packs")
+        self.manager = manager
+        self.resize(680, 560)
+        #: A search asked for before there was a list to search, made once
+        #: the list has arrived.
+        self._find_after_fetch = False
+        self._never_fetched = True
+
+        introduction = QLabel(INTRODUCTION)
+        introduction.setWordWrap(True)
+
+        self.text = QLineEdit()
+        self.text.setPlaceholderText("Part of a device's name, such as xmc4500")
+        self.text.setToolTip(FIND_TIP)
+        self.text.setAccessibleName("Device")
+        self.text.setClearButtonEnabled(True)
+        self.find_button = QPushButton("Find")
+        self.find_button.setToolTip(FIND_TIP)
+
+        self.devices = QTreeWidget()
+        self.devices.setHeaderLabels(["Device", "Maker", "Pack", "Version", "Installed"])
+        self.devices.setRootIsDecorated(False)
+        self.devices.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.devices.setAccessibleName("Devices found")
+        self.result = QLabel()
+        self.result.setWordWrap(True)
+
+        self.install_button = QPushButton("Install pack")
+        self.install_button.setToolTip(INSTALL_TIP)
+        self.use_button = QPushButton("Use as target")
+        self.use_button.setToolTip(USE_TIP)
+
+        self.packs = QTreeWidget()
+        self.packs.setHeaderLabels(["Pack", "Version"])
+        self.packs.setRootIsDecorated(False)
+        self.packs.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.packs.setAccessibleName("Installed packs")
+        self.remove_button = QPushButton("Remove...")
+        self.remove_button.setToolTip(REMOVE_TIP)
+
+        self.fetched = QLabel()
+        self.update_button = QPushButton("Update the list")
+        self.update_button.setToolTip(UPDATE_TIP)
+
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        #: Back and forth rather than a fraction: a pack is one file, and
+        #: how much of it has arrived is not something the library says.
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 0)
+        self.bar.setTextVisible(False)
+        self.bar.setVisible(False)
+
+        closer = QDialogButtonBox(QDialogButtonBox.Close)
+        closer.rejected.connect(self.reject)
+        # Enter in the search box is Find, and must not also be Close.
+        closer.button(QDialogButtonBox.Close).setAutoDefault(False)
+        for button in (
+            self.install_button,
+            self.use_button,
+            self.remove_button,
+            self.update_button,
+        ):
+            button.setAutoDefault(False)
+        self.find_button.setDefault(True)
+
+        search = QHBoxLayout()
+        search.addWidget(self.text, 1)
+        search.addWidget(self.find_button)
+        found_row = QHBoxLayout()
+        found_row.addWidget(self.install_button)
+        found_row.addWidget(self.use_button)
+        found_row.addStretch(1)
+        packs_row = QHBoxLayout()
+        packs_row.addWidget(self.remove_button)
+        packs_row.addStretch(1)
+        list_row = QHBoxLayout()
+        list_row.addWidget(self.fetched, 1)
+        list_row.addWidget(self.update_button)
+
+        layout = QVBoxLayout(self)
+        layout.addWidget(introduction)
+        layout.addLayout(search)
+        layout.addWidget(self.devices, 3)
+        layout.addWidget(self.result)
+        layout.addLayout(found_row)
+        layout.addWidget(QLabel("Installed on this computer:"))
+        layout.addWidget(self.packs, 2)
+        layout.addLayout(packs_row)
+        layout.addLayout(list_row)
+        layout.addWidget(self.status)
+        layout.addWidget(self.bar)
+        layout.addWidget(closer)
+
+        self.find_button.clicked.connect(self.find)
+        self.text.returnPressed.connect(self.find)
+        self.install_button.clicked.connect(self._install)
+        self.use_button.clicked.connect(self._use)
+        self.remove_button.clicked.connect(self._remove)
+        self.update_button.clicked.connect(manager.fetch_list)
+        self.devices.itemSelectionChanged.connect(self._enable)
+        self.devices.itemDoubleClicked.connect(lambda *_: self._use())
+        self.packs.itemSelectionChanged.connect(self._enable)
+        manager.found.connect(self._show_devices)
+        manager.not_found.connect(self._not_found)
+        manager.listed.connect(self._show_packs)
+        manager.progress.connect(self.status.setText)
+        manager.busy_changed.connect(self._on_busy)
+
+        self._on_busy(manager.busy)
+        manager.refresh()
+        self.text.setFocus()
+
+    # --- what is selected ------------------------------------------------------------
+    def selected_device(self) -> Device | None:
+        item = self.devices.currentItem()
+        return None if item is None else item.data(0, Qt.UserRole)
+
+    def selected_pack(self) -> Pack | None:
+        item = self.packs.currentItem()
+        return None if item is None else item.data(0, Qt.UserRole)
+
+    # --- finding ---------------------------------------------------------------------
+    def find(self) -> None:
+        if not self.text.text().strip():
+            return
+        if self._never_fetched and not self.manager.busy:
+            # Nothing to search yet, and what was asked for is plain enough.
+            self._find_after_fetch = True
+            self.manager.fetch_list()
+            return
+        self.manager.find(self.text.text())
+
+    def _show_devices(self, devices: list[Device]) -> None:
+        kept = self.selected_device()
+        self.devices.clear()
+        for device in devices[:MOST_FOUND]:
+            item = QTreeWidgetItem(
+                [
+                    device.name,
+                    device.vendor,
+                    device.pack.label,
+                    device.pack.version,
+                    "Yes" if device.installed else "",
+                ]
+            )
+            item.setData(0, Qt.UserRole, device)
+            self.devices.addTopLevelItem(item)
+            if kept is not None and device.name == kept.name:
+                self.devices.setCurrentItem(item)
+        for column in range(self.devices.columnCount()):
+            self.devices.resizeColumnToContents(column)
+            self.devices.setColumnWidth(column, self.devices.columnWidth(column) + GAP)
+        if self.devices.currentItem() is None and devices:
+            self.devices.setCurrentItem(self.devices.topLevelItem(0))
+        if not devices:
+            self.result.setText(NOTHING_FOUND)
+        elif len(devices) > MOST_FOUND:
+            self.result.setText(
+                f"{len(devices)} devices have that in their name; the first {MOST_FOUND} are "
+                "shown. More of the name finds fewer."
+            )
+        else:
+            self.result.setText(f"{len(devices)} found." if len(devices) > 1 else "1 found.")
+        self._enable()
+
+    def _not_found(self, why: str) -> None:
+        self.devices.clear()
+        self.result.setText(why)
+        self._enable()
+
+    # --- what is installed -----------------------------------------------------------
+    def _show_packs(self, packs: list[Pack], fetched: datetime | None) -> None:
+        self._never_fetched = fetched is None
+        self.fetched.setText(fetched_text(fetched))
+        self.packs.clear()
+        for pack in packs:
+            item = QTreeWidgetItem([pack.label, pack.version])
+            item.setData(0, Qt.UserRole, pack)
+            self.packs.addTopLevelItem(item)
+        self.packs.resizeColumnToContents(0)
+        self.packs.setColumnWidth(0, self.packs.columnWidth(0) + GAP)
+        # What was found says which of it is installed, and that has changed.
+        if self.devices.topLevelItemCount() or self._find_after_fetch:
+            if not self.manager.busy and not self._never_fetched:
+                self._find_after_fetch = False
+                self.manager.find(self.text.text())
+        self._enable()
+
+    def _install(self) -> None:
+        if (device := self.selected_device()) is None:
+            return
+        pack = device.pack
+        where = f" from {pack.url}" if pack.url else ""
+        asked = messages.question(
+            self,
+            f"Download {pack}?",
+            f"It is downloaded{where}, and kept on this computer for pyOCD to use. A pack "
+            "holds every device of its family, and can be tens of megabytes.",
+            messages.Button.Yes | messages.Button.No,
+            messages.Button.Yes,
+        )
+        if asked == messages.Button.Yes:
+            self.manager.install(pack)
+
+    def _remove(self) -> None:
+        if (pack := self.selected_pack()) is None:
+            return
+        asked = messages.question(
+            self,
+            f"Remove {pack}?",
+            "Its devices leave the list of targets. It can be installed again.",
+            messages.Button.Yes | messages.Button.No,
+            messages.Button.No,
+        )
+        if asked == messages.Button.Yes:
+            self.manager.remove(pack)
+
+    def _use(self) -> None:
+        device = self.selected_device()
+        if device is not None and device.installed:
+            self.chosen.emit(device.name.lower())
+            self.status.setText(f"{device.name.lower()} is the target.")
+
+    # --- what can be pressed ---------------------------------------------------------
+    def _on_busy(self, busy: bool) -> None:
+        self.bar.setVisible(busy)
+        self._enable()
+
+    def _enable(self) -> None:
+        busy = self.manager.busy
+        device = self.selected_device()
+        self.install_button.setEnabled(not busy and device is not None and not device.installed)
+        self.use_button.setEnabled(device is not None and device.installed)
+        self.remove_button.setEnabled(not busy and self.selected_pack() is not None)
+        self.update_button.setEnabled(not busy)

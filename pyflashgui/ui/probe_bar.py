@@ -52,7 +52,8 @@ BACKEND_TIP = (
 PROBE_TIP = "The debug probe to connect through. Refresh looks for them again."
 TARGET_TIP = (
     "The device on the end of the probe. Type part of its name to find it.\n"
-    "The memory map is checked against it before it is connected to."
+    "The memory map is checked against it before it is connected to.\n"
+    "One that is not here may be in a pack: Tools > Device packs."
 )
 FREQUENCY_TIP = (
     "How fast the probe clocks the debug port. Lower it if connecting is\n"
@@ -186,6 +187,10 @@ class ProbeBar(QToolBar):
 
     def chosen_target(self) -> str:
         return self.target.currentText().strip()
+
+    def choose_target(self, name: str) -> None:
+        """Make ``name`` the target, as typing it would."""
+        self.target.setEditText(name)
 
     def chosen_frequency(self) -> int | None:
         return self.frequency.currentData()

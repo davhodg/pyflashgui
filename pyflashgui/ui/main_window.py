@@ -34,12 +34,14 @@ from pyflashgui.core.events import PROBLEMS, EventLog
 from pyflashgui.core.excepthook import ExceptionLogger
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.memory_map import FLASH, RAM, Region
+from pyflashgui.core.pack_manager import PackManager
 from pyflashgui.ui import event_colours, folders, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.files_view import Entry, FilesView
 from pyflashgui.ui.help_menu import HelpMenu
 from pyflashgui.ui.map_view import MapView
 from pyflashgui.ui.memory_view import MemoryView
+from pyflashgui.ui.packs_dialog import PacksDialog
 from pyflashgui.ui.panes import PaneKind, Panes
 from pyflashgui.ui.probe_bar import ProbeBar
 from pyflashgui.ui.read_dialog import ReadDialog
@@ -150,6 +152,10 @@ class MainWindow(QMainWindow):
         #: The one thing that talks to a probe. The bar and the panes ask
         #: it for things and listen for what comes back.
         self.flasher = Flasher(self.events, parent=self)
+        #: The CMSIS-Packs pyOCD gets most of its targets from. A new one
+        #: is a new set of targets, whichever backend is chosen just now.
+        self.packs = PackManager(self.events, parent=self)
+        self.packs.changed.connect(self.flasher.refresh_targets)
 
         # --- toolbar ---------------------------------------------------------
         self.probe_bar = ProbeBar(self.flasher, self.ctx)
@@ -228,6 +234,11 @@ class MainWindow(QMainWindow):
 
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.setToolTipsVisible(True)
+        self.packs_action = tools_menu.addAction("Device packs...", self._manage_packs)
+        self.packs_action.setToolTip(
+            "Find a device that is not in the list of targets, and install the\n"
+            "CMSIS-Pack that describes it. For devices used through pyOCD."
+        )
         folder = tools_menu.addAction("Open workspace folder", self._open_workspace_folder)
         folder.setToolTip(
             "The folder this workspace keeps its settings and its arrangement\n"
@@ -528,6 +539,7 @@ class MainWindow(QMainWindow):
         # running after the main window had gone.
         self.panes.close_detached()
         self.help_menu.shutdown()
+        self.packs.shutdown()
         self.flasher.shutdown()
         self.exceptions.remove()
         super().closeEvent(event)
@@ -598,6 +610,23 @@ class MainWindow(QMainWindow):
         self.events.information(f"J-Link Commander is {path}.")
         self.flasher.refresh_targets()
         self.flasher.refresh_probes()
+
+    def _manage_packs(self) -> None:
+        """Tools > Device packs."""
+        dialog = PacksDialog(self.packs, self)
+        dialog.chosen.connect(self._use_target)
+        dialog.exec()
+        dialog.deleteLater()
+
+    def _use_target(self, name: str) -> None:
+        """A device was picked in the packs dialog to be the target."""
+        if self.flasher.connected or self.flasher.busy:
+            self.events.warning(
+                f"{name} was not made the target: disconnect first, and choose it in the bar."
+            )
+            return
+        self.probe_bar.choose_target(name)
+        self.events.information(f"The target is {name}.")
 
     def _read_memory(self) -> None:
         """Ask what to read from the target, and read it."""

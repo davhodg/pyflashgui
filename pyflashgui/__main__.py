@@ -29,6 +29,7 @@ SELFTEST_MODULES = (
     "pyflashgui.core.images",
     "pyflashgui.core.memory_map",
     "pyflashgui.backends.pyocd_backend",
+    "pyflashgui.backends.pyocd_packs",
     "pyflashgui.backends.jlink_backend",
     "pyflashgui.backends.simulated",
     "pyflashgui.ui.main_window",
@@ -75,6 +76,16 @@ def selftest() -> int:
         failures += [f"pyOCD target {name}: not found" for name in missing_builtin_targets()]
     except Exception as exc:
         failures.append(f"pyocd: {exc}")
+
+    # Tools > Device packs is the only way an installed copy has of getting a
+    # target pyOCD has not built in, and what does it is a native library.
+    # Opening the store of packs loads it; nothing is downloaded.
+    try:
+        from pyflashgui.backends import pyocd_packs
+
+        pyocd_packs.installed()
+    except Exception as exc:
+        failures.append(f"device packs: {exc}")
 
     # libusb is a native library carried inside a Python package, which is
     # the kind of file a build leaves behind. Without it pyOCD lists no
