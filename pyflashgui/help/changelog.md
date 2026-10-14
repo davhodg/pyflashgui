@@ -14,8 +14,9 @@ since the last version, and comes out in the next one.
 - *View > Python Console*: a Python prompt and *Run script...*, with `flash` to connect,
   read, write RAM, erase, program, verify and reset, each call waiting for its answer.
 - *Tools > pyOCD device packs...*: find a device that is not in the list of targets, and
-  install the CMSIS-Pack that describes it, for use through pyOCD. An installed copy of
-  pyflashgui had no way to add one.
+  install the CMSIS-Pack that describes it, for use through pyOCD, or add a `.pack` file
+  downloaded by hand for a computer with no internet. An installed copy of pyflashgui had
+  no way to add one.
 - *File > Workspace*: a new workspace, the one in use saved under another name, switching
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip

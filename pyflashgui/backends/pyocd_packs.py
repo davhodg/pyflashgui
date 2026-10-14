@@ -12,6 +12,12 @@ installed with either is there for both.
 This is that command's work, for a window to ask for: an installed copy of
 pyflashgui has no command line to type it at.
 
+A pack can also be added from a file, for a computer with no internet: one
+downloaded by hand from its maker. That store only counts a pack that its
+index lists, and a computer with no internet has no index, so such a pack is
+kept in a folder of pyflashgui's own instead and handed to pyOCD by name
+when one of its devices is connected to.
+
 **Every call here blocks**, and fetching the index or a pack does so for as
 long as the download takes. They are for a thread other than the window's.
 
@@ -20,13 +26,16 @@ Nothing here imports Qt.
 
 from __future__ import annotations
 
+import shutil
+import zipfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from pyflashgui.backends.base import BackendError
+from pyflashgui.core import paths
 
 #: Called as a download goes: how many files have arrived, and how many
 #: there are, or None while that is not known yet.
@@ -54,6 +63,8 @@ class Pack:
     version: str
     #: Where it is downloaded from.
     url: str = ""
+    #: Where it is kept, for one added from a file rather than downloaded.
+    file: str = ""
 
     @property
     def label(self) -> str:
@@ -142,7 +153,8 @@ def find(text: str) -> list[Device]:
         return []
     cache = open_cache()
     index = cache.index
-    if not index:
+    from_files = [d for d in file_devices() if wanted in d.name.lower()]
+    if not index and not file_packs():
         raise PackError(NO_LIST)
     found = []
     there: dict[Pack, bool] = {}
@@ -155,17 +167,18 @@ def find(text: str) -> list[Device]:
             there[pack] = _file(cache, pack).is_file()
         vendor = str(entry.get("vendor", "")).split(":")[0]
         found.append(Device(entry.get("name", name), vendor, pack, there[pack]))
-    return found
+    # A device in a pack added from a file is installed, whatever the list says.
+    names = {d.name.lower() for d in from_files}
+    found = [d for d in found if d.name.lower() not in names] + from_files
+    return sorted(found, key=lambda d: d.name.lower())
 
 
 def installed() -> list[Pack]:
     """The packs that have been downloaded."""
     cache = open_cache()
     packs = {_pack_of(entry) for entry in cache.index.values()}
-    return sorted(
-        (pack for pack in packs if _file(cache, pack).is_file()),
-        key=lambda pack: pack.label.lower(),
-    )
+    downloaded = [pack for pack in packs if _file(cache, pack).is_file()]
+    return sorted(downloaded + file_packs(), key=lambda pack: pack.label.lower())
 
 
 def install(pack: Pack, tick: Tick | None = None) -> None:
@@ -185,8 +198,116 @@ def install(pack: Pack, tick: Tick | None = None) -> None:
 
 
 def remove(pack: Pack) -> None:
-    """Delete one downloaded pack. The list still has it, to install again."""
+    """Delete one pack. A downloaded one is still in the list, to install again."""
     try:
-        _file(open_cache(), pack).unlink(missing_ok=True)
+        (Path(pack.file) if pack.file else _file(open_cache(), pack)).unlink(missing_ok=True)
     except OSError as exc:
         raise _said(f"Removing {pack}", exc) from exc
+
+
+# --- packs from files -------------------------------------------------------------------
+#: What each pack file was found to hold, by path, with when it was changed:
+#: the list of targets asks every time it is filled, and reading a pack of
+#: a whole family of devices is not instant.
+_described: dict[str, tuple[float, Pack, tuple[tuple[str, str], ...]]] = {}
+
+
+def files_folder() -> Path:
+    """Where packs added from files are kept."""
+    return paths.user_dir() / "packs"
+
+
+def read_pack(path: Path) -> tuple[Pack, tuple[tuple[str, str], ...]]:
+    """Which pack a .pack file is, and its devices as (part number, maker)."""
+    from xml.etree import ElementTree
+
+    # By the way in pyOCD's own modules take, before the part of it wanted
+    # here. Started part way in, pyOCD can import itself in a circle, which
+    # it does not survive; and the backend may be importing it on another
+    # thread at the same moment.
+    import pyocd.target  # noqa: F401
+    from pyocd.target.pack.cmsis_pack import CmsisPack
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            # The description is at the top of the archive, beside its folders.
+            described = [n for n in archive.namelist() if n.lower().endswith(".pdsc")]
+            if not described:
+                raise PackError(
+                    f"{path.name} is not a CMSIS-Pack: there is no description (.pdsc) in it."
+                )
+            root = ElementTree.fromstring(archive.read(min(described, key=lambda n: n.count("/"))))
+            # Read through this archive, which is closed after: one pyOCD opened
+            # itself would stay open, and Windows will not delete an open file.
+            found = {
+                (d.part_number, (d.vendor or "").split(":")[0]) for d in CmsisPack(archive).devices
+            }
+    except PackError:
+        raise
+    except Exception as exc:
+        raise PackError(f"{path.name} cannot be read as a CMSIS-Pack: {exc}") from exc
+    release = root.find("releases/release")
+    vendor, name = root.findtext("vendor"), root.findtext("name")
+    version = release.get("version") if release is not None else None
+    if not (vendor and name and version):
+        raise PackError(
+            f"{path.name} does not say which pack it is: it has no vendor, name or version."
+        )
+    if not found:
+        raise PackError(f"{path.name} describes no devices, so there would be nothing to choose.")
+    return Pack(vendor.strip(), name.strip(), version.strip()), tuple(sorted(found))
+
+
+def _described_file(path: Path) -> tuple[Pack, tuple[tuple[str, str], ...]] | None:
+    try:
+        changed = path.stat().st_mtime
+    except OSError:
+        return None
+    key = str(path)
+    if (kept := _described.get(key)) is None or kept[0] != changed:
+        try:
+            pack, devices = read_pack(path)
+        except PackError:
+            return None  # one that has gone bad is left out, not the end of the list
+        kept = _described[key] = (changed, replace(pack, file=key), devices)
+    return kept[1], kept[2]
+
+
+def file_packs() -> list[Pack]:
+    """The packs added from files."""
+    return [d[0] for d in map(_described_file, sorted(files_folder().glob("*.pack"))) if d]
+
+
+def file_devices() -> list[Device]:
+    """The devices in the packs added from files."""
+    out = []
+    for path in sorted(files_folder().glob("*.pack")):
+        if (described := _described_file(path)) is not None:
+            pack, devices = described
+            out += [Device(name, maker, pack, True) for name, maker in devices]
+    return out
+
+
+def packs_for(target: str) -> list[str]:
+    """The pack files with this device in, for pyOCD to be handed when connecting."""
+    wanted = target.lower()
+    return [d.pack.file for d in file_devices() if d.name.lower() == wanted]
+
+
+def add_file(source: str) -> tuple[Pack, int]:
+    """Keep a copy of a .pack file, and say which pack it is and how many devices it has."""
+    pack, devices = read_pack(Path(source))
+    folder = files_folder()
+    kept = folder / f"{pack.vendor}.{pack.name}.{pack.version}.pack"
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+        # The same pack at another version is replaced rather than kept beside it:
+        # two descriptions of one device would leave pyOCD to pick one.
+        for older in folder.glob(f"{pack.vendor}.{pack.name}.*.pack"):
+            if older != kept:
+                older.unlink()
+        if Path(source).resolve() != kept.resolve():
+            shutil.copyfile(source, kept)
+    except OSError as exc:
+        raise _said(f"Adding {Path(source).name}", exc) from exc
+    return replace(pack, file=str(kept)), len(devices)

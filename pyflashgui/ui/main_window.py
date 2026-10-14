@@ -642,7 +642,7 @@ class MainWindow(QMainWindow):
 
     def _manage_packs(self) -> None:
         """Tools > pyOCD device packs."""
-        dialog = PacksDialog(self.packs, self)
+        dialog = PacksDialog(self.packs, self, self.ctx)
         dialog.chosen.connect(self._use_target)
         dialog.exec()
         dialog.deleteLater()

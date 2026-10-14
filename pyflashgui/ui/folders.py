@@ -41,6 +41,7 @@ IMAGE = "image"  # ELF, Intel HEX, S-record, raw binary: what is programmed
 EXPORT = "export"  # what is read back from a target and saved
 WORKSPACE = "workspace"  # workspace files, exported and imported
 SCRIPT = "script"  # Python, run in the console
+PACK = "pack"  # CMSIS-Packs downloaded by hand, added to pyOCD's devices
 
 PREFIX = "folders."
 #: The chosen file type is kept beside the folder and under the same

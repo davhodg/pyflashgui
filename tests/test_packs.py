@@ -9,6 +9,7 @@ the computer running the tests are neither seen nor touched.
 
 import json
 import time
+import zipfile
 from pathlib import Path
 
 import pytest
@@ -102,6 +103,9 @@ def store(tmp_path, monkeypatch):
     made = Store(tmp_path / "packs")
     made.folder.mkdir()
     monkeypatch.setattr(pyocd_packs, "open_cache", made.open)
+    # Packs added from files go here, and not among the computer's own.
+    made.files = tmp_path / "from files"
+    monkeypatch.setattr(pyocd_packs, "files_folder", lambda: made.files)
     return made
 
 
@@ -370,3 +374,128 @@ def test_tools_has_device_packs_and_a_device_chosen_there_is_the_target(
         assert window.probe_bar.chosen_target() == "xmc4500-f100x1024"
     finally:
         window.close()
+
+
+# --- packs from files -----------------------------------------------------------------
+PDSC = """<?xml version="1.0" encoding="UTF-8"?>
+<package schemaVersion="1.4">
+  <vendor>Acme</vendor>
+  <name>Widget_DFP</name>
+  <description>Two made-up parts</description>
+  <releases>
+    <release version="{version}">Latest</release>
+    <release version="1.0.0">Older</release>
+  </releases>
+  <devices>
+    <family Dfamily="Widget" Dvendor="Acme:999">
+      <processor Dcore="Cortex-M4" Dendian="Little-endian" Dclock="100000000"/>
+      <device Dname="WIDGET100">
+        <memory id="IROM1" start="0x08000000" size="0x10000" startup="1" default="1"/>
+        <memory id="IRAM1" start="0x20000000" size="0x4000" default="1"/>
+      </device>
+      <device Dname="WIDGET200">
+        <memory id="IROM1" start="0x08000000" size="0x20000" startup="1" default="1"/>
+        <memory id="IRAM1" start="0x20000000" size="0x8000" default="1"/>
+      </device>
+    </family>
+  </devices>
+</package>
+"""
+
+
+def pack_file(folder: Path, version: str = "1.2.3", name: str = "downloaded.pack") -> str:
+    """A .pack as a maker publishes one, cut down to its description."""
+    path = folder / name
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr("Acme.Widget_DFP.pdsc", PDSC.format(version=version))
+    return str(path)
+
+
+def test_a_pack_file_is_kept_and_its_devices_are_installed_with_no_list(store, tmp_path):
+    source = pack_file(tmp_path)
+    pack, count = pyocd_packs.add_file(source)
+    assert (pack.label, pack.version, count) == ("Acme.Widget_DFP", "1.2.3", 2)
+    assert Path(pack.file) == store.files / "Acme.Widget_DFP.1.2.3.pack"
+    Path(source).unlink()  # a copy is kept: the download can go
+    assert pyocd_packs.installed() == [pack]
+
+    found = pyocd_packs.find("widget")
+    assert [(d.name, d.vendor, d.installed) for d in found] == [
+        ("WIDGET100", "Acme", True),
+        ("WIDGET200", "Acme", True),
+    ]
+    assert pyocd_packs.packs_for("widget200") == [pack.file]
+    assert pyocd_packs.packs_for("stm32f407vg") == []
+
+
+def test_a_pack_file_and_the_list_are_searched_together(fetched, tmp_path):
+    pyocd_packs.add_file(pack_file(tmp_path))
+    assert [d.name for d in pyocd_packs.find("0")] == [
+        "STM32F407VG",
+        "WIDGET100",
+        "WIDGET200",
+        "XMC4500-F100x1024",
+        "XMC4500-F144x768",
+    ]
+
+
+def test_another_version_of_a_pack_replaces_the_one_kept(store, tmp_path):
+    pyocd_packs.add_file(pack_file(tmp_path, "1.2.3"))
+    newer, _count = pyocd_packs.add_file(pack_file(tmp_path, "1.3.0", "newer.pack"))
+    assert sorted(p.name for p in store.files.iterdir()) == ["Acme.Widget_DFP.1.3.0.pack"]
+    assert pyocd_packs.installed() == [newer]
+
+
+def test_removing_a_pack_from_a_file_deletes_the_copy(store, tmp_path):
+    pack, _count = pyocd_packs.add_file(pack_file(tmp_path))
+    pyocd_packs.remove(pack)
+    assert not Path(pack.file).exists()
+    assert pyocd_packs.installed() == [] and pyocd_packs.packs_for("widget100") == []
+
+
+def test_a_file_that_is_not_a_pack_says_so(store, tmp_path):
+    text = tmp_path / "notes.pack"
+    text.write_text("not a zip")
+    with pytest.raises(PackError, match=r"notes\.pack cannot be read as a CMSIS-Pack"):
+        pyocd_packs.add_file(str(text))
+    empty = tmp_path / "empty.pack"
+    with zipfile.ZipFile(empty, "w") as archive:
+        archive.writestr("readme.txt", "hello")
+    with pytest.raises(PackError, match="no description"):
+        pyocd_packs.add_file(str(empty))
+    assert not store.files.exists() or not list(store.files.iterdir())
+
+
+def test_pyocd_offers_the_devices_of_a_pack_file_as_targets(store, tmp_path):
+    from pyflashgui import backends
+
+    pyocd_packs.add_file(pack_file(tmp_path))
+    targets = {t.name: t for t in backends.get("pyocd").targets()}
+    assert targets["widget100"].source == "pack file"
+    assert targets["widget100"].vendor == "Acme"
+
+
+def test_the_dialog_adds_a_file_and_can_search_it_with_no_list(
+    dialog, manager, store, tmp_path, monkeypatch
+):
+    assert not dialog.text.isEnabled()
+    source = pack_file(tmp_path)
+    monkeypatch.setattr(
+        packs_dialog.QFileDialog, "getOpenFileName", lambda *_args: (source, "CMSIS-Pack (*.pack)")
+    )
+    dialog.add_file_button.click()
+    wait_for(lambda: not manager.busy)
+
+    assert [dialog.packs.topLevelItem(0).text(c) for c in range(3)] == [
+        "Acme.Widget_DFP",
+        "1.2.3",
+        "a file",
+    ]
+    assert said(manager, GOOD) == [
+        "Added Acme.Widget_DFP 1.2.3 from downloaded.pack: 2 devices, now in the list of targets."
+    ]
+    assert dialog.text.isEnabled(), "a pack from a file needs no list to be searched"
+    dialog.text.setText("widget1")
+    dialog.find()
+    assert names(dialog.devices) == ["WIDGET100"]
+    assert dialog.use_button.isEnabled() and not dialog.install_button.isEnabled()

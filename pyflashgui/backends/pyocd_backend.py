@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from pyflashgui.backends import pyocd_packs
 from pyflashgui.backends.base import (
     ERASE_CHIP,
     ERASE_SECTORS,
@@ -215,6 +216,11 @@ class PyocdBackend(Backend):
             for name, cls in TARGET.items()
         ]
         seen = {t.name for t in out}
+        for device in self._file_devices():
+            name = device.name.lower()
+            if name not in seen:
+                seen.add(name)
+                out.append(TargetInfo(name, vendor=device.vendor, source="pack file"))
         for device in self._pack_devices():
             name = device.part_number.lower()
             if name not in seen:
@@ -232,6 +238,14 @@ class PyocdBackend(Backend):
         except Exception:
             # A pack index that is missing or damaged must not cost the
             # built-in targets, which need no pack at all.
+            return []
+
+    @staticmethod
+    def _file_devices() -> list:
+        """The devices in packs added from files. None is not a fault."""
+        try:
+            return pyocd_packs.file_devices()
+        except Exception:
             return []
 
     def regions(self, target: str) -> list[Region]:
@@ -270,6 +284,10 @@ class PyocdBackend(Backend):
         }
         if frequency is not None:
             options["frequency"] = int(frequency)
+        # A device from a pack added from a file is one pyOCD knows nothing of
+        # unless it is handed the pack.
+        if packs := pyocd_packs.packs_for(target):
+            options["pack"] = packs
         if needs_one_packet_at_a_time(chosen.description, chosen.product_name):
             options["cmsis_dap.limit_packets"] = True
         try:

@@ -31,7 +31,7 @@ The list is every target pyOCD has built in, and every device in the CMSIS-Packs
 
 pyOCD has a few dozen targets built in. Every other Cortex-M device is described by a CMSIS-Pack, which the maker of the device publishes: it says where the device's memory is and holds the code that programs its flash. A device that is not in the list of targets is almost always in a pack that has not been installed.
 
-*Tools > pyOCD device packs...* installs one:
+*Tools > pyOCD device packs...* installs one, from the internet or from a file:
 
 1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once.
 2. Type any part of the device's part number. The devices with that in their name are listed as you type.
@@ -43,6 +43,8 @@ The dialog can be closed while a pack is downloading: the [Event Log](manual.md)
 Once fetched, the button is **Update the list**: it downloads the list again, for a device newer than the list. **Remove...** deletes a pack from this computer, and its devices leave the list of targets.
 
 Packs are kept in pyOCD's own folder for them, not in a workspace, so a pack installed here is also there for pyOCD's command line, and one installed with `pyocd pack install` is there for pyflashgui. Only pyOCD uses them: J-Link Commander has SEGGER's own list of devices.
+
+**For a computer with no internet**, download the `.pack` file from the maker's website on one that has it, and press **Add from file...**. No list of devices is needed: the pack's devices are in the list of targets, and can be searched for here, straight away. A copy is kept in pyflashgui's own folder, so the file can be moved or deleted afterwards, and adding another version of the same pack replaces the one kept. The *From* column says which packs came from a file; **Remove...** deletes the copy.
 
 ## J-Link Commander
 

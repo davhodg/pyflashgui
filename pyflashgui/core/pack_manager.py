@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 from PySide6.QtCore import QObject, Signal, Slot
@@ -137,6 +138,20 @@ class PackManager(QObject):
             self.changed.emit()
 
         self._run(doing, lambda: pyocd_packs.install(pack, self._tick(doing)), done)
+
+    def add_file(self, path: str) -> None:
+        """Keep a .pack file that was downloaded by hand, and use its devices."""
+        name = Path(path).name
+
+        def done(result: tuple[Pack, int]) -> None:
+            pack, count = result
+            devices = "1 device" if count == 1 else f"{count} devices"
+            message = f"Added {pack} from {name}: {devices}, now in the list of targets."
+            self.events.good(message)
+            self.progress.emit(message)
+            self.changed.emit()
+
+        self._run(f"Adding {name}", lambda: pyocd_packs.add_file(path), done)
 
     def remove(self, pack: Pack) -> None:
         if self.busy:

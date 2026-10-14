@@ -15,12 +15,14 @@ Log says when it has arrived.
 from __future__ import annotations
 
 from datetime import datetime
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -33,8 +35,9 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.backends.pyocd_packs import MOST_FOUND, Device, Pack
+from pyflashgui.core.context import Context
 from pyflashgui.core.pack_manager import PackManager
-from pyflashgui.ui import messages
+from pyflashgui.ui import folders, messages
 
 INTRODUCTION = (
     "pyOCD knows some devices by itself. The rest are described by CMSIS-Packs, which the "
@@ -42,7 +45,10 @@ INTRODUCTION = (
     "is in the list of targets from then on. J-Link Commander has its own list of devices and "
     "needs none of this."
 )
-NEVER_FETCHED = "The list of devices has not been fetched yet. Fetch it to look a device up."
+NEVER_FETCHED = (
+    "The list of devices has not been fetched yet. Fetch it to look a device up, or add a "
+    "pack from a file."
+)
 FETCH = "Fetch the list"
 UPDATE = "Update the list"
 #: How long after the last letter typed the search is made.
@@ -62,6 +68,12 @@ UPDATE_TIP = (
 )
 INSTALL_TIP = "Download the pack the selected device is in. Every device in it comes with it."
 USE_TIP = "Choose the selected device as the target, in the bar across the top of the window."
+ADD_FILE_TIP = (
+    "Add a pack downloaded by hand from its maker's website, as a .pack\n"
+    "file: for a computer that cannot reach the internet. A copy is kept,\n"
+    "so the file can be moved or deleted afterwards."
+)
+PACK_FILES = "CMSIS-Pack (*.pack);;All files (*)"
 REMOVE_TIP = (
     "Delete the selected pack from this computer. Its devices leave the\n"
     "list of targets; it can be installed again."
@@ -82,8 +94,16 @@ class PacksDialog(QDialog):
     #: A device was chosen as the target: its name as pyOCD has it.
     chosen = Signal(str)
 
-    def __init__(self, manager: PackManager, parent: QWidget | None = None) -> None:
+    def __init__(
+        self,
+        manager: PackManager,
+        parent: QWidget | None = None,
+        ctx: Context | None = None,
+    ) -> None:
         super().__init__(parent)
+        #: For remembering where packs are added from. None leaves that
+        #: to the file dialog.
+        self.ctx = ctx
         self.setWindowTitle("pyOCD device packs")
         self.manager = manager
         self.resize(680, 560)
@@ -93,6 +113,9 @@ class PacksDialog(QDialog):
         self._typing.setInterval(TYPING_MS)
         self._typing.timeout.connect(self.find)
         self._never_fetched = True
+        #: Whether there is anything to search: the list, or a pack added
+        #: from a file, which needs no list.
+        self._searchable = False
 
         introduction = QLabel(INTRODUCTION)
         introduction.setWordWrap(True)
@@ -117,10 +140,12 @@ class PacksDialog(QDialog):
         self.use_button.setToolTip(USE_TIP)
 
         self.packs = QTreeWidget()
-        self.packs.setHeaderLabels(["Pack", "Version"])
+        self.packs.setHeaderLabels(["Pack", "Version", "From"])
         self.packs.setRootIsDecorated(False)
         self.packs.setSelectionMode(QAbstractItemView.SingleSelection)
         self.packs.setAccessibleName("Installed packs")
+        self.add_file_button = QPushButton("Add from file...")
+        self.add_file_button.setToolTip(ADD_FILE_TIP)
         self.remove_button = QPushButton("Remove...")
         self.remove_button.setToolTip(REMOVE_TIP)
 
@@ -145,6 +170,7 @@ class PacksDialog(QDialog):
             self.install_button,
             self.use_button,
             self.remove_button,
+            self.add_file_button,
             self.update_button,
         ):
             button.setAutoDefault(False)
@@ -154,6 +180,7 @@ class PacksDialog(QDialog):
         found_row.addWidget(self.use_button)
         found_row.addStretch(1)
         packs_row = QHBoxLayout()
+        packs_row.addWidget(self.add_file_button)
         packs_row.addWidget(self.remove_button)
         packs_row.addStretch(1)
         list_row = QHBoxLayout()
@@ -179,6 +206,7 @@ class PacksDialog(QDialog):
         self.install_button.clicked.connect(self._install)
         self.use_button.clicked.connect(self._use)
         self.remove_button.clicked.connect(self._remove)
+        self.add_file_button.clicked.connect(self._add_file)
         self.update_button.clicked.connect(manager.fetch_list)
         self.devices.itemSelectionChanged.connect(self._enable)
         self.devices.itemDoubleClicked.connect(lambda *_: self._use())
@@ -191,7 +219,7 @@ class PacksDialog(QDialog):
 
         self._on_busy(manager.busy)
         manager.refresh()
-        (self.update_button if self._never_fetched else self.text).setFocus()
+        (self.text if self._searchable else self.update_button).setFocus()
 
     # --- what is selected ------------------------------------------------------------
     def selected_device(self) -> Device | None:
@@ -206,7 +234,7 @@ class PacksDialog(QDialog):
     def find(self) -> None:
         """Search the list for what is typed. Nothing typed is nothing found."""
         self._typing.stop()
-        if self._never_fetched:
+        if not self._searchable:
             return
         if not self.text.text().strip():
             self.devices.clear()
@@ -256,10 +284,13 @@ class PacksDialog(QDialog):
     # --- what is installed -----------------------------------------------------------
     def _show_packs(self, packs: list[Pack], fetched: datetime | None) -> None:
         self._never_fetched = fetched is None
+        self._searchable = not self._never_fetched or any(pack.file for pack in packs)
         self.fetched.setText(fetched_text(fetched))
         self.packs.clear()
         for pack in packs:
-            item = QTreeWidgetItem([pack.label, pack.version])
+            item = QTreeWidgetItem(
+                [pack.label, pack.version, "a file" if pack.file else "download"]
+            )
             item.setData(0, Qt.UserRole, pack)
             self.packs.addTopLevelItem(item)
         self.packs.resizeColumnToContents(0)
@@ -292,12 +323,26 @@ class PacksDialog(QDialog):
         asked = messages.question(
             self,
             f"Remove {pack}?",
-            "Its devices leave the list of targets. It can be installed again.",
+            "Its devices leave the list of targets. "
+            + (
+                "It can be added from its file again."
+                if pack.file
+                else "It can be installed again."
+            ),
             messages.Button.Yes | messages.Button.No,
             messages.Button.No,
         )
         if asked == messages.Button.Yes:
             self.manager.remove(pack)
+
+    def _add_file(self) -> None:
+        caption = "Add a CMSIS-Pack"
+        if self.ctx is not None:
+            path = folders.open_file(self, self.ctx, folders.PACK, caption, PACK_FILES, Path.home())
+        else:
+            path, _type = QFileDialog.getOpenFileName(self, caption, str(Path.home()), PACK_FILES)
+        if path:
+            self.manager.add_file(path)
 
     def _use(self) -> None:
         device = self.selected_device()
@@ -317,6 +362,7 @@ class PacksDialog(QDialog):
         self.use_button.setEnabled(device is not None and device.installed)
         self.remove_button.setEnabled(not busy and self.selected_pack() is not None)
         self.update_button.setEnabled(not busy)
+        self.add_file_button.setEnabled(not busy)
         self.update_button.setText(FETCH if self._never_fetched else UPDATE)
-        # Nothing to search until there is a list.
-        self.text.setEnabled(not self._never_fetched)
+        # Nothing to search until there is a list, or a pack from a file.
+        self.text.setEnabled(self._searchable)
