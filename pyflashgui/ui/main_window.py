@@ -233,10 +233,11 @@ class MainWindow(QMainWindow):
 
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.setToolTipsVisible(True)
-        self.packs_action = tools_menu.addAction("Device packs...", self._manage_packs)
+        self.packs_action = tools_menu.addAction("pyOCD device packs...", self._manage_packs)
         self.packs_action.setToolTip(
             "Find a device that is not in the list of targets, and install the\n"
-            "CMSIS-Pack that describes it. For devices used through pyOCD."
+            "CMSIS-Pack that describes it. Only pyOCD uses packs: J-Link Commander\n"
+            "has SEGGER's own list of devices."
         )
         tools_menu.addSeparator()
         # What is set and left, apart from what is done. A submenu rather
@@ -603,7 +604,7 @@ class MainWindow(QMainWindow):
         self.flasher.refresh_probes()
 
     def _manage_packs(self) -> None:
-        """Tools > Device packs."""
+        """Tools > pyOCD device packs."""
         dialog = PacksDialog(self.packs, self)
         dialog.chosen.connect(self._use_target)
         dialog.exec()

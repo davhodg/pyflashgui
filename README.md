@@ -110,7 +110,7 @@ CMSIS-DAP is a protocol and not a product, so a great many probes speak it. Amon
 
 **With pyOCD, the target has to be an Arm Cortex-M, whichever probe it is.** The probe carries the debug port; what is on the far side of it is pyOCD's to understand, and Cortex-M is what it understands. A probe that can reach other kinds of processor with its maker's own software -- a Cortex-A or Cortex-R, a RISC-V core -- still reaches only Cortex-M here.
 
-**Which Cortex-M devices** is a matter of CMSIS-Packs. pyOCD has a few dozen devices built in; every other is described by a pack its maker publishes. **Tools > Device packs** finds a device by its part number and downloads the pack it is in, however pyflashgui was installed.
+**Which Cortex-M devices** is a matter of CMSIS-Packs. pyOCD has a few dozen devices built in; every other is described by a pack its maker publishes. **Tools > pyOCD device packs** finds a device by its part number and downloads the pack it is in, however pyflashgui was installed.
 
 ### Beyond Cortex-M, with a J-Link
 

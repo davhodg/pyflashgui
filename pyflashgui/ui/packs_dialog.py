@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""Tools > Device packs: find a device, and install the pack that describes it.
+"""Tools > pyOCD device packs: find a device, and install the pack that describes it.
 
 From the top down, in the order it is done. The list of every device there
 is a pack for is fetched, once; a part is looked up in it, as it is typed,
@@ -84,7 +84,7 @@ class PacksDialog(QDialog):
 
     def __init__(self, manager: PackManager, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Device packs")
+        self.setWindowTitle("pyOCD device packs")
         self.manager = manager
         self.resize(680, 560)
         #: Typing is not searching until it stops for a moment.

@@ -365,7 +365,7 @@ def test_tools_has_device_packs_and_a_device_chosen_there_is_the_target(
     QSettings().clear()
     window = MainWindow()
     try:
-        assert window.packs_action.text() == "Device packs..."
+        assert window.packs_action.text() == "pyOCD device packs..."
         window._use_target("xmc4500-f100x1024")
         assert window.probe_bar.chosen_target() == "xmc4500-f100x1024"
     finally:

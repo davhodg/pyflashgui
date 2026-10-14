@@ -77,7 +77,7 @@ def selftest() -> int:
     except Exception as exc:
         failures.append(f"pyocd: {exc}")
 
-    # Tools > Device packs is the only way an installed copy has of getting a
+    # Tools > pyOCD device packs is the only way an installed copy has of getting a
     # target pyOCD has not built in, and what does it is a native library.
     # Opening the store of packs loads it; nothing is downloaded.
     try:

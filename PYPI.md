@@ -60,7 +60,7 @@ The [manual](https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/m
 
 ## Probes and targets
 
-Through [pyOCD](https://pyocd.io), any probe it supports, for Arm Cortex-M targets: CMSIS-DAP probes, ST-Link, and J-Link. The targets are those pyOCD has built in and those in CMSIS-Packs, which **Tools > Device packs** finds and installs.
+Through [pyOCD](https://pyocd.io), any probe it supports, for Arm Cortex-M targets: CMSIS-DAP probes, ST-Link, and J-Link. The targets are those pyOCD has built in and those in CMSIS-Packs, which **Tools > pyOCD device packs** finds and installs.
 
 Through SEGGER's J-Link Commander, a J-Link reaches the devices beyond Cortex-M that SEGGER's software supports -- Cortex-A and Cortex-R, RISC-V and others. SEGGER's software is not included: install it, and pyflashgui finds it.
 

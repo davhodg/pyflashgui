@@ -53,7 +53,7 @@ PROBE_TIP = "The debug probe to connect through. Refresh looks for them again."
 TARGET_TIP = (
     "The device on the end of the probe. Type part of its name to find it.\n"
     "The memory map is checked against it before it is connected to.\n"
-    "One that is not here may be in a pack: Tools > Device packs."
+    "One that is not here may be in a pack: Tools > pyOCD device packs."
 )
 FREQUENCY_TIP = (
     "How fast the probe clocks the debug port. Lower it if connecting is\n"
