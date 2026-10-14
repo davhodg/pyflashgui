@@ -32,7 +32,7 @@ from pyflashgui.backends.base import (
 )
 from pyflashgui.core.events import EventLog
 from pyflashgui.core.images import Image, Segment
-from pyflashgui.core.memory_map import Region
+from pyflashgui.core.memory_map import FLASH, Region
 from pyflashgui.core.worker import Worker
 
 #: Progress is passed on when it has moved this far, and not otherwise: a
@@ -229,7 +229,7 @@ class Flasher(QObject):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
-    ) -> None:
+    ) -> bool:
         backend = self.backend
 
         def work() -> tuple[Connection, list[Region]]:
@@ -249,8 +249,9 @@ class Flasher(QObject):
             self.regions_changed.emit()
 
         if not self._run(f"Connecting to {target}", work, done):
-            return
+            return False
         self.events.information(f"Connecting to {target} through probe {probe}...")
+        return True
 
     def disconnect(self) -> None:
         connection, self.connection = self.connection, None
@@ -271,13 +272,14 @@ class Flasher(QObject):
         return self.connection
 
     # --- what is done to a target ----------------------------------------------------
-    def erase(self, ranges: Sequence[tuple[int, int]] | None = None) -> None:
+    def erase(self, ranges: Sequence[tuple[int, int]] | None = None) -> bool:
         """Erase all of the target's flash, or these stretches of it.
 
-        Each of ``ranges`` is an address and a length.
+        Each of ``ranges`` is an address and a length. Like every operation
+        here, returns whether it was started, having said why when it was not.
         """
         if (connection := self._connection("Erasing")) is None:
-            return
+            return False
         target = self.target
         started = time.monotonic()
         if ranges is None:
@@ -294,9 +296,11 @@ class Flasher(QObject):
             took = time.monotonic() - started
             self.events.good(f"Erased {what} in {took:.1f} s.")
 
-        if self._run("Erasing", work, done):
-            self.events.information(f"Erasing {what}...")
-            self.progress.emit("Erasing", 0.0)
+        if not self._run("Erasing", work, done):
+            return False
+        self.events.information(f"Erasing {what}...")
+        self.progress.emit("Erasing", 0.0)
+        return True
 
     def program(
         self,
@@ -304,14 +308,14 @@ class Flasher(QObject):
         erase: str = ERASE_SECTORS,
         verify: bool = True,
         reset: bool = True,
-    ) -> None:
+    ) -> bool:
         """Program these files, then verify and reset if asked to."""
         if (connection := self._connection("Programming")) is None:
-            return
+            return False
         segments: list[Segment] = [s for image in images for s in image.segments]
         if not segments:
             self.events.warning("There is nothing to program: no file is ticked.")
-            return
+            return False
         size = sum(len(s) for s in segments)
         started = time.monotonic()
 
@@ -346,17 +350,24 @@ class Flasher(QObject):
             self.events.good(", ".join(parts) + f", in {took:.1f} s.")
             return True
 
-        if self._run("Programming", work, done):
-            names = ", ".join(image.name for image in images)
-            self.events.information(f"Programming {self.target} with {names}...")
+        if not self._run("Programming", work, done):
+            return False
+        names = ", ".join(image.name for image in images)
+        self.events.information(f"Programming {self.target} with {names}...")
+        return True
 
-    def verify(self, images: Sequence[Image]) -> None:
+    def verify(
+        self,
+        images: Sequence[Image],
+        then: Callable[[Verification], None] | None = None,
+    ) -> bool:
+        """Compare the target with these files. ``then`` is handed what was found."""
         if (connection := self._connection("Verifying")) is None:
-            return
+            return False
         segments: list[Segment] = [s for image in images for s in image.segments]
         if not segments:
             self.events.warning("There is nothing to verify: no file is ticked.")
-            return
+            return False
 
         def work() -> Verification:
             return connection.verify(
@@ -365,18 +376,29 @@ class Flasher(QObject):
 
         def done(result: Verification) -> bool:
             (self.events.good if result.ok else self.events.error)(verification_text(result))
+            if then is not None:
+                then(result)
             return result.ok
 
-        self._run("Verifying", work, done)
+        return self._run("Verifying", work, done)
 
-    def read_memory(self, address: int, length: int, skip_setup: bool = False) -> None:
+    def read_memory(
+        self,
+        address: int,
+        length: int,
+        skip_setup: bool = False,
+        then: Callable[[bytes], None] | None = None,
+    ) -> bool:
         """Read this much of the target's memory, and say so with ``memory_read``.
 
         Into memory and not into a file: most reads are to look at what is
         there, and whoever shows it can save it once it has been looked at.
+        Handed to ``then`` instead, where that is given: a script reading
+        the same word a hundred times wants the bytes, not a hundred reads
+        in the Files list.
         """
         if (connection := self._connection("Reading")) is None:
-            return
+            return False
         target = self.target
 
         def work() -> bytes:
@@ -385,19 +407,58 @@ class Flasher(QObject):
             )
 
         def done(data: bytes) -> None:
+            if then is not None:
+                then(data)
+                return
             self.events.good(f"Read {size_text(len(data))} at {address:08X} of {target}.")
             self.memory_read.emit(address, data, target)
 
-        if self._run("Reading", work, done):
+        if not self._run("Reading", work, done):
+            return False
+        if then is None:
             self.events.information(f"Reading {size_text(length)} at {address:08X} of {target}...")
+        return True
 
-    def reset(self) -> None:
+    def write_memory(self, address: int, data: bytes) -> bool:
+        """Write these bytes to RAM, or to a peripheral's registers.
+
+        Never to flash, which is erased and programmed: written to as if it
+        were RAM it either refuses or does something nobody meant.
+        """
+        if (connection := self._connection("Writing")) is None:
+            return False
+        data = bytes(data)
+        if not data:
+            self.events.warning("There is nothing to write: no bytes were given.")
+            return False
+        end = address + len(data)
+        for region in self.regions:
+            if region.kind == FLASH and region.start < end and address < region.end:
+                span = f"{address:08X}" if len(data) == 1 else f"{address:08X} to {end - 1:08X}"
+                self.events.warning(
+                    f"Not written: {span} is flash ({region.name}), and flash is programmed "
+                    "rather than written to."
+                )
+                return False
+        target = self.target
+
+        def work() -> None:
+            connection.write(address, data)
+
+        def done(_result) -> None:
+            self.events.information(f"Wrote {size_text(len(data))} at {address:08X} of {target}.")
+
+        return self._run("Writing", work, done)
+
+    def reset(self, halt: bool = False) -> bool:
+        """Restart the target, and leave it stopped at its first instruction if ``halt``."""
         if (connection := self._connection("Resetting")) is None:
-            return
-        self._run(
+            return False
+        said = f"Reset {self.target}" + (", and stopped it." if halt else ".")
+        return self._run(
             "Resetting",
-            connection.reset,
-            lambda _r: self.events.information(f"Reset {self.target}."),
+            lambda: connection.reset(halt),
+            lambda _r: self.events.information(said),
         )
 
     # --- going away ------------------------------------------------------------------

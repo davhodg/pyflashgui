@@ -36,6 +36,7 @@ from pyflashgui.core.memory_map import FLASH, RAM, Region
 from pyflashgui.core.pack_manager import PackManager
 from pyflashgui.ui import event_colours, folders, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
+from pyflashgui.ui.console_view import ConsoleView
 from pyflashgui.ui.files_view import Entry, FilesView
 from pyflashgui.ui.help_menu import HelpMenu
 from pyflashgui.ui.map_view import MapView
@@ -44,6 +45,7 @@ from pyflashgui.ui.packs_dialog import PacksDialog
 from pyflashgui.ui.panes import PaneKind, Panes
 from pyflashgui.ui.probe_bar import ProbeBar
 from pyflashgui.ui.read_dialog import ReadDialog
+from pyflashgui.ui.scripting import Flash, namespace
 from pyflashgui.ui.workspace_menu import SWITCH_WHILE_CONNECTED, WorkspaceMenu
 
 
@@ -69,6 +71,9 @@ DEFAULT_VISIBLE = ("files", "log")
 #: What a Memory pane opens at, when it opens in front of the window:
 #: wide enough for an address, sixteen bytes and their text.
 MEMORY_PANE_SIZE = (760, 560)
+#: The console is typed into, so it wants the width of a line of Python
+#: and room for what a script prints.
+CONSOLE_PANE_SIZE = (820, 480)
 
 #: How near the bottom of the Event Log still counts as being at the bottom,
 #: in scrollbar steps. Exactly at the end is too strict: a line arriving
@@ -155,6 +160,8 @@ class MainWindow(QMainWindow):
         #: is a new set of targets, whichever backend is chosen just now.
         self.packs = PackManager(self.events, parent=self)
         self.packs.changed.connect(self.flasher.refresh_targets)
+        #: The probe and the target, for the Python console and its scripts.
+        self.flash = Flash(self)
 
         # --- toolbar ---------------------------------------------------------
         self.probe_bar = ProbeBar(self.flasher, self.ctx)
@@ -169,6 +176,9 @@ class MainWindow(QMainWindow):
         # and done with it, and what the tool has to say for itself.
         self.files_view = self.panes.view(self.panes.add("files"))
         self.panes.add("log")
+        # Made now and hidden, so that the View menu has it: the menu lists
+        # the panes there are.
+        self.panes.add("console", show=False)
         self._arrange_default()
         # The map is of what is ticked on the chosen target, so either
         # changing redraws it.
@@ -339,6 +349,14 @@ class MainWindow(QMainWindow):
                 transient=True,
             ),
             PaneKind("log", "Event Log", Qt.BottomDockWidgetArea, lambda _name: self.log),
+            PaneKind(
+                "console",
+                "Python Console",
+                Qt.BottomDockWidgetArea,
+                lambda _name: ConsoleView(namespace(self, self.flash), self.flash, self.ctx),
+                floating_first=True,
+                floating_size=CONSOLE_PANE_SIZE,
+            ),
         ):
             self.panes.register(kind)
 
@@ -423,6 +441,10 @@ class MainWindow(QMainWindow):
         self.resizeDocks([files, log], [7, 3], Qt.Vertical)
         for name in DEFAULT_VISIBLE:
             self.panes.docks[name].setVisible(True)
+        # The console starts hidden, and opens in front of the window when
+        # it is asked for. Reset layout puts it back to that.
+        for name in self.panes.instances("console"):
+            self.panes.put_away(name)
         placed = None
         for name in self._memory_panes():
             if name in self.panes.detached:
@@ -507,12 +529,27 @@ class MainWindow(QMainWindow):
         self.panes.save_view_states()
         self.panes.save()
 
+    def script_running(self) -> bool:
+        """Whether the Python Console is running something."""
+        return any(
+            getattr(self.panes.view(name), "running", False)
+            for name in self.panes.instances("console")
+        )
+
     def closeEvent(self, event) -> None:
         # Not while a target is being written to: closing would abandon it
         # half programmed, with nothing left on screen to say so.
         if self.flasher.busy and not self._closing:
             self.events.warning(
                 "pyflashgui is still working on the target. Close it when that has finished."
+            )
+            event.ignore()
+            return
+        # Nor while a script is: it is part way through something, on this
+        # window's own thread, and would be left wherever it had got to.
+        if self.script_running() and not self._closing:
+            self.events.warning(
+                "A script is running in the Python Console. Stop it, then close pyflashgui."
             )
             event.ignore()
             return

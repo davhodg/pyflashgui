@@ -12,6 +12,7 @@ pyflashgui is a graphical flash programming tool: for Arm Cortex-M targets with 
 - [Files](files.md): what is open, files and reads alike, and Read, Erase, Program and verify, Reset and Compare
 - [Memory map](memory-map.md): where what is ticked lands, checked before anything is sent
 - [Memory](memory.md): the bytes of a file or of what was read back, to look at, compare and save
+- [Python Console](console.md): `flash` and scripts, for what the buttons do not do
 - [About, licences and updates](about.md)
 - [Changes](changelog.md)
 

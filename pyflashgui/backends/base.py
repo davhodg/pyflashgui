@@ -148,6 +148,14 @@ class Connection(ABC):
     def read(self, address: int, length: int) -> bytes:
         """This many bytes of the target's memory, from this address."""
 
+    def write(self, address: int, data: bytes) -> None:
+        """Write these bytes to RAM, or to a peripheral's registers, as they are.
+
+        Not for flash, which has to be erased before it can be written and
+        is written by ``program``. A backend that cannot says so.
+        """
+        raise BackendError("This way of reaching the probe cannot write to memory.")
+
     @abstractmethod
     def reset(self, halt: bool = False) -> None:
         """Restart the target, and leave it running unless ``halt``."""

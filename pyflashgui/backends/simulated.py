@@ -177,6 +177,17 @@ class SimulatedConnection(Connection):
             address = stop
         return bytes(out)
 
+    def write(self, address: int, data: bytes) -> None:
+        board = self._open()
+        runs = self._place(board, address, len(data))
+        for region, _offset, _length in runs:
+            if region.kind == FLASH:
+                raise BackendError(f"{region.name} is flash: program it instead.")
+        position = 0
+        for region, offset, length in runs:
+            board.memory[region.name][offset : offset + length] = data[position : position + length]
+            position += length
+
     def reset(self, halt: bool = False) -> None:
         board = self._open()
         board.resets += 1

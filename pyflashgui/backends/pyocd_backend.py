@@ -158,6 +158,15 @@ class PyocdConnection(Connection):
         except Exception as exc:
             raise _said(f"Reading {length} bytes at {address:08X}", exc) from exc
 
+    def write(self, address: int, data: bytes) -> None:
+        target = self._target()
+        try:
+            target.write_memory_block8(address, list(data))
+            # pyOCD may hold writes back to send together: these are sent now.
+            target.flush()
+        except Exception as exc:
+            raise _said(f"Writing {len(data)} bytes at {address:08X}", exc) from exc
+
     def reset(self, halt: bool = False) -> None:
         target = self._target()
         try:

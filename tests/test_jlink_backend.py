@@ -23,6 +23,7 @@ SIM = str(Path(__file__).with_name("commander_sim.py"))
 SERIAL = "801012345"
 DEVICE = "STM32F103ZE"
 FLASH_AT = 0x0800_0000
+RAM_AT = 0x2000_0000
 
 
 @pytest.fixture
@@ -236,6 +237,14 @@ def test_reading_asks_for_the_bytes_and_checks_it_got_them(connection, home):
     assert command.startswith('SaveBin "') and command.endswith(" 0x8000002 0x4")
     connection.read_range(FLASH_AT, 8)
     assert runs(home)[-1]["commands"][-2:] == ["G", "Exit"], "a read asked for sets it going again"
+
+
+def test_writing_hands_commander_the_bytes_and_sets_the_device_going(connection, home):
+    connection.write(RAM_AT, b"wxyz")
+    halt, command, go, leave = runs(home)[-1]["commands"]
+    assert (halt, go, leave) == ("H", "G", "Exit")
+    assert command.startswith('LoadBin "') and command.endswith(f'write.bin", 0x{RAM_AT:X}')
+    assert connection.read(RAM_AT, 4) == b"wxyz"
 
 
 def test_verifying_reads_each_run_back_once_and_compares(connection, home):

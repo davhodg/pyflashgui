@@ -429,6 +429,23 @@ class Panes(QObject):
         self._arranged.add(name)
         self.ctx.settings.set("panes.arranged", sorted(self._arranged))
 
+    def put_away(self, name: str) -> None:
+        """Hide a pane wherever it is, as though it had never been opened.
+
+        Back in the window if it was out in one of its own, and noted as
+        never placed, so that the next time it is asked for it arrives as
+        it did the first time.
+        """
+        if name in self.detached:
+            self.attach(name)
+        if (dock := self.docks.get(name)) is None:
+            return
+        dock.setFloating(False)
+        dock.hide()
+        if name in self._arranged:
+            self._arranged.discard(name)
+            self.ctx.settings.set("panes.arranged", sorted(self._arranged))
+
     def forget_arrangement(self) -> None:
         """Every pane is a first time again.
 

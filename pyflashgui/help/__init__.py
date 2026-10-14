@@ -43,6 +43,7 @@ PAGES = (
     "files.md",
     "memory-map.md",
     "memory.md",
+    "console.md",
     "about.md",
     "changelog.md",
 )

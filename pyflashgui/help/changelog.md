@@ -11,6 +11,8 @@ since the last version, and comes out in the next one.
 
 ### Added
 
+- *View > Python Console*: a Python prompt and *Run script...*, with `flash` to connect,
+  read, write RAM, erase, program, verify and reset, each call waiting for its answer.
 - *Tools > pyOCD device packs...*: find a device that is not in the list of targets, and
   install the CMSIS-Pack that describes it, for use through pyOCD. An installed copy of
   pyflashgui had no way to add one.

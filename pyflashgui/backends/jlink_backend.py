@@ -491,6 +491,14 @@ class JLinkConnection(Connection):
             progress(checked / total)
         return Verification(checked=checked, different=different, first=first)
 
+    def write(self, address: int, data: bytes) -> None:
+        """Stopped while it is written, and set going again, as a read is."""
+        with tempfile.TemporaryDirectory(prefix="pyflashgui-jlink-") as folder:
+            path = Path(folder) / "write.bin"
+            path.write_bytes(data)
+            commands = ["H", f"LoadBin {_named(path)}, 0x{address:X}", "G"]
+            self._run(commands, WORK_S, f"Writing {len(data)} bytes at {address:08X}")
+
     def reset(self, halt: bool = False) -> None:
         # R restarts the device and leaves it stopped; G sets it going.
         self._run(["R"] if halt else ["R", "G"], QUICK_S, f"Resetting {self._device}")

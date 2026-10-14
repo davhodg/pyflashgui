@@ -136,6 +136,13 @@ def main() -> int:
             if spoil := os.environ.get("COMMANDER_SIM_SPOIL"):
                 flash[int(spoil, 0)] = flash.get(int(spoil, 0), ERASED) ^ 0xFF
             print("O.K.")
+        elif command == "loadbin":
+            # A file and where it goes, written as it is: no sector erased.
+            address = int(words[2], 0)
+            data = Path(words[1].rstrip(",")).read_bytes()
+            for offset, value in enumerate(data):
+                flash[address + offset] = value
+            print("O.K.")
         elif command == "savebin":
             address, length = int(words[2], 0), int(words[3], 0)
             Path(words[1]).write_bytes(

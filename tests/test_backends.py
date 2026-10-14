@@ -137,6 +137,15 @@ def test_another_address_for_the_flash_reads_the_same_and_takes_no_writes(backen
 
 
 # --- verifying ------------------------------------------------------------------------
+def test_ram_is_written_as_it_is_and_flash_is_not_written_to(connection):
+    ram = next(r for r in connection.regions() if r.kind == RAM)
+    connection.write(ram.start + 4, b"abc")
+    assert connection.read(ram.start, 8) == b"\x00" * 4 + b"abc\x00"
+    flash = next(r for r in connection.regions() if r.kind == FLASH)
+    with pytest.raises(BackendError, match="is flash: program it instead"):
+        connection.write(flash.start, b"x")
+
+
 def test_verifying_what_was_just_programmed_passes(connection):
     segments = [Segment(FLASH_AT, pattern(VERIFY_CHUNK * 2 + 17)), Segment(FLASH_AT + 0x8000, b"x")]
     connection.program(segments)

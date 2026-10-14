@@ -22,6 +22,7 @@ A graphical flash programming tool. It works with any debug probe [pyOCD](https:
 - **Any probe.** A low-cost CMSIS-DAP probe or the ST-Link on a development board does the job a dedicated programmer does.
 - **Workspaces.** The target, the probe, its speed and the files to program are kept together, one workspace per product, so programming a board is one click.
 - **Files.** ELF, Intel HEX, Motorola S-record and raw binary, with a map of what will be written where.
+- **Python.** A console with the probe and the target to hand, for what the buttons do not do: watching a value in RAM, writing a test pattern, a loop that programs and reads back.
 
 ## Installing
 

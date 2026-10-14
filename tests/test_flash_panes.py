@@ -460,9 +460,10 @@ def test_a_target_whose_memory_is_not_known_says_nothing_was_checked(window, tmp
 
 # --- the window -----------------------------------------------------------------------
 def test_the_window_opens_with_its_two_panes_and_the_bar(window):
-    assert [d.windowTitle() for d in window.panes.docks.values()] == ["Files", "Event Log"]
+    docks = window.panes.docks
+    assert [d.windowTitle() for d in docks.values()] == ["Files", "Event Log", "Python Console"]
     assert window.map_view.isVisible(), "the map is part of the Files pane"
-    assert all(dock.isVisible() for dock in window.panes.docks.values())
+    assert [n for n, dock in docks.items() if dock.isVisible()] == ["files", "log"]
     assert window.probe_bar.isVisible()
 
 

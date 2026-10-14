@@ -631,15 +631,18 @@ class FilesView(QWidget):
         if not layout.programmable:
             self.ctx.events.error("Not programmed: the Memory Map says what is wrong.")
             return
+        if self.may_program():
+            self.flasher.program(files, erase=ERASE_SECTORS, verify=verify, reset=True)
+
+    def may_program(self) -> bool:
+        """Ask whether to program the target. A script is asked the same."""
         target = self.flasher.target
-        if not self._may(
+        return self._may(
             "program",
             f"Program {target}?",
             f"This replaces what {target} holds in the sectors that what is ticked writes "
             "to. It cannot be undone.",
-        ):
-            return
-        self.flasher.program(files, erase=ERASE_SECTORS, verify=verify, reset=True)
+        )
 
     def verify(self) -> None:
         if (files := self.reread()) is not None:
@@ -651,8 +654,11 @@ class FilesView(QWidget):
         if dialog.exec() != EraseDialog.Accepted:
             return
         ok, ranges = dialog.chosen()
-        if not ok:
-            return
+        if ok and self.may_erase(ranges):
+            self.flasher.erase(ranges)
+
+    def may_erase(self, ranges: list[tuple[int, int]] | None) -> bool:
+        """Ask whether to erase these ranges, or all of the flash for None."""
         target = self.flasher.target
         if ranges is None:
             title = f"Erase all of the flash of {target}?"
@@ -667,8 +673,7 @@ class FilesView(QWidget):
                 f"What is in {spans} is lost, with the rest of every sector those "
                 "addresses fall in. It cannot be undone."
             )
-        if self._may("erase", title, text):
-            self.flasher.erase(ranges)
+        return self._may("erase", title, text)
 
     # --- following the flasher -------------------------------------------------------
     def _enable(self) -> None:

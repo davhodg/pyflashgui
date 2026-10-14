@@ -54,6 +54,7 @@ A probe is usable without root on Linux once a udev rule allows it; pyOCD publis
 - **Read** any range of a target's memory back, shown as addresses, bytes and text, with a search for bytes or text and a way to an address. A read is saved as raw binary, Intel HEX or S-record, and can be programmed like a file.
 - **Compare** any two of them -- what is in the target against the file that should be, or one read against another -- with each difference marked.
 - **Workspaces**: one for each board or project, holding its probe, target, files and layout.
+- **A Python console** with the probe and the target as `flash`: read, write RAM, erase, program, verify and reset from a prompt or a script, each call waiting for its answer.
 - **A simulated probe and target**, to try all of it with no hardware.
 
 The [manual](https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/manual.md) covers each of these, and is also under **Help > Documentation** in the application.
