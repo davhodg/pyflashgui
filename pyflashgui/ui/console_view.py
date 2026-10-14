@@ -22,7 +22,7 @@ import traceback
 from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeyEvent, QTextCursor
 from PySide6.QtWidgets import (
     QHBoxLayout,
@@ -137,6 +137,9 @@ class _HistoryLineEdit(QLineEdit):
 
 
 class ConsoleView(QWidget):
+    #: A file was run, by the button here or from the File menu: its path.
+    ran = Signal(str)
+
     def __init__(self, namespace: dict, flash: Flash, ctx: Context) -> None:
         super().__init__()
         self.ctx = ctx
@@ -220,6 +223,8 @@ class ConsoleView(QWidget):
         except OSError as exc:
             self.write(f"{file} cannot be read: {exc}\n")
             return
+        # Before it runs: a script that fails is still the one to run again.
+        self.ran.emit(str(file))
         self.run_source(source, str(file))
 
     def _run(self, work):

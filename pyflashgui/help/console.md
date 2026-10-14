@@ -6,6 +6,8 @@
 
 It behaves like the `python` prompt: a block over several lines carries on with `...`, Up and Down go back through what was typed, and a mistake shows Python's own traceback. **Run script...** runs a `.py` file with the same names. **Stop** stops a line or a script, and **Clear** clears the pane.
 
+**File > Run script...** does the same from the menu, and shows the console first, so that what the script prints can be read. **File > Recent scripts** lists the last five run in the workspace, by either, newest first: one click runs one again. A script kept in the workspace's folder is remembered by where it is in it, and found wherever the workspace is taken.
+
 ## The names
 
 | Name | What it is |

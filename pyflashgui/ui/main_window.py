@@ -46,6 +46,7 @@ from pyflashgui.ui.panes import PaneKind, Panes
 from pyflashgui.ui.probe_bar import ProbeBar
 from pyflashgui.ui.read_dialog import ReadDialog
 from pyflashgui.ui.scripting import Flash, namespace
+from pyflashgui.ui.scripts_menu import ScriptsMenu
 from pyflashgui.ui.workspace_menu import SWITCH_WHILE_CONNECTED, WorkspaceMenu
 
 
@@ -178,7 +179,7 @@ class MainWindow(QMainWindow):
         self.panes.add("log")
         # Made now and hidden, so that the View menu has it: the menu lists
         # the panes there are.
-        self.panes.add("console", show=False)
+        self.console = self.panes.view(self.panes.add("console", show=False))
         self._arrange_default()
         # The map is of what is ticked on the chosen target, so either
         # changing redraws it.
@@ -210,6 +211,13 @@ class MainWindow(QMainWindow):
 
         # --- menus & layout persistence --------------------------------------
         file_menu = self.menuBar().addMenu("&File")
+        file_menu.setToolTipsVisible(True)
+        #: Run script... and the last few run, in the Python Console.
+        self.scripts_menu = ScriptsMenu(self, self.ctx)
+        self.scripts_menu.install(file_menu)
+        self.scripts_menu.run_wanted.connect(self.run_script_in_console)
+        self.console.ran.connect(self.scripts_menu.remember)
+        file_menu.addSeparator()
         #: One workspace per product: new, save as, switch to and manage.
         self.workspace_menu = WorkspaceMenu(self, self.ctx)
         self.workspace_menu.install(file_menu)
@@ -528,6 +536,17 @@ class MainWindow(QMainWindow):
         self.ctx.layout.set("window", bytes(self.saveState(LAYOUT_VERSION)))
         self.panes.save_view_states()
         self.panes.save()
+
+    def run_script_in_console(self, path: str) -> None:
+        """File > Run script... and Recent scripts: in the console, shown, so
+        that what the script prints is there to be read."""
+        if self.console.running:
+            self.events.warning(
+                f"{Path(path).name} was not run: the Python Console is still running something."
+            )
+            return
+        self.panes.show("console")
+        self.console.run_file(path)
 
     def script_running(self) -> bool:
         """Whether the Python Console is running something."""

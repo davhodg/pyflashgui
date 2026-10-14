@@ -226,7 +226,7 @@ def test_a_single_product_never_meets_the_word(window):
 def test_the_workspace_menu_is_in_the_file_menu_above_exit(window):
     file_menu = next(a.menu() for a in window.menuBar().actions() if a.text() == "&File")
     texts = [a.text() for a in file_menu.actions() if not a.isSeparator()]
-    assert texts == ["Workspace", "Exit"]
+    assert texts == ["Run script...", "Recent scripts", "Workspace", "Exit"]
     inside = [a.text() for a in window.workspace_menu.menu.actions()]
     assert inside == ["New...", "Save as...", "Switch to", "Manage...", "", "Open folder"]
 
