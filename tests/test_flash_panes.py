@@ -477,3 +477,27 @@ def test_the_reset_menu_forgets_folders_and_confirmations(window, tmp_path):
     actions["Re-enable all confirmations"].trigger()
     assert folders.remembered(window.ctx, folders.IMAGE) is None
     assert not window.confirm.agreed("program:rp2350")
+
+
+def test_the_place_for_memory_is_kept_while_no_memory_pane_is_in_it(window, tmp_path):
+    space = window.memory_space
+    files_dock = window.panes.docks["files"]
+    assert space.isVisible() and "Double-click a file" in space.widget().text()
+    assert files_dock.width() < window.width() * 0.7, "the Files pane does not take the width"
+
+    window.files_view.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"abcd")])
+    entry = window.files_view.entries[0]
+    window._open_memory(entry)
+    wait_for(lambda: not space.isVisible())
+    (name,) = window.panes.instances("memory")
+    memory = window.panes.docks[name]
+    assert memory.isVisible() and not memory.isFloating(), "in the place that was kept"
+
+    memory.setFloating(True)
+    wait_for(space.isVisible)
+    memory.setFloating(False)
+    wait_for(lambda: not space.isVisible())
+
+    window._close_memory(entry)
+    wait_for(space.isVisible)
+    assert "Memory" not in [a.text() for a in window.view_menu.actions()], "not a pane"

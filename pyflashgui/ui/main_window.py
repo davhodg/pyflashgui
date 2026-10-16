@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QSettings, Qt, QTimer, Signal, Slot
+from PySide6.QtCore import QEvent, QSettings, Qt, QTimer, Signal, Slot
 from PySide6.QtGui import (
     QAction,
     QFont,
@@ -16,12 +16,14 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import (
     QApplication,
+    QDockWidget,
     QFileDialog,
     QLabel,
     QMainWindow,
     QMenu,
     QPlainTextEdit,
     QStatusBar,
+    QWidget,
 )
 
 from pyflashgui import APP_NAME, __version__
@@ -64,10 +66,16 @@ def window_title() -> str:
 # Bumped whenever the set of docks changes. restoreState declines a state
 # saved under a different version, so an old layout is replaced by the current
 # default instead of being restored with panes missing.
-LAYOUT_VERSION = 5
+LAYOUT_VERSION = 6
 
 #: Open on a first run. Everything else is one click away in the View menu.
 DEFAULT_VISIBLE = ("files", "log")
+
+#: In the place the Memory panes take, while there are none there.
+MEMORY_SPACE_TEXT = (
+    "Double-click a file or a read in Files, or Read... from the target, "
+    "and its bytes are shown here."
+)
 
 #: What a Memory pane opens at, when it opens in front of the window:
 #: wide enough for an address, sixteen bytes and their text.
@@ -180,6 +188,14 @@ class MainWindow(QMainWindow):
         # Made now and hidden, so that the View menu has it: the menu lists
         # the panes there are.
         self.console = self.panes.view(self.panes.add("console", show=False))
+        #: Where the Memory panes go, kept for them while there are none, so
+        #: that the Files pane does not take the whole width and then give
+        #: half of it back the moment something is shown. Not a pane: it
+        #: cannot be moved or closed, and is not in the View menu.
+        self.memory_space = self._make_memory_space()
+        #: How wide the Files pane was beside the Memory panes. See eventFilter.
+        self._files_width = 0
+        self.panes.docks["files"].installEventFilter(self)
         self._arrange_default()
         # The map is of what is ticked on the chosen target, so either
         # changing redraws it.
@@ -248,6 +264,12 @@ class MainWindow(QMainWindow):
         # this menu's own action doing it, and clearing a menu while it is
         # delivering a click is not somewhere to be.
         self.panes.changed.connect(lambda: QTimer.singleShot(0, self._build_view_menu))
+        # A Memory pane opened, closed, let out or put back: the space for
+        # them is shown or not to match.
+        self.panes.changed.connect(lambda: QTimer.singleShot(0, self._update_memory_space))
+        self.panes.pane_shown.connect(
+            lambda _name, _shown: QTimer.singleShot(0, self._update_memory_space)
+        )
 
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.setToolTipsVisible(True)
@@ -449,6 +471,12 @@ class MainWindow(QMainWindow):
         self.resizeDocks([files, log], [7, 3], Qt.Vertical)
         for name in DEFAULT_VISIBLE:
             self.panes.docks[name].setVisible(True)
+        # The place for the Memory panes, beside the Files pane and above
+        # the log, which runs under both.
+        space = self.memory_space
+        space.show()
+        self.splitDockWidget(files, space, Qt.Horizontal)
+        self.resizeDocks([files, space], [1, 1], Qt.Horizontal)
         # The console starts hidden, and opens in front of the window when
         # it is asked for. Reset layout puts it back to that.
         for name in self.panes.instances("console"):
@@ -464,11 +492,74 @@ class MainWindow(QMainWindow):
             placed = placed or dock
         if placed is not None:
             placed.raise_()
+        self._update_memory_space()
+
+    def eventFilter(self, watched, event) -> bool:
+        # How wide the Files pane is while a Memory pane is beside it, kept
+        # as it changes: by the time the last one has closed, Qt has already
+        # given the Files pane its room.
+        if (
+            event.type() == QEvent.Resize
+            and watched is self.panes.docks.get("files")
+            and not self._closing
+            and self._memory_docked()
+        ):
+            self._files_width = watched.width()
+        return super().eventFilter(watched, event)
+
+    def _make_memory_space(self) -> QDockWidget:
+        label = QLabel(MEMORY_SPACE_TEXT)
+        label.setAlignment(Qt.AlignCenter)
+        label.setWordWrap(True)
+        label.setEnabled(False)  # drawn in the quieter colour: it is a hint, not content
+        label.setMargin(24)
+        space = QDockWidget("Memory", self)
+        space.setObjectName("memory_space")  # for saveState and restoreState
+        space.setFeatures(QDockWidget.NoDockWidgetFeatures)
+        space.setTitleBarWidget(QWidget())  # no title bar: there is nothing to do to it
+        space.setWidget(label)
+        self.addDockWidget(Qt.LeftDockWidgetArea, space)
+        return space
+
+    def _memory_docked(self) -> bool:
+        """Whether a Memory pane is in the window, rather than in front of it or out."""
+        return any(
+            name not in self.panes.detached and not self.panes.docks[name].isFloating()
+            for name in self._memory_panes()
+        )
+
+    def _update_memory_space(self) -> None:
+        """Keep the place for the Memory panes while none is in it."""
+        if self._closing:
+            return
+        space, files = self.memory_space, self.panes.docks["files"]
+        wanted = not self._memory_docked()
+        if wanted == space.isVisible():
+            return
+        if not wanted:
+            space.hide()
+            return
+        space.show()
+        # Back to how wide the Files pane was beside the Memory panes: Qt
+        # hands the whole of what they leave to the pane next to them.
+        if (width := self._files_width) and files.isVisible():
+            # Once the space is laid out: sized before, it is sized twice.
+            def restore() -> None:
+                both = files.width() + space.width()
+                self.resizeDocks([files, space], [width, max(both - width, 1)], Qt.Horizontal)
+
+            QTimer.singleShot(0, restore)
 
     def _dock_memory(self, dock, beside) -> None:
-        """Put a Memory pane in the window: a tab with another, or right of the Files pane."""
+        """Put a Memory pane in the window: a tab with another, or in the place kept for it."""
         if beside is not None:
             self.tabifyDockWidget(beside, dock)
+            return
+        space = self.memory_space
+        if not space.isFloating() and space.isVisible():
+            # Into the place kept for it, which then gives the place up.
+            self.tabifyDockWidget(space, dock)
+            self._update_memory_space()
             return
         files = self.panes.docks["files"]
         self.splitDockWidget(files, dock, Qt.Horizontal)
@@ -501,6 +592,9 @@ class MainWindow(QMainWindow):
             # window the first time rather than as a sliver at the edge.
             self.panes.forget_arrangement()
         self.panes.restore_view_states()
+        # Memory panes are not kept with a layout, so none is in the place
+        # the saved layout kept for them.
+        self._update_memory_space()
 
     def _reset_layout(self) -> None:
         """Put the panes back where they start, in a window the size it opens at.
@@ -738,6 +832,8 @@ class MainWindow(QMainWindow):
             )
         dock.show()
         dock.raise_()
+        # Dragged out of the window or back into it: the space follows.
+        dock.topLevelChanged.connect(lambda _floating: self._update_memory_space())
 
     def _compare(self, shown: Entry, other: Entry) -> None:
         """Show one entry, marked where another differs from it."""

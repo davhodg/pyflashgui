@@ -25,6 +25,9 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- The place for the Memory panes is kept beside the Files pane while none is open, saying
+  how to fill it, rather than the Files pane taking the whole width. The pane arrangement
+  saved by an earlier version is replaced by the default once.
 - *Open workspace folder* is *File > Workspace > Open folder*, with the rest of what is
   done with a workspace.
 - **Program and verify** is one button, with **Program** and **Verify** each on its own
