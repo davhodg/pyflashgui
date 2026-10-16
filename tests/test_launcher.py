@@ -253,10 +253,17 @@ def test_the_windows_launcher_prefers_a_python_every_library_has_a_download_for(
     assert "python -m venv" not in text, "never the python on the PATH by name"
 
 
-def test_a_failed_first_setup_leaves_no_half_made_venv():
+def test_a_failed_setup_does_not_keep_a_venv_made_with_the_wrong_python():
+    """Reported: after a failed setup on 3.15, installing 3.14 changed nothing,
+    because the .venv made with 3.15 was still there and used again."""
     text = (PROJECT / "pyflashgui.cmd").read_text(encoding="utf-8")
-    failed = text[text.index(":fail") :]
-    assert "if defined FIRSTRUN" in failed and 'rmdir /s /q ".venv"' in failed
+    failed = text[text.index("\n:fail\nset") :]
+    assert "if defined FIRSTRUN goto :failfirst" in failed, "a first setup's goes unasked"
+    label = failed.index("\n:failfirst\n")
+    first = failed[label:]
+    assert 'rmdir /s /q ".venv"' in first
+    asked = failed[:label]
+    assert "choice /c YN" in asked and 'rmdir /s /q ".venv"' in asked, "a later one's is asked"
 
 
 def _broken_venv(folder: Path, home: str) -> None:

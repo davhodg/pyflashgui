@@ -224,14 +224,36 @@ echo Setup failed ^(errorlevel %FAILED%^). The messages above say why. The
 echo usual causes are:
 echo.
 echo  - no internet connection, or a proxy that blocks pypi.org;
-echo  - "Failed to build" in the messages: a Python newer than every library
-echo    pyflashgui runs on has a ready-made download for, so one had to be
-echo    built from source. Python 3.14 has them all: "py install 3.14", and
-echo    run this again -- it is chosen over a newer one by itself.
-if defined FIRSTRUN (
-    rmdir /s /q ".venv" >nul 2>&1
-    echo.
-    echo The half-made .venv was removed, so the next run starts again.
-)
+echo  - "Failed to build" in the messages: .venv was made with a Python newer
+echo    than every library pyflashgui runs on has a ready-made download for,
+echo    so one had to be built from source. Python 3.14 has them all; if it
+echo    is not installed, "py install 3.14" installs it, and the next setup
+echo    chooses it over a newer one by itself.
+rem Whatever went wrong, a .venv made with the wrong Python stays made with
+rem it: installing 3.14 changes nothing until .venv is made again. So it goes
+rem -- without asking after a first setup, which leaves nothing worth
+rem keeping, and asked after an update of one that had been working.
+if defined FIRSTRUN goto :failfirst
+echo.
+choice /c YN /m "Delete .venv, so that the next run sets it up again"
+if errorlevel 2 goto :failkept
+rmdir /s /q ".venv" >nul 2>&1
+if exist ".venv" goto :cannotdelete
+echo.
+echo .venv was deleted. Run this again to set it up afresh.
+pause
+exit /b 1
+
+:failfirst
+rmdir /s /q ".venv" >nul 2>&1
+echo.
+echo The half-made .venv was removed, so the next run sets it up afresh.
+pause
+exit /b 1
+
+:failkept
+echo.
+echo .venv was left as it is. Deleting it later has the same effect: the next
+echo run sets it up again.
 pause
 exit /b 1
