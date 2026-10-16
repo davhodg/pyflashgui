@@ -8,6 +8,7 @@ user saw was a window that never opened and no message anywhere.
 """
 
 import importlib
+import os
 import sys
 from pathlib import Path
 
@@ -222,6 +223,122 @@ def test_the_shell_launcher_is_executable_in_git():
     if not staged:
         pytest.skip("pyflashgui.sh is not in git yet")
     assert staged.startswith("100755"), staged
+
+
+# --- a .venv whose Python has gone ----------------------------------------------------
+# A .venv is made from one Python. Uninstall that one, or replace it with a
+# newer version, and the .venv cannot start: under pythonw that was a window
+# that never opened, and the launcher took a dangling link for a first run.
+
+
+@pytest.mark.parametrize("name", ("pyflashgui.cmd", "pyflashgui.sh"))
+def test_the_launcher_offers_to_make_a_venv_again_when_its_python_has_gone(name):
+    text = (PROJECT / name).read_text(encoding="utf-8")
+    assert "not there any more" in text
+    assert "Delete .venv and set it up again" in text
+
+
+@pytest.mark.parametrize("name", ("pyflashgui.cmd", "pyflashgui.sh"))
+def test_uv_makes_the_venv_from_the_python_that_was_checked(name):
+    text = (PROJECT / name).read_text(encoding="utf-8")
+    assert "uv venv --python" in text
+
+
+def test_the_windows_launcher_prefers_a_python_every_library_has_a_download_for():
+    """hidapi, which pyOCD needs on Windows, had no 3.15 download, so a .venv
+    made from 3.15 failed to build it on any computer without a C compiler."""
+    text = (PROJECT / "pyflashgui.cmd").read_text(encoding="utf-8")
+    assert "for %%V in (3.14 3.13 3.12)" in text
+    assert "py -%%V" in text and '"%PYEXE%" -m venv .venv' in text
+    assert "python -m venv" not in text, "never the python on the PATH by name"
+
+
+def test_a_failed_first_setup_leaves_no_half_made_venv():
+    text = (PROJECT / "pyflashgui.cmd").read_text(encoding="utf-8")
+    failed = text[text.index(":fail") :]
+    assert "if defined FIRSTRUN" in failed and 'rmdir /s /q ".venv"' in failed
+
+
+def _broken_venv(folder: Path, home: str) -> None:
+    (folder / ".venv" / "Scripts").mkdir(parents=True)
+    (folder / ".venv" / "Scripts" / "python.exe").write_bytes(b"")
+    (folder / ".venv" / "pyvenv.cfg").write_text(
+        f"home = {home}\ninclude-system-site-packages = false\nversion = 3.14.6\n",
+        encoding="utf-8",
+    )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="cmd.exe")
+@pytest.mark.parametrize("answer", ("N", "Y"))
+def test_the_windows_launcher_asks_before_deleting_a_venv_whose_python_has_gone(tmp_path, answer):
+    import shutil
+    import subprocess
+
+    shutil.copy(PROJECT / "pyflashgui.cmd", tmp_path)
+    _broken_venv(tmp_path, r"C:\Program Files\No Such Python 3.14")
+    # No Python on the PATH: after Yes, setting up again stops at the first step.
+    system = Path(os.environ.get("SystemRoot", r"C:\Windows")) / "System32"
+    said = subprocess.run(
+        ["cmd", "/c", str(tmp_path / "pyflashgui.cmd")],
+        cwd=tmp_path,
+        input=f"{answer}\r\n\r\n",
+        capture_output=True,
+        text=True,
+        env={**os.environ, "PATH": str(system)},
+        timeout=60,
+    ).stdout
+    assert r"C:\Program Files\No Such Python 3.14" in said, "the whole path, spaces and all"
+    if answer == "N":
+        assert "left as it is" in said and (tmp_path / ".venv").exists()
+    else:
+        assert not (tmp_path / ".venv").exists()
+        assert "First run: setting up pyflashgui" in said
+
+
+def _shell_check(folder: Path) -> Path:
+    """The shell launcher, as far as its .venv check, and a word if it got past it."""
+    text = (PROJECT / "pyflashgui.sh").read_text(encoding="utf-8")
+    cut = text.index("if [ ! -x .venv/bin/python ]; then\n")
+    script = folder / "pyflashgui.sh"
+    script.write_text(text[:cut] + 'echo "GOT PAST THE CHECK"\n', encoding="utf-8")
+    return script
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symbolic links and sh")
+def test_the_shell_launcher_takes_a_link_to_a_python_that_has_gone_for_what_it_is(tmp_path):
+    import subprocess
+
+    script = _shell_check(tmp_path)
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+    (tmp_path / ".venv" / "bin" / "python").symlink_to(tmp_path / "no-such-python3.14")
+    said = subprocess.run(
+        ["sh", str(script)], cwd=tmp_path, capture_output=True, text=True, stdin=subprocess.DEVNULL
+    )
+    assert said.returncode == 1, "no terminal to ask in, so it says what to do and stops"
+    assert "not there any more" in said.stdout and "GOT PAST" not in said.stdout
+    assert (tmp_path / ".venv").exists(), "and deletes nothing it was not told to"
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="symbolic links and sh")
+@pytest.mark.parametrize("made", ("3.1", "this one"))
+def test_the_shell_launcher_notices_a_python_replaced_by_another_version(tmp_path, made):
+    import subprocess
+
+    script = _shell_check(tmp_path)
+    (tmp_path / ".venv" / "bin").mkdir(parents=True)
+    python = Path(sys.executable).resolve()
+    (tmp_path / ".venv" / "bin" / "python").symlink_to(python)
+    version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.0" if made == "this one" else "3.1.0"
+    )
+    (tmp_path / ".venv" / "pyvenv.cfg").write_text(f"version = {version}\n", encoding="utf-8")
+    said = subprocess.run(
+        ["sh", str(script)], cwd=tmp_path, capture_output=True, text=True, stdin=subprocess.DEVNULL
+    )
+    if made == "this one" or not python.name.startswith("python3."):
+        assert "GOT PAST THE CHECK" in said.stdout, said.stdout + said.stderr
+    else:
+        assert "It was made with Python 3.1" in said.stdout
 
 
 # --- the check that runs before every start ------------------------------------------------

@@ -25,6 +25,10 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- The launchers notice a `.venv` whose Python has been uninstalled or replaced, and offer
+  to make it again. On Windows, `.venv` is made from Python 3.14, 3.13 or 3.12 through
+  the `py` launcher when one is installed, since every library has a ready-made download
+  for them; a setup that fails no longer leaves a half-made `.venv` behind.
 - The place for the Memory panes is kept beside the Files pane while none is open, saying
   how to fill it, rather than the Files pane taking the whole width. The pane arrangement
   saved by an earlier version is replaced by the default once.
