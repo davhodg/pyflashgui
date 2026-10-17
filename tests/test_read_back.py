@@ -895,3 +895,24 @@ def test_flash_that_erases_to_zero_has_its_zeros_left_off(window, monkeypatch, t
     memory = window.memory_view
     memory.trim.setChecked(True)
     assert memory.to_save() == b"\x01\x00\x02", "a 00 in the middle is part of what is there"
+
+
+def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(
+    window, monkeypatch, tmp_path
+):
+    """Reported: an XMC4500's erased flash reads 00, and pyOCD says FF for it."""
+    window.probe_bar.button.click()
+    wait_for(lambda: window.flasher.connected)
+    board = backends.get("simulated").board(PROBE)
+    board.memory["flash"][:256] = b"\x01\x00\x02" + b"\x00" * 0xFD
+    read(window, monkeypatch, "08000000", "100")
+    memory = window.memory_view
+    assert memory.erased_as.itemText(0) == "As the target says (FF)"
+    assert not memory.erased_as.isEnabled(), "only with the tick"
+    memory.trim.setChecked(True)
+    assert len(memory.to_save()) == 256, "the target says FF, and there are none"
+    memory.erased_as.setCurrentIndex(memory.erased_as.findData(0x00))
+    memory.erased_as.activated.emit(memory.erased_as.currentIndex())
+    assert memory.to_save() == b"\x01\x00\x02"
+    memory._show_erased_as()
+    assert memory.erased_as.currentData() == 0x00, "kept for the target"

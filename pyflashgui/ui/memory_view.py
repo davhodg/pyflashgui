@@ -63,8 +63,15 @@ TRIM_TIP = (
     "Erased flash reads as FF on most devices, and as 00 on some. With this\n"
     "ticked, the erased bytes after the last byte that holds something are\n"
     "not saved, so the file is the size of what is there and not the size of\n"
-    "what was read. The target's own erased value is used where it is known."
+    "what was read."
 )
+ERASED_TIP = (
+    "What erased flash reads as on this target: as the target's description\n"
+    "says, or FF or 00 where that is not right -- an XMC4500's reads 00, and\n"
+    "pyOCD says FF for it. Kept for each target."
+)
+#: The choice of erased value for each target, under this and its name.
+ERASED_KEY = "memory.erased"
 
 
 #: What Find looks for: bytes written in hexadecimal, or the characters
@@ -423,11 +430,22 @@ class MemoryView(QWidget):
 
         self.trim = QCheckBox("Leave off the erased bytes at the end")
         self.trim.setToolTip(TRIM_TIP)
+        #: What erased reads as: what the target says, or either value where
+        #: that is wrong. None for the target's own.
+        self.erased_as = QComboBox()
+        self.erased_as.setToolTip(ERASED_TIP)
+        self.erased_as.setAccessibleName("Erased flash reads as")
+        for text, value in (("As the target says", None), ("FF", 0xFF), ("00", 0x00)):
+            self.erased_as.addItem(text, value)
+        self.erased_as.setEnabled(False)
+        self.trim.toggled.connect(self.erased_as.setEnabled)
+        self.erased_as.activated.connect(self._on_erased_as)
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.read_button)
         buttons.addWidget(self.save_button)
         buttons.addWidget(self.trim)
+        buttons.addWidget(self.erased_as)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary)
@@ -476,6 +494,7 @@ class MemoryView(QWidget):
         """Show what this entry of the Files list holds, in place of what was shown."""
         self.entry = entry
         self.target = entry.target or entry.name
+        self._show_erased_as()
         self._show(entry.image)
         self.table.scrollToTop()
 
@@ -722,13 +741,33 @@ class MemoryView(QWidget):
         return data.rstrip(bytes([self._erased()])) if self.trim.isChecked() else data
 
     def _erased(self) -> int:
-        """What the flash this was read from reads as erased: FF unless the
-        target says otherwise, as an XMC4500's 00 does."""
+        """What the flash this was read from reads as erased: as chosen beside
+        Leave off, or as the target says, or FF where it says nothing."""
+        if (chosen := self.erased_as.currentData()) is not None:
+            return int(chosen)
+        return self._erased_said()
+
+    def _erased_said(self) -> int:
+        """What the target says its flash reads as erased, where this was read."""
         if self.model.segments:
             region = region_at(self.flasher.regions, self.model.segments[0].address)
             if region is not None:
                 return region.erased
         return 0xFF
+
+    def _erased_key(self) -> str:
+        return f"{ERASED_KEY}.{self.target}"
+
+    def _show_erased_as(self) -> None:
+        """The choice made for this target, and what the target says, in the box."""
+        saved = self.ctx.settings.get(self._erased_key(), None)
+        index = self.erased_as.findData(None if saved in (None, "") else int(saved))
+        self.erased_as.setCurrentIndex(max(index, 0))
+        self.erased_as.setItemText(0, f"As the target says ({self._erased_said():02X})")
+
+    def _on_erased_as(self, _index: int) -> None:
+        chosen = self.erased_as.currentData()
+        self.ctx.settings.set(self._erased_key(), "" if chosen is None else int(chosen))
 
     def save(self) -> bool:
         """Ask where, and save what is shown there. Whether it was saved."""

@@ -327,10 +327,11 @@ class PyocdConnection(Connection):
                 def report(fraction: float, size=size, before=before) -> None:
                     progress((before + fraction * size) / total)
 
-                # Not keep_unwritten: the rest of a page written to is filled
-                # with what erased flash reads as, which writes nothing,
-                # rather than read back first.
-                builder.program(progress_cb=report, smart_flash=False, keep_unwritten=False)
+                # keep_unwritten: the rest of a page written to is read and
+                # written back as it is. Filled instead with what pyOCD takes
+                # erased flash to read as, it would be written to: pyOCD
+                # says FF for an XMC4500, whose erased flash reads 00.
+                builder.program(progress_cb=report, smart_flash=False, keep_unwritten=True)
                 written += size
         except BackendError:
             raise
