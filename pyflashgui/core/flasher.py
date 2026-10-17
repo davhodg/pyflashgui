@@ -65,6 +65,10 @@ def verification_text(result: Verification) -> str:
 class Flasher(QObject):
     #: The probes plugged in, as a list of ProbeInfo, after ``refresh_probes``.
     probes_changed = Signal(list)
+    #: Looking for probes has started, or has finished however it went.
+    #: It can take a second or two, and is not being busy: nothing else
+    #: waits for it.
+    looking_for_probes = Signal(bool)
     #: The targets the backend has, as a list of TargetInfo.
     targets_changed = Signal(list)
     #: Connected, or not any more.
@@ -200,7 +204,25 @@ class Flasher(QObject):
 
     def refresh_probes(self) -> None:
         backend = self.backend
-        self._run("Looking for probes", backend.probes, self.probes_changed.emit, quiet=True)
+
+        def work() -> tuple[list, str]:
+            # Caught here rather than by _run, so that the end of looking is
+            # said even when the looking failed.
+            try:
+                return backend.probes(), ""
+            except BackendError as exc:
+                return [], str(exc)
+
+        def done(result: tuple[list, str]) -> None:
+            probes, error = result
+            if error:
+                self.events.warning(error)
+            self.probes_changed.emit(probes)
+            self.looking_for_probes.emit(False)
+
+        self.looking_for_probes.emit(True)
+        if not self._run("Looking for probes", work, done, quiet=True):
+            self.looking_for_probes.emit(False)
 
     def refresh_targets(self) -> None:
         backend = self.backend

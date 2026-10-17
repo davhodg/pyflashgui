@@ -523,3 +523,30 @@ def test_find_probes_looks_again_and_an_empty_list_does_when_opened(window, monk
     assert bar.probe.currentText() == probe_bar.NO_PROBES
     bar.probe.opening.emit()
     assert asked == [True]
+
+
+def test_looking_for_probes_is_shown_while_it_goes_on(window, monkeypatch):
+    from pyflashgui.backends.base import BackendError
+
+    bar = window.probe_bar
+    seen = []
+    window.flasher.looking_for_probes.connect(seen.append)
+    bar._show_probes([])
+    bar.refresh.click()
+    assert bar.refresh.text() == "Looking..." and not bar.refresh.isEnabled()
+    assert bar.probe.currentText() == probe_bar.LOOKING, "an empty list says what is happening"
+    wait_for(lambda: seen == [True, False])
+    assert bar.refresh.text() == "Find probes" and bar.refresh.isEnabled()
+    assert bar.chosen_probe() == PROBE
+
+    # Failing ends the looking as well, and says why.
+    backend = window.flasher.backend
+
+    def fails():
+        raise BackendError("The USB driver is not answering.")
+
+    monkeypatch.setattr(backend, "probes", fails)
+    bar.refresh.click()
+    wait_for(lambda: seen[-1] is False and len(seen) == 4)
+    assert bar.refresh.isEnabled() and bar.probe.currentText() == probe_bar.NO_PROBES
+    assert said(window, WARNING)[-1] == "The USB driver is not answering."

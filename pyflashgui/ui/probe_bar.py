@@ -41,6 +41,7 @@ FREQUENCIES = (
 )
 
 NO_PROBES = "No probe found"
+LOOKING = "Looking for probes..."
 
 BACKEND_TIP = (
     "What pyflashgui reaches the probe through. pyOCD works with many probes\n"
@@ -90,6 +91,8 @@ class ProbeBar(QToolBar):
         self.setMovable(False)
         self.flasher = flasher
         self.ctx = ctx
+        #: True while probes are being looked for.
+        self._looking = False
         #: True while the boxes are being filled, so that filling one is not
         #: taken for somebody choosing what it was filled with.
         self._loading = False
@@ -168,6 +171,7 @@ class ProbeBar(QToolBar):
         self.interface.currentIndexChanged.connect(self._on_interface)
         self.button.toggled.connect(self._on_toggled)
         flasher.probes_changed.connect(self._show_probes)
+        flasher.looking_for_probes.connect(self._on_looking)
         flasher.targets_changed.connect(self._show_targets)
         flasher.connection_changed.connect(self._on_connection)
         flasher.busy_changed.connect(lambda _busy: self._enable())
@@ -246,6 +250,19 @@ class ProbeBar(QToolBar):
         # The one used last time if it is here, and the first otherwise.
         self.probe.setCurrentIndex(max(self.probe.findData(wanted), 0))
         self._loading = False
+        self._enable()
+
+    def _on_looking(self, looking: bool) -> None:
+        """Say that probes are being looked for: through pyOCD it takes a
+        second or two, and a list that changes with no warning looks broken."""
+        self._looking = looking
+        self.refresh.setText("Looking..." if looking else "Find probes")
+        # An empty list says so; one with probes in keeps them to choose from.
+        if looking and not self.chosen_probe():
+            self._loading = True
+            self.probe.clear()
+            self.probe.addItem(LOOKING, "")
+            self._loading = False
         self._enable()
 
     def _show_targets(self, targets: list[TargetInfo]) -> None:
@@ -347,5 +364,6 @@ class ProbeBar(QToolBar):
             self.interface,
         ):
             widget.setEnabled(not connected and not busy)
+        self.refresh.setEnabled(self.refresh.isEnabled() and not self._looking)
         can_connect = bool(self.chosen_probe() and self.chosen_target())
         self.button.setEnabled(not busy and (connected or can_connect))

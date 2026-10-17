@@ -29,7 +29,7 @@ since the last version, and comes out in the next one.
 - The speed box's first choice is **Default**, with what that comes to: 1 MHz through pyOCD,
   and auto through J-Link Commander. The Event Log says the speed on connecting.
 - **Refresh** beside the probe is **Find probes**, and opening the list of probes looks
-  again by itself when none was found.
+  again by itself when none was found. While it looks, the button says **Looking...**.
 - The launchers notice a `.venv` whose Python has been uninstalled or replaced, and offer
   to make it again. On Windows, `.venv` is made from Python 3.14, 3.13 or 3.12 through
   the `py` launcher when one is installed, since every library has a ready-made download
