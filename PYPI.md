@@ -37,6 +37,8 @@ pip install --upgrade pyflashgui
 
 Python 3.12 or newer, on Windows or Linux. `python -m pyflashgui` starts it too.
 
+**Python 3.15 on Windows is not supported yet:** a library pyOCD needs there has not been released for 3.15. Use 3.14, 3.13 or 3.12 until it has.
+
 On Linux, Qt needs a system library to draw the window, and Debian, Ubuntu, Linux Mint and the like often leave it out:
 
 ```
@@ -49,12 +51,13 @@ A probe is usable without root on Linux once a udev rule allows it; pyOCD publis
 
 - **Probe and target** in a bar across the top: the probe by its serial number, the target by name, the debug clock, and Connect.
 - **Files**: ELF, Intel HEX, Motorola S-record and raw binary, in one list with what has been read from a target. A file is read again whenever a build writes it.
+- **Device packs**: every Cortex-M device there is a CMSIS-Pack for, found by part number and installed from inside pyflashgui, with the address each pack comes from -- or added from a `.pack` file, for a computer with no internet.
 - **Memory map**: where everything ticked will land on the chosen target, how full each flash region is and how much is erased, checked before anything is sent. A file built for another part, or two that write the same addresses, are found here.
 - **Program and verify** in one press, with each half on its own beside it, **Erase** of all the flash, some regions or a range, and **Reset**.
 - **Read** any range of a target's memory back, shown as addresses, bytes and text, with a search for bytes or text and a way to an address. A read is saved as raw binary, Intel HEX or S-record, and can be programmed like a file.
 - **Compare** any two of them -- what is in the target against the file that should be, or one read against another -- with each difference marked.
 - **Workspaces**: one for each board or project, holding its probe, target, files and layout.
-- **A Python console** with the probe and the target as `flash`: read, write RAM, erase, program, verify and reset from a prompt or a script, each call waiting for its answer.
+- **A Python console** with the probe and the target as `flash`: read, write RAM, erase, program, verify and reset from a prompt or a script, each call waiting for its answer. *File > Run script...* runs one, and keeps the last five a click away.
 - **A simulated probe and target**, to try all of it with no hardware.
 
 The [manual](https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/manual.md) covers each of these, and is also under **Help > Documentation** in the application.

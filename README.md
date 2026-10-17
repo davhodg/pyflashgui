@@ -21,14 +21,17 @@ A graphical flash programming tool. It works with any debug probe [pyOCD](https:
 
 - **Any probe.** A low-cost CMSIS-DAP probe or the ST-Link on a development board does the job a dedicated programmer does.
 - **Workspaces.** The target, the probe, its speed and the files to program are kept together, one workspace per product, so programming a board is one click.
-- **Files.** ELF, Intel HEX, Motorola S-record and raw binary, with a map of what will be written where.
-- **Python.** A console with the probe and the target to hand, for what the buttons do not do: watching a value in RAM, writing a test pattern, a loop that programs and reads back.
+- **Files.** ELF, Intel HEX, Motorola S-record and raw binary, with a map of what will be written where, and what is read back from a target in the same list, to compare and save.
+- **Device packs.** Every Cortex-M device there is a CMSIS-Pack for, found by part number and installed from inside pyflashgui -- or from a file, for a computer with no internet.
+- **Python.** A console with the probe and the target to hand, and *File > Run script...*, for what the buttons do not do: watching a value in RAM, writing a test pattern, a loop that programs and reads back.
 
 ## Installing
 
 There are three options:
 
 1. **With pip** -- from [PyPI](https://pypi.org/project/pyflashgui/), into whichever Python environment you choose. Python 3.12 or newer is needed.
+
+   **Python 3.15 on Windows is not supported yet:** a library pyOCD needs there has not been released for 3.15. Use 3.14, 3.13 or 3.12 until it has.
 
    To install it:
 
@@ -56,11 +59,11 @@ There are three options:
 
    It asks first who it is for: **everybody who uses the computer**, which needs administrator rights, or **only you**, which does not.
 
-3. **From a Git clone** -- clone the repository, then double-click `pyflashgui.cmd` (Windows) or run `./pyflashgui.sh` (Linux). This is the way to have the latest changes before they are released, or to contribute. Python 3.12 or newer must be on the PATH.
+3. **From a Git clone** -- clone the repository, then double-click `pyflashgui.cmd` (Windows) or run `./pyflashgui.sh` (Linux). This is the way to have the latest changes before they are released, or to contribute. Python 3.12 or newer is needed: on Windows 3.14, 3.13 or 3.12, as below.
 
    The first run sets itself up: it creates a *virtual environment* -- a folder called `.venv` holding its own copy of Python and only the libraries pyflashgui needs, so nothing else on the machine is touched -- and downloads a couple of hundred megabytes into it. That takes a few minutes once; every later start is immediate, and deleting `.venv` undoes the whole thing. If `uv` is installed it is used instead of pip, which makes rebuilding that folder a matter of seconds.
 
-   **On Windows** the launcher makes `.venv` from Python 3.14, 3.13 or 3.12 when the `py` launcher has one of them, newest first, even if a newer Python is the one on the PATH: those are the versions every library pyflashgui runs on has a ready-made download for. A newer one has pip build some from source, which needs a C compiler.
+   **On Windows** the launcher makes `.venv` from Python 3.14, 3.13 or 3.12 when the `py` launcher has one of them, newest first, even if a newer Python is the one on the PATH: those are the versions every library pyflashgui runs on has a ready-made download for. 3.15 is not one of them yet; if it is the only Python installed, `py install 3.14` adds one the launcher will choose.
 
    **If the Python `.venv` was made with is uninstalled** -- or replaced by a newer version -- the launcher says so, and offers to delete `.venv` and set it up again with the Python installed now. Workspaces and settings are not in `.venv`, and are kept.
 
