@@ -257,10 +257,15 @@ def test_a_stopped_flash_call_raises_stopped(flash):
     flash.wait(0)
 
 
-def test_the_window_does_not_close_while_a_script_runs(window, console):
+def test_the_window_does_not_close_while_a_script_runs(window, console, monkeypatch):
+    from pyflashgui.ui import messages
+
+    boxes = []
+    monkeypatch.setattr(messages, "warning", lambda _parent, title, text: boxes.append(text))
     console.run_source("window.close()\nprint('still open:', window.isVisible())\n")
     assert "still open: True" in console.output.toPlainText()
     assert any("A script is running" in message for _level, message in window.said)
+    assert len(boxes) == 1 and "A script is running" in boxes[0]
 
 
 def test_the_console_is_in_the_view_menu_and_opens_in_front(window):

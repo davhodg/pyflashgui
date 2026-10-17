@@ -174,6 +174,22 @@ def test_what_a_reset_had_to_do_is_said_after_it(connected, said, monkeypatch):
     ]
 
 
+def test_closing_does_not_wait_for_ever_on_a_probe_that_will_not_let_go(connected, monkeypatch):
+    """Reported: pyflashgui froze on closing, after a reset by the reset pin
+    through a J-Link, waiting on SEGGER's library to let go of the probe."""
+    import threading
+
+    from pyflashgui.core import flasher as flasher_module
+
+    monkeypatch.setattr(flasher_module, "CLOSE_S", 0.1)
+    never = threading.Event()
+    monkeypatch.setattr(connected.connection, "close", lambda: never.wait(10))
+    started = time.monotonic()
+    connected.shutdown()
+    assert time.monotonic() - started < 3
+    never.set()
+
+
 def test_a_backend_working_in_stages_names_each_on_the_bar(flasher):
     steps = []
     flasher.progress.connect(lambda label, fraction: steps.append((label, fraction)))

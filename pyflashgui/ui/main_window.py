@@ -36,7 +36,7 @@ from pyflashgui.core.excepthook import ExceptionLogger
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.memory_map import FLASH, RAM, Region
 from pyflashgui.core.pack_manager import PackManager
-from pyflashgui.ui import event_colours, folders, theme
+from pyflashgui.ui import event_colours, folders, messages, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.console_view import ConsoleView
 from pyflashgui.ui.files_view import Entry, FilesView
@@ -653,16 +653,20 @@ class MainWindow(QMainWindow):
         # Not while a target is being written to: closing would abandon it
         # half programmed, with nothing left on screen to say so.
         if self.flasher.busy and not self._closing:
-            self.events.warning(
-                "pyflashgui is still working on the target. Close it when that has finished."
+            self._refuse_close(
+                "pyflashgui is still working on the target. Close it when that has finished.",
+                "A read or a verify can be stopped with Cancel, beside the progress bar. "
+                "Erasing and programming cannot be stopped part way: that would leave the "
+                "target holding neither the old firmware nor the new.",
             )
             event.ignore()
             return
         # Nor while a script is: it is part way through something, on this
         # window's own thread, and would be left wherever it had got to.
         if self.script_running() and not self._closing:
-            self.events.warning(
-                "A script is running in the Python Console. Stop it, then close pyflashgui."
+            self._refuse_close(
+                "A script is running in the Python Console. Stop it, then close pyflashgui.",
+                "Stop, in the Python Console, stops it at the next thing it asks of the probe.",
             )
             event.ignore()
             return
@@ -688,6 +692,15 @@ class MainWindow(QMainWindow):
         self.flasher.shutdown()
         self.exceptions.remove()
         super().closeEvent(event)
+
+    def _refuse_close(self, said: str, more: str) -> None:
+        """Say why the window is staying open: in the Event Log, and in a box.
+
+        The box because closing is asked for by somebody who has stopped looking
+        at the Event Log: a line there alone looked like nothing happening.
+        """
+        self.events.warning(said)
+        messages.warning(self, "pyflashgui is busy", f"{said}\n\n{more}")
 
     # --- tools ---------------------------------------------------------------
     def _switch_workspace(self, name: str) -> None:

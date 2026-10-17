@@ -421,7 +421,11 @@ def test_a_real_target_is_asked_about_before_it_is_changed(window, tmp_path, mon
     assert bytes(flash[:4]) == b"\xff" * 4
 
 
-def test_the_window_does_not_close_part_way_through_a_target(window, tmp_path):
+def test_the_window_does_not_close_part_way_through_a_target(window, tmp_path, monkeypatch):
+    from pyflashgui.ui import messages
+
+    boxes = []
+    monkeypatch.setattr(messages, "warning", lambda _parent, title, text: boxes.append(text))
     files = window.files_view
     files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, bytes(8192))])
     connect(window)
@@ -429,6 +433,7 @@ def test_the_window_does_not_close_part_way_through_a_target(window, tmp_path):
     assert window.flasher.busy
     assert window.close() is False
     assert "still working on the target" in said(window, WARNING)[-1]
+    assert len(boxes) == 1 and "Cancel" in boxes[0], "said in a box too, with what can be done"
     idle(window)
 
 

@@ -46,6 +46,19 @@ RESET_SAID = {
     RESET_PIN: "by its reset pin",
     RESET_CORE: "by restarting its processor only",
 }
+#: How long letting go of the probe is waited for when the window closes, in
+#: seconds: a library that never comes back must not keep the window frozen.
+CLOSE_S = 5.0
+
+
+def _close_quietly(connection) -> None:
+    """Close a connection, with nobody left to tell if that fails."""
+    try:
+        connection.close()
+    except Exception:
+        pass
+
+
 #: Progress is passed on when it has moved this far, and not otherwise: a
 #: library reporting every page would otherwise queue a thousand signals to
 #: move a bar a thousand times by less than a pixel.
@@ -546,9 +559,14 @@ class Flasher(QObject):
         self._worker.stop()
         if connection is not None:
             # After the worker has stopped, so nothing is half way through
-            # using it, and here rather than queued, so that it happens
-            # before the application has gone.
-            try:
-                connection.close()
-            except BackendError:
-                pass
+            # using it, and waited for here rather than queued, so that it
+            # happens before the application has gone -- but only so long.
+            # Reported: closed after a reset by the reset pin through a J-Link,
+            # pyflashgui froze, the window's own thread waiting on SEGGER's
+            # library to let go. Given up on, the probe is let go of when the
+            # process ends.
+            closer = threading.Thread(
+                target=_close_quietly, args=(connection,), name="closing the probe", daemon=True
+            )
+            closer.start()
+            closer.join(CLOSE_S)

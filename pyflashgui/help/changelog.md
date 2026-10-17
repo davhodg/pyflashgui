@@ -100,6 +100,10 @@ since the last version, and comes out in the next one.
 - Erasing or programming through pyOCD a target attached to as it ran -- an XMC4500 with
   its firmware going -- could end in a HardFault (*IPSR=3*): pyOCD ran its flash routine
   wherever it had stopped the firmware. The target is now reset and stopped first.
+- Closing pyflashgui while connected could leave it frozen, waiting on SEGGER's library to
+  let go of a J-Link after a reset by the reset pin. Letting go is now given five seconds.
+- Closing pyflashgui while it is working on the target, or while a script runs, says why
+  it stays open in a box as well as in the Event Log.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no
