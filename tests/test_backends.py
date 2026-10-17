@@ -301,3 +301,65 @@ def test_a_debug_clock_is_said_as_somebody_would_say_it():
 def test_each_backend_says_what_leaving_the_speed_to_it_comes_to():
     assert backends.get("pyocd").default_speed == "Default (1 MHz)"
     assert backends.get("jlink").default_speed == "Default (auto)"
+
+
+@pytest.fixture
+def fake_pyocd(monkeypatch):
+    """pyOCD with a J-Link plugged in, and a Session that records what it was given."""
+    from pyocd.core import helpers, session
+
+    from pyflashgui.backends import pyocd_backend
+
+    class Probe:
+        unique_id = "JLINK1"
+        description = "J-Link"
+        product_name = "J-Link"
+
+    made = {"options": [], "refuse": None}
+
+    class Session:
+        def __init__(self, probe, auto_open=False, options=None):
+            self.options = dict(options or {})
+            made["options"].append(self.options)
+
+        def open(self):
+            if made["refuse"] is not None and made["refuse"](self.options):
+                raise RuntimeError("SEGGER's library did not take that")
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(helpers.ConnectHelper, "get_all_connected_probes", lambda **_kw: [Probe()])
+    monkeypatch.setattr(session, "Session", Session)
+    monkeypatch.setattr(pyocd_backend, "is_jlink", lambda _probe: True)
+    return made
+
+
+def test_a_jlink_through_pyocd_is_named_the_core_so_it_reads_in_blocks(fake_pyocd, monkeypatch):
+    from pyflashgui.backends import pyocd_packs
+
+    monkeypatch.setattr(pyocd_packs, "core_of", lambda target: "Cortex-M4")
+    connection = backends.get("pyocd").connect("JLINK1", "xmc4500-f100x1024")
+    assert fake_pyocd["options"][-1]["jlink.device"] == "Cortex-M4"
+    assert connection.notes == ()
+
+
+def test_a_jlink_that_does_not_take_the_name_connects_the_slow_way_and_says_so(
+    fake_pyocd, monkeypatch
+):
+    from pyflashgui.backends import pyocd_backend, pyocd_packs
+
+    monkeypatch.setattr(pyocd_packs, "core_of", lambda target: "Cortex-M4")
+    fake_pyocd["refuse"] = lambda options: "jlink.device" in options
+    connection = backends.get("pyocd").connect("JLINK1", "xmc4500-f100x1024")
+    assert "jlink.device" not in fake_pyocd["options"][-1]
+    assert connection.notes == (pyocd_backend.SLOW_JLINK,)
+
+
+def test_a_jlink_for_a_target_with_no_pack_says_it_is_slow(fake_pyocd, monkeypatch):
+    from pyflashgui.backends import pyocd_backend, pyocd_packs
+
+    monkeypatch.setattr(pyocd_packs, "core_of", lambda target: "")
+    connection = backends.get("pyocd").connect("JLINK1", "rp2350")
+    assert "jlink.device" not in fake_pyocd["options"][-1]
+    assert connection.notes == (pyocd_backend.SLOW_JLINK,)

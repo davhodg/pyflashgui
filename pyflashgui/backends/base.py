@@ -117,6 +117,8 @@ class Connection(ABC):
     #: The debug clock it runs at, said in the Event Log on connecting:
     #: "4 MHz", or how the backend chooses it. Empty where it cannot say.
     speed: str = ""
+    #: Anything else worth saying on connecting, a sentence each.
+    notes: tuple[str, ...] = ()
 
     @abstractmethod
     def regions(self) -> list[Region]:

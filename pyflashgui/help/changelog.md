@@ -53,6 +53,10 @@ since the last version, and comes out in the next one.
 
 - A pyOCD connect that failed kept hold of the probe, so every later one failed too until
   the backend was switched and back.
+- A J-Link through pyOCD read and wrote a word at a time, a megabyte in five minutes:
+  SEGGER's library is now named the device's core, from its pack, and works a block at a
+  time. For a target with no pack the Event Log says it is slow, and that J-Link Commander
+  is faster.
 
 ## [0.1.0] - 2026-10-11
 

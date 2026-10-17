@@ -337,3 +337,34 @@ def add_file(source: str) -> tuple[Pack, int]:
     except OSError as exc:
         raise _said(f"Adding {Path(source).name}", exc) from exc
     return replace(pack, file=str(kept)), len(devices)
+
+
+# --- what a pack says about a device ----------------------------------------------------
+def _core(device: Any) -> str:
+    """A pack device's core, as the pack names it: "Cortex-M4". Empty if it does not say."""
+    for element in getattr(getattr(device, "_info", None), "processors", None) or []:
+        if core := element.attrib.get("Dcore", ""):
+            return core
+    return next((name for name in device.processors_map if name.startswith("Cortex-M")), "")
+
+
+def core_of(target: str) -> str:
+    """The core of a device from an installed pack, or empty for one from no pack.
+
+    Read from the packs added from files and from pyOCD's own, whichever has it.
+    """
+    import pyocd.target  # noqa: F401  # see read_pack
+    from pyocd.target.pack.cmsis_pack import CmsisPack
+
+    wanted = target.lower()
+    for path in packs_for(target):
+        with zipfile.ZipFile(path) as archive:
+            for device in CmsisPack(archive).devices:
+                if device.part_number.lower() == wanted and (core := _core(device)):
+                    return core
+    from pyocd.target.pack.pack_target import ManagedPacks
+
+    for device in ManagedPacks.get_installed_targets():
+        if device.part_number.lower() == wanted and (core := _core(device)):
+            return core
+    return ""

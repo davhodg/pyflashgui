@@ -84,6 +84,22 @@ def _said(doing: str, exc: Exception) -> BackendError:
     return BackendError(f"{doing} failed: {detail}")
 
 
+#: Said on connecting a J-Link through pyOCD where it cannot be told the device.
+SLOW_JLINK = (
+    "Through pyOCD, this J-Link reads and writes the target a word at a time, which is slow: "
+    "a megabyte takes minutes. J-Link Commander, under Through, is much faster with a J-Link."
+)
+
+
+def is_jlink(probe) -> bool:
+    """Whether pyOCD reaches this probe through SEGGER's library."""
+    try:
+        from pyocd.probe.jlink_probe import JLinkProbe
+    except Exception:  # pylink missing, or SEGGER's library with it
+        return False
+    return isinstance(probe, JLinkProbe)
+
+
 def speed_text(hertz: int | None) -> str:
     """A debug clock as somebody would say it."""
     if not hertz:
@@ -278,7 +294,6 @@ class PyocdBackend(Backend):
         interface: str | None = None,
     ) -> Connection:
         from pyocd.core.helpers import ConnectHelper
-        from pyocd.core.session import Session
 
         try:
             found = ConnectHelper.get_all_connected_probes(blocking=False, unique_id=probe)
@@ -303,9 +318,41 @@ class PyocdBackend(Backend):
             options["pack"] = packs
         if needs_one_packet_at_a_time(chosen.description, chosen.product_name):
             options["cmsis_dap.limit_packets"] = True
+        notes: list[str] = []
+        if is_jlink(chosen):
+            # Named to SEGGER's library, a J-Link reads and writes memory a
+            # block at a time. Not named, pyOCD drives it a word at a time,
+            # each word a round trip over USB: a megabyte took five minutes.
+            # SEGGER's library takes a core's name as a device's.
+            try:
+                core = pyocd_packs.core_of(target)
+            except Exception:
+                core = ""
+            if core:
+                options["jlink.device"] = core
+            else:
+                notes.append(SLOW_JLINK)
+        try:
+            session = self._open(chosen, options, target)
+        except BackendError:
+            if "jlink.device" not in options:
+                raise
+            # Whatever SEGGER's library made of the name, the slow way works.
+            del options["jlink.device"]
+            session = self._open(chosen, options, target)
+            notes.append(SLOW_JLINK)
+        connection = PyocdConnection(session)
+        connection.speed = speed_text(session.options.get("frequency"))
+        connection.notes = tuple(notes)
+        return connection
+
+    @staticmethod
+    def _open(chosen, options: dict, target: str):
+        from pyocd.core.session import Session
+
         session = None
         try:
-            session = Session(chosen, auto_open=False, options=options)
+            session = Session(chosen, auto_open=False, options=dict(options))
             session.open()
         except Exception as exc:
             # Let go of the probe whatever got as far as opening it: left
@@ -316,6 +363,4 @@ class PyocdBackend(Backend):
                 with contextlib.suppress(Exception):
                     session.close()
             raise _said(f"Connecting to {target}", exc) from exc
-        connection = PyocdConnection(session)
-        connection.speed = speed_text(session.options.get("frequency"))
-        return connection
+        return session

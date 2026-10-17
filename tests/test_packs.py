@@ -519,3 +519,9 @@ def test_the_dialog_adds_a_file_and_can_search_it_with_no_list(
     assert dialog.address.text().startswith("Added from a file, kept as ")
     assert not dialog.copy_button.isEnabled(), "there is no address to copy"
     assert dialog.use_button.isEnabled() and not dialog.install_button.isEnabled()
+
+
+def test_a_packs_device_says_its_core(store, tmp_path):
+    pyocd_packs.add_file(pack_file(tmp_path))
+    assert pyocd_packs.core_of("WIDGET100") == "Cortex-M4"
+    assert pyocd_packs.core_of("no-such-part") == ""

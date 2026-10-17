@@ -268,6 +268,8 @@ class Flasher(QObject):
             self._regions_for = target
             at = f" at {self.connection.speed}" if self.connection.speed else ""
             self.events.good(f"Connected to {target} through probe {probe}{at}.")
+            for note in self.connection.notes:
+                self.events.warning(note)
             self.connection_changed.emit(True)
             self.regions_changed.emit()
 
