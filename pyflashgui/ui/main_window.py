@@ -833,6 +833,7 @@ class MainWindow(QMainWindow):
         view = self.panes.view(name)
         view.read_requested.connect(self._read_memory)
         view.saved.connect(self.files_view.refill)
+        view.cropped.connect(self.files_view.add_read)
         view.show_entry(entry)
         # Called what the list calls it, which is how the two are told to be one.
         self.panes.set_default_title(name, view.title())

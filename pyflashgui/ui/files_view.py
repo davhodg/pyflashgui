@@ -155,8 +155,6 @@ def save_entry(parent: QWidget, ctx: Context, entry: Entry, data: bytes | None =
     """Ask where, and save what an entry holds there. Whether it was saved.
 
     For one that is a single run of bytes, which what is read always is.
-    ``data`` is for saving less than all of it: the same bytes with the
-    erased ones left off the end.
     """
     segment = entry.image.segments[0]
     address = segment.address
@@ -169,9 +167,10 @@ def save_entry(parent: QWidget, ctx: Context, entry: Entry, data: bytes | None =
         "Save what was read" if entry.is_read else "Save a copy",
         images.WRITE_FILTER,
         Path.home(),
-        # The time in the name: a read is saved to be kept, and the
-        # next one must not offer to overwrite it.
-        suggested=folders.stamped(f"{source}_{address:08X}", ".bin"),
+        # Where it starts and how long it is, both in hexadecimal: what
+        # tells one read of a target from another, a crop from what it came
+        # from, and what is needed to program a raw binary back.
+        suggested=f"{source}_{address:08X}_{len(data):08X}.bin",
     )
     if not path:
         return False

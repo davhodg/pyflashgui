@@ -26,8 +26,8 @@ from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
-    QCheckBox,
     QComboBox,
+    QDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -45,6 +45,7 @@ from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import Image, Segment
 from pyflashgui.core.memory_map import region_at
 from pyflashgui.ui import fonts
+from pyflashgui.ui.crop_dialog import CropDialog
 from pyflashgui.ui.files_view import Entry, parse_address, save_entry
 
 #: Bytes shown on a row.
@@ -59,16 +60,10 @@ AGREES, UNMENTIONED = "..", "--"
 MOST_SHOWN = 8
 
 NOTHING = "Nothing is shown yet. Read... reads part of the connected target's memory."
-TRIM_TIP = (
-    "Erased flash reads as FF on most devices, and as 00 on some. With this\n"
-    "ticked, the erased bytes after the last byte that holds something are\n"
-    "not saved, so the file is the size of what is there and not the size of\n"
-    "what was read."
-)
-ERASED_TIP = (
-    "What erased flash reads as on this target: as the target's description\n"
-    "says, or FF or 00 where that is not right -- an XMC4500's reads 00, and\n"
-    "pyOCD says FF for it. Kept for each target."
+CROP_TIP = (
+    "Make a shorter copy of what is shown: a range of it, or all of it but the\n"
+    "erased bytes at the end. It joins the Files list as a read of its own,\n"
+    "to look at, compare or save."
 )
 #: The choice of erased value for each target, under this and its name.
 ERASED_KEY = "memory.erased"
@@ -308,6 +303,8 @@ class MemoryView(QWidget):
     read_requested = Signal()
     #: What is shown has been saved: the list it is on says so no longer.
     saved = Signal()
+    #: A shorter copy was made: where it starts, what it holds, and what of.
+    cropped = Signal(int, bytes, str)
 
     def __init__(self, flasher: Flasher, ctx: Context) -> None:
         super().__init__()
@@ -428,24 +425,14 @@ class MemoryView(QWidget):
         differences.addWidget(self.previous_difference)
         differences.addWidget(self.next_difference)
 
-        self.trim = QCheckBox("Leave off the erased bytes at the end")
-        self.trim.setToolTip(TRIM_TIP)
-        #: What erased reads as: what the target says, or either value where
-        #: that is wrong. None for the target's own.
-        self.erased_as = QComboBox()
-        self.erased_as.setToolTip(ERASED_TIP)
-        self.erased_as.setAccessibleName("Erased flash reads as")
-        for text, value in (("As the target says", None), ("FF", 0xFF), ("00", 0x00)):
-            self.erased_as.addItem(text, value)
-        self.erased_as.setEnabled(False)
-        self.trim.toggled.connect(self.erased_as.setEnabled)
-        self.erased_as.activated.connect(self._on_erased_as)
+        self.crop_button = QPushButton("Crop...")
+        self.crop_button.setToolTip(CROP_TIP)
+        self.crop_button.clicked.connect(self.crop)
 
         buttons = QHBoxLayout()
         buttons.addWidget(self.read_button)
         buttons.addWidget(self.save_button)
-        buttons.addWidget(self.trim)
-        buttons.addWidget(self.erased_as)
+        buttons.addWidget(self.crop_button)
         buttons.addStretch(1)
         layout = QVBoxLayout(self)
         layout.addWidget(self.summary)
@@ -494,7 +481,6 @@ class MemoryView(QWidget):
         """Show what this entry of the Files list holds, in place of what was shown."""
         self.entry = entry
         self.target = entry.target or entry.name
-        self._show_erased_as()
         self._show(entry.image)
         self.table.scrollToTop()
 
@@ -540,6 +526,7 @@ class MemoryView(QWidget):
         self.read_button.setEnabled(self.flasher.connected and not self.flasher.busy)
         anything = bool(self.model.data_read)
         self.save_button.setEnabled(anything and len(self.model.segments) == 1)
+        self.crop_button.setEnabled(anything and len(self.model.segments) == 1)
         for widget in (
             self.goto,
             self.find_as,
@@ -735,18 +722,6 @@ class MemoryView(QWidget):
         self._show_offset(at)
         self.found.setText(difference_text(made, self.model.data_read, at, self.model.address_of))
 
-    def to_save(self) -> bytes:
-        """What is shown, less the erased bytes at the end if that is ticked."""
-        data = self.model.data_read
-        return data.rstrip(bytes([self._erased()])) if self.trim.isChecked() else data
-
-    def _erased(self) -> int:
-        """What the flash this was read from reads as erased: as chosen beside
-        Leave off, or as the target says, or FF where it says nothing."""
-        if (chosen := self.erased_as.currentData()) is not None:
-            return int(chosen)
-        return self._erased_said()
-
     def _erased_said(self) -> int:
         """What the target says its flash reads as erased, where this was read."""
         if self.model.segments:
@@ -758,29 +733,36 @@ class MemoryView(QWidget):
     def _erased_key(self) -> str:
         return f"{ERASED_KEY}.{self.target}"
 
-    def _show_erased_as(self) -> None:
-        """The choice made for this target, and what the target says, in the box."""
+    def _erased_chosen(self) -> int | None:
+        """What erased flash was last said to read as for this target, if anything."""
         saved = self.ctx.settings.get(self._erased_key(), None)
-        index = self.erased_as.findData(None if saved in (None, "") else int(saved))
-        self.erased_as.setCurrentIndex(max(index, 0))
-        self.erased_as.setItemText(0, f"As the target says ({self._erased_said():02X})")
+        return None if saved in (None, "") else int(saved)
 
-    def _on_erased_as(self, _index: int) -> None:
-        chosen = self.erased_as.currentData()
-        self.ctx.settings.set(self._erased_key(), "" if chosen is None else int(chosen))
+    def crop(self) -> bool:
+        """Ask what to keep, and make a shorter copy of what is shown. Whether one was made."""
+        if self.entry is None or len(self.model.segments) != 1:
+            return False
+        address = self.model.segments[0].address
+        dialog = CropDialog(
+            address, self.model.data_read, self._erased_said(), self._erased_chosen(), self
+        )
+        if dialog.exec() != QDialog.Accepted or (made := dialog.result()) is None:
+            return False
+        chosen = dialog.erased_choice()
+        self.ctx.settings.set(self._erased_key(), "" if chosen is None else chosen)
+        start, kept = made
+        self.ctx.events.information(
+            f"Cropped {self.title()} to {start:08X} to {start + len(kept) - 1:08X}, "
+            f"{size_text(len(kept))}."
+        )
+        self.cropped.emit(start, kept, self.target)
+        return True
 
     def save(self) -> bool:
         """Ask where, and save what is shown there. Whether it was saved."""
         if self.entry is None or len(self.model.segments) != 1:
             return False
-        data = self.to_save()
-        if not data:
-            self.ctx.events.warning(
-                "All of what was read is erased, so there is nothing to save. "
-                "Untick the box to save it as it is."
-            )
-            return False
-        if not save_entry(self, self.ctx, self.entry, data):
+        if not save_entry(self, self.ctx, self.entry):
             return False
         self.saved.emit()
         return True

@@ -23,6 +23,11 @@ since the last version, and comes out in the next one.
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
   installation too.
+- **Crop...** in a Memory pane makes a shorter copy of what is shown, as a read of its own:
+  all of it but the erased bytes at the end, or a range. What erased flash reads as can be
+  chosen there -- as the target says, `FF` or `00` -- and is kept for each target: an
+  XMC4500's reads `00`. It takes the place of the tick beside Save, which made Save save
+  less than was shown.
 - **Stop when connecting** beside **Connect**, through pyOCD: untick it to attach to the target as it is,
   running, rather than stopping it. `flash.connect(stop=False)` in the console.
 - **Program without erasing**, under the arrow beside **Program and verify**, writes to
@@ -32,6 +37,8 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- The name offered for saving a read is where it starts and how long it is, as eight
+  hexadecimal digits each, in place of the date and time.
 - Beside the progress bar, what is being done -- *Erasing...*, *Programming...*,
   *Verifying...* -- even where there is no figure for how far along it is, and each stage
   starts the bar afresh rather than leaving the last one's 100%. Programming through
@@ -104,8 +111,6 @@ since the last version, and comes out in the next one.
   a reset by the reset pin. Letting go is now given five seconds, on a thread of its own.
 - Closing pyflashgui while it is working on the target, or while a script runs, says why
   it stays open in a box as well as in the Event Log.
-- Beside **Leave off the erased bytes at the end**, what erased flash reads as: as the
-  target says, `FF` or `00`, kept for each target. An XMC4500's reads `00`.
 - **Program without erasing** through pyOCD reads and writes back the rest of a page a
   file only partly covers, rather than filling it with `FF`: flash that reads `00` once
   erased, as an XMC4500's does, would have had `FF` written into it there.

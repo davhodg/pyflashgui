@@ -670,34 +670,70 @@ def test_what_is_shown_is_saved_as_it_was_read_by_the_name_it_is_given(
         monkeypatch.setattr(QFileDialog, "getSaveFileName", answer)
         memory.save_button.click()
 
-    whole, trimmed, hexed = tmp_path / "whole.bin", tmp_path / "trimmed.bin", tmp_path / "a.hex"
+    whole, hexed = tmp_path / "whole.bin", tmp_path / "a.hex"
     save_as(whole)
     assert whole.read_bytes() == b"\x01\xff\x02" + b"\xff" * 0xFD, "what was read, all of it"
-    assert offered[0].startswith("sim_single_08000000_") and offered[0].endswith(".bin")
+    assert offered[0] == "sim_single_08000000_00000100.bin", "where it starts, and its size"
     assert window.said[-1] == (
         "good",
         f"Saved 256 bytes from 08000000 of sim_single as raw binary in {whole}.",
     )
 
-    memory.trim.setChecked(True)
-    save_as(trimmed)
-    assert trimmed.read_bytes() == b"\x01\xff\x02", "an FF in the middle is part of what is there"
-
     save_as(hexed)
-    assert images.read(str(hexed)).segments == (Segment(FLASH_AT, b"\x01\xff\x02"),)
+    assert images.read(str(hexed)).segments == (
+        Segment(FLASH_AT, b"\x01\xff\x02" + b"\xff" * 0xFD),
+    )
 
 
-def test_flash_that_is_all_erased_is_not_saved_as_nothing(window, monkeypatch, tmp_path):
-    window.probe_bar.button.click()
-    wait_for(lambda: window.flasher.connected)
+def crop_with(monkeypatch, memory, choose):
+    """Crop... with the dialog answered by ``choose``, which is handed the dialog."""
+    from pyflashgui.ui.crop_dialog import CropDialog
+
+    def answer(dialog):
+        choose(dialog)
+        return CropDialog.Accepted if dialog.result() is not None else CropDialog.Rejected
+
+    monkeypatch.setattr(CropDialog, "exec", answer)
+    return memory.crop()
+
+
+def test_crop_makes_a_read_of_its_own_without_the_erased_end(window, monkeypatch):
+    """Asked for: Save said it saved what is shown, and a tick made it save less."""
+    connect_and_program(window, b"\x01\xff\x02")
     read(window, monkeypatch, "08000000", "100")
     memory = window.memory_view
-    memory.trim.setChecked(True)
-    asked = []
-    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
-    memory.save_button.click()
-    assert asked == [] and window.said[-1][0] == "warning"
-    assert "there is nothing to save" in window.said[-1][1]
+    assert crop_with(monkeypatch, memory, lambda dialog: None)
+    made = window.files_view.entries[-1]
+    assert made.is_read and made.unsaved and made.name == "Read 2"
+    assert made.image.segments == (Segment(FLASH_AT, b"\x01\xff\x02"),), "an FF inside is kept"
+    assert memory.model.data_read == b"\x01\xff\x02" + b"\xff" * 0xFD, "the first is untouched"
+    assert window.said[-1][1].startswith("Cropped Read 1 to 08000000 to 08000002")
+
+
+def test_crop_takes_a_range(window, monkeypatch):
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "100")
+
+    def a_range(dialog):
+        dialog.range.setChecked(True)
+        dialog.start.setText("08000004")
+        dialog.length.setText("4")
+
+    assert crop_with(monkeypatch, window.memory_view, a_range)
+    assert window.files_view.entries[-1].image.segments == (Segment(FLASH_AT + 4, b"ware"),)
+
+
+def test_crop_refuses_what_would_leave_nothing_or_run_past_the_end(app):
+    from pyflashgui.ui.crop_dialog import CropDialog
+
+    dialog = CropDialog(FLASH_AT, b"\xff" * 16, erased_said=0xFF)
+    assert dialog.result() is None and "nothing left" in dialog.problem.text()
+    dialog.range.setChecked(True)
+    dialog.length.setText("20")
+    assert dialog.result() is None and "past the end" in dialog.problem.text()
+    dialog.length.setText("10")
+    assert dialog.result() == (FLASH_AT, b"\xff" * 16)
+    assert dialog.kept.text() == "Keeps 08000000 to 0800000F, 16 bytes."
 
 
 def test_a_file_that_cannot_be_made_is_said_and_the_read_is_kept(window, monkeypatch, tmp_path):
@@ -879,27 +915,7 @@ def test_an_s_record_is_given_addresses_wide_enough_for_what_it_holds(tmp_path):
     assert images.read(high).segments == (Segment(FLASH_AT, b"\x01\x02"),)
 
 
-def test_flash_that_erases_to_zero_has_its_zeros_left_off(window, monkeypatch, tmp_path):
-    """An XMC4500's flash reads 00 once erased: left off the end, not FF."""
-    import dataclasses
-
-    window.probe_bar.button.click()
-    wait_for(lambda: window.flasher.connected)
-    board = backends.get("simulated").board(PROBE)
-    board.memory["flash"][:256] = b"\x01\x00\x02" + b"\x00" * 0xFD
-    read(window, monkeypatch, "08000000", "100")
-    window.flasher.regions = [
-        dataclasses.replace(r, erased=0x00) if r.kind == FLASH else r
-        for r in window.flasher.regions
-    ]
-    memory = window.memory_view
-    memory.trim.setChecked(True)
-    assert memory.to_save() == b"\x01\x00\x02", "a 00 in the middle is part of what is there"
-
-
-def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(
-    window, monkeypatch, tmp_path
-):
+def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(window, monkeypatch):
     """Reported: an XMC4500's erased flash reads 00, and pyOCD says FF for it."""
     window.probe_bar.button.click()
     wait_for(lambda: window.flasher.connected)
@@ -907,12 +923,15 @@ def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(
     board.memory["flash"][:256] = b"\x01\x00\x02" + b"\x00" * 0xFD
     read(window, monkeypatch, "08000000", "100")
     memory = window.memory_view
-    assert memory.erased_as.itemText(0) == "As the target says (FF)"
-    assert not memory.erased_as.isEnabled(), "only with the tick"
-    memory.trim.setChecked(True)
-    assert len(memory.to_save()) == 256, "the target says FF, and there are none"
-    memory.erased_as.setCurrentIndex(memory.erased_as.findData(0x00))
-    memory.erased_as.activated.emit(memory.erased_as.currentIndex())
-    assert memory.to_save() == b"\x01\x00\x02"
-    memory._show_erased_as()
-    assert memory.erased_as.currentData() == 0x00, "kept for the target"
+    seen = []
+
+    def zeros(dialog):
+        seen.append(dialog.erased_as.itemText(0))
+        dialog.erased_as.setCurrentIndex(dialog.erased_as.findData(0x00))
+
+    assert crop_with(monkeypatch, memory, zeros)
+    assert seen == ["As the target says (FF)"]
+    assert window.files_view.entries[-1].image.segments == (Segment(FLASH_AT, b"\x01\x00\x02"),)
+    remembered = []
+    crop_with(monkeypatch, memory, lambda dialog: remembered.append(dialog.erased_choice()))
+    assert remembered == [0x00], "kept for the target"
