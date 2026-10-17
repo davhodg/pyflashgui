@@ -9,6 +9,8 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-17
+
 ### Added
 
 - *View > Python Console*: a Python prompt and *Run script...*, with `flash` to connect,
@@ -23,19 +25,21 @@ since the last version, and comes out in the next one.
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
   installation too.
-- **Crop...** in a Memory pane makes a shorter copy of what is shown, named after it --
-  *Read 1 cropped* -- : all of it but the erased bytes at the end, or a range. What erased flash reads as can be
-  chosen there -- as the target says, `FF` or `00` -- and is kept for each target: an
-  XMC4500's reads `00`. It takes the place of the tick beside Save, which made Save save
-  less than was shown.
+- **Crop...** in a Memory pane makes a shorter copy of what is shown, named after it
+  (*Read 1 cropped*): all of it but the erased bytes at the end, or a range. What erased
+  flash reads as is chosen there -- as the target says, `FF` or `00` -- and kept for each
+  target: an XMC4500's reads `00`. It takes the place of the tick beside Save, which made
+  Save save less than was shown.
 - A right click on a Memory pane's tab: **Close**, **Close the other Memory panes** and
   **Close all Memory panes**.
-- **Stop when connecting** beside **Connect**, through pyOCD: untick it to attach to the target as it is,
-  running, rather than stopping it. `flash.connect(stop=False)` in the console.
+- **Stop when connecting** beside **Connect**, through pyOCD: untick it to attach to the
+  target as it is, running, rather than stopping it. `flash.connect(stop=False)` in the
+  console.
 - **Program without erasing**, under the arrow beside **Program and verify**, writes to
   flash that **Erase...** has cleared already, so that it is not erased twice. Through
-  pyOCD, and `flash.program(..., erase=False)` in the console. The tooltips of **Program
-  and verify** and **Program** say that they erase the sectors they write to.
+  pyOCD, and `flash.program(..., erase=False)` in the console. The rest of a page a file
+  only partly covers is read and written back as it is. The tooltips of **Program and
+  verify** and **Program** say that they erase the sectors they write to.
 
 ### Changed
 
@@ -53,7 +57,9 @@ since the last version, and comes out in the next one.
 - **Reset** has the ways a target can be restarted under an arrow: the usual way, by
   the reset pin, by software, or the processor only. The one chosen is remembered for
   the target. An XMC4500 reset the usual way through pyOCD stayed stopped, and starts
-  by its reset pin.
+  by its reset pin. A target whose debug connection goes with the reset, as an XMC4500's
+  does by its reset pin, is connected to again, leaving it running, and the Event Log
+  says so.
 - Changing **Using** no longer keeps the target chosen for the last backend, which names
   targets its own way: each backend remembers its own, chosen again on switching back.
 - **Compare** marks the other entry too when it is open in a Memory pane, and the Event Log
@@ -103,10 +109,6 @@ since the last version, and comes out in the next one.
 - A pack's device chosen as pyOCD spells it -- *xmc4500_f100x1024* for the pack's
   *xmc4500-f100x1024* -- was not known to be in the pack, so its core was not found. Both
   spellings are one device, listed once.
-- An XMC4500 resets its debug port too when reset by its reset pin, and pyflashgui went
-  on saying connected, so everything after failed with *Unspecified error*. A target that
-  no longer answers after a reset is now connected to again, leaving it running, and the
-  Event Log says so.
 - Erasing or programming through pyOCD a target attached to as it ran -- an XMC4500 with
   its firmware going -- could end in a HardFault (*IPSR=3*): pyOCD ran its flash routine
   wherever it had stopped the firmware. The target is now reset and stopped first.
@@ -114,9 +116,6 @@ since the last version, and comes out in the next one.
   a reset by the reset pin. Letting go is now given five seconds, on a thread of its own.
 - Closing pyflashgui while it is working on the target, or while a script runs, says why
   it stays open in a box as well as in the Event Log.
-- **Program without erasing** through pyOCD reads and writes back the rest of a page a
-  file only partly covers, rather than filling it with `FF`: flash that reads `00` once
-  erased, as an XMC4500's does, would have had `FF` written into it there.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no
@@ -155,5 +154,6 @@ since the last version, and comes out in the next one.
   for updates.
 - Launchers for a source folder on Windows and Linux, and the build of the Windows installer.
 
-[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/davhodg/pyflashgui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/davhodg/pyflashgui/releases/tag/v0.1.0

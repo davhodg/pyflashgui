@@ -49,12 +49,12 @@ A probe is usable without root on Linux once a udev rule allows it; pyOCD publis
 
 ## What it does
 
-- **Probe and target** in a bar across the top: the probe by its serial number, the target by name, the debug clock, and Connect.
+- **Probe and target** in a bar across the top: the probe by its serial number, the target by name, the debug clock, and Connect -- through pyOCD, stopping the target or leaving it running.
 - **Files**: ELF, Intel HEX, Motorola S-record and raw binary, in one list with what has been read from a target. A file is read again whenever a build writes it.
 - **Device packs**: every Cortex-M device there is a CMSIS-Pack for, found by part number and installed from inside pyflashgui, with the address each pack comes from -- or added from a `.pack` file, for a computer with no internet.
 - **Memory map**: where everything ticked will land on the chosen target, how full each flash region is and how much is erased, checked before anything is sent. A file built for another part, or two that write the same addresses, are found here.
-- **Program and verify** in one press, with each half on its own beside it, **Erase** of all the flash, some regions or a range, and **Reset**.
-- **Read** any range of a target's memory back, shown as addresses, bytes and text, with a search for bytes or text and a way to an address. A read is saved as raw binary, Intel HEX or S-record, and can be programmed like a file.
+- **Program and verify** in one press, with each half on its own beside it and **Program without erasing** for flash erased already, **Erase** of all the flash, some regions or a range, and **Reset**, by the reset pin or another way where a device needs it.
+- **Read** any range of a target's memory back, shown as addresses, bytes and text, with a search for bytes or text and a way to an address. A read is saved as raw binary, Intel HEX or S-record, can be cropped to what is in use or to a range, and can be programmed like a file.
 - **Compare** any two of them -- what is in the target against the file that should be, or one read against another -- with each difference marked.
 - **Workspaces**: one for each board or project, holding its probe, target, files and layout.
 - **A Python console** with the probe and the target as `flash`: read, write RAM, erase, program, verify and reset from a prompt or a script, each call waiting for its answer. *File > Run script...* runs one, and keeps the last five a click away.
