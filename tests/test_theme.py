@@ -22,6 +22,10 @@ class Hints:
         self.asked = []
         self.system = system
         self.scheme = system
+        self.colorSchemeChanged = self  # connected to, and never emitted here
+
+    def connect(self, _slot):
+        pass
 
     def setColorScheme(self, scheme):
         self.asked.append(scheme)
@@ -49,6 +53,13 @@ class App:
     def __init__(self, style="windows11", system=Qt.ColorScheme.Light):
         self.hints = Hints(system)
         self._style = Style(style)
+        self._sheet = ""
+
+    def styleSheet(self):
+        return self._sheet
+
+    def setStyleSheet(self, sheet):
+        self._sheet = sheet
 
     def styleHints(self):
         return self.hints
@@ -102,6 +113,28 @@ def test_switching_on_windows_10_changes_colours_not_the_style():
     assert app.hints.asked[-1] == Qt.ColorScheme.Light
 
 
+def test_unticked_boxes_are_outlined_where_the_dark_style_hides_them():
+    """Reported on Windows 10 in the dark: a tick box in a list could not be
+    seen until it was ticked. Fusion draws it a shade darker than what is
+    behind it."""
+    app = App(style="windowsvista")
+    theme.apply(theme.DARK, app)
+    assert app.styleSheet() == theme.TICK_BOX_OUTLINE
+
+    theme.apply(theme.LIGHT, app)
+    assert app.styleSheet() == "", "in the light it is drawn well enough"
+    assert app.style().name() == "fusion", "and the style is still the one it was"
+
+    theme.apply(theme.DARK, app)
+    assert app.styleSheet() == theme.TICK_BOX_OUTLINE
+
+
+def test_a_style_that_draws_them_itself_is_left_alone():
+    app = App(style="windows11", system=Qt.ColorScheme.Dark)
+    theme.apply(theme.DARK, app)
+    assert app.styleSheet() == ""
+
+
 @pytest.mark.parametrize("choice", [theme.SYSTEM, theme.LIGHT, theme.DARK])
 def test_a_native_style_that_can_be_dark_is_kept(choice):
     app = App(style="windows11")
@@ -144,3 +177,35 @@ def test_it_is_under_tools_settings(app, tmp_path, monkeypatch):
     assert window.settings_menu.menuAction() in tools.actions()
     assert window.theme_menu.menuAction() in window.settings_menu.actions()
     window.close()
+
+
+# --- cells typed into ---------------------------------------------------------------------
+@pytest.mark.parametrize("view", ["tree", "table"])
+def test_a_cell_typed_into_hides_the_value_it_is_over(app, view):
+    """Reported: in the Windows 11 style the old value showed through under
+    the new one, since the box typed into painted no background of its own."""
+    from PySide6.QtWidgets import (
+        QLineEdit,
+        QTableWidget,
+        QTableWidgetItem,
+        QTreeWidget,
+        QTreeWidgetItem,
+    )
+
+    theme.apply(theme.SYSTEM, App())
+    if view == "tree":
+        widget = QTreeWidget()
+        item = QTreeWidgetItem(["old value"])
+        item.setFlags(item.flags() | Qt.ItemIsEditable)
+        widget.addTopLevelItem(item)
+        widget.show()
+        widget.editItem(item, 0)
+    else:
+        widget = QTableWidget(1, 1)
+        item = QTableWidgetItem("old value")
+        widget.setItem(0, 0, item)
+        widget.show()
+        widget.editItem(item)
+    editor = widget.findChild(QLineEdit)
+    assert editor is not None and editor.autoFillBackground()
+    widget.close()

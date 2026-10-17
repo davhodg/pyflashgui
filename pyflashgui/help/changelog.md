@@ -57,6 +57,10 @@ since the last version, and comes out in the next one.
   SEGGER's library is now named the device's core, from its pack, and works a block at a
   time. For a target with no pack the Event Log says it is slow, and that J-Link Commander
   is faster.
+- In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
+  be seen; it now has an outline.
+- In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no
+  longer shows its old value under the new one.
 
 ## [0.1.0] - 2026-10-11
 
