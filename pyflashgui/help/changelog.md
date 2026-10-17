@@ -97,6 +97,9 @@ since the last version, and comes out in the next one.
   with it: pyflashgui still said connected, and everything after failed with
   *Unspecified error*. A target that no longer answers after a reset is connected to
   again, leaving it running, and the Event Log says so.
+- Erasing or programming through pyOCD a target attached to as it ran -- an XMC4500 with
+  its firmware going -- could end in a HardFault (*IPSR=3*): pyOCD ran its flash routine
+  wherever it had stopped the firmware. The target is now reset and stopped first.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

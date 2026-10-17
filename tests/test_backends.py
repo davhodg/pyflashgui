@@ -625,3 +625,43 @@ def test_connecting_again_is_tried_more_than_once(monkeypatch):
     connection = PyocdConnection(Session(), reopen=reopen)
     assert connection.reset(kind="pin").startswith("The reset took the debug connection")
     assert len(attempts) == 3
+
+
+@pytest.mark.parametrize("operation", ["erase_chip", "erase_ranges"])
+def test_the_target_is_reset_and_stopped_before_a_flash_routine_runs(monkeypatch, operation):
+    """Reported on an XMC4500 attached to its running firmware: pyOCD stopped
+    it amid the firmware, and the erase routine ended in a HardFault."""
+    from pyocd.flash import eraser
+
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+    from pyflashgui.core.memory_map import FLASH, Region
+
+    done = []
+
+    class Target:
+        def reset_and_halt(self, reset_type=None):
+            done.append("reset and stopped")
+
+    class Session:
+        target = Target()
+
+    class Eraser:
+        class Mode:
+            CHIP, SECTOR = "chip", "sector"
+
+        def __init__(self, session, mode):
+            pass
+
+        def erase(self, ranges=None):
+            done.append("erased")
+
+    monkeypatch.setattr(eraser, "FlashEraser", Eraser)
+    connection = PyocdConnection(Session())
+    monkeypatch.setattr(
+        connection, "regions", lambda: [Region("flash", 0x0800_0000, 0x1_0000, FLASH)]
+    )
+    if operation == "erase_chip":
+        connection.erase_chip()
+    else:
+        connection.erase_ranges([(0x0800_0000, 0x1000)])
+    assert done == ["reset and stopped", "erased"]

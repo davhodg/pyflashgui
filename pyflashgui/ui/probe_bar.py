@@ -84,7 +84,7 @@ CONNECT_TIP = (
 STOP_TIP = (
     "Stop the target on connecting, as pyOCD does unless told otherwise.\n"
     "Untick to attach to it as it is, running: to read what a program is\n"
-    "doing without stopping it. Erasing and programming stop it either way."
+    "doing without stopping it. Erasing and programming reset and stop it."
 )
 
 

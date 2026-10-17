@@ -20,7 +20,7 @@ What is chosen is kept in the [workspace](manual.md): the target and the speed b
 
 ## Connecting
 
-**The target is stopped while it is connected**, and runs again when it is disconnected or reset. Connecting to a device that is doing something is therefore not free: it stops doing it. Through pyOCD, unticking **Stop when connecting** attaches to it as it is instead, still running, so that what a program is doing can be read without stopping it; the Event Log says *leaving it running*. Erasing and programming stop it either way.
+**The target is stopped while it is connected**, and runs again when it is disconnected or reset. Connecting to a device that is doing something is therefore not free: it stops doing it. Through pyOCD, unticking **Stop when connecting** attaches to it as it is instead, still running, so that what a program is doing can be read without stopping it; the Event Log says *leaving it running*. Erasing and programming through pyOCD reset it and stop it first, either way, so that pyOCDs flash routine runs on a device as it starts and not amid its firmware.
 
 A reset that takes the debug connection with it -- an XMC4500 reset by its reset pin through a J-Link does -- is connected again by itself, leaving the target running, and the Event Log says so.
 

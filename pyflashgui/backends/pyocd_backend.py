@@ -213,7 +213,7 @@ class PyocdConnection(Connection):
     def erase_chip(self) -> None:
         from pyocd.flash.eraser import FlashEraser
 
-        self._target()
+        self._from_reset()
         try:
             FlashEraser(self._session, FlashEraser.Mode.CHIP).erase()
         except Exception as exc:
@@ -232,6 +232,7 @@ class PyocdConnection(Connection):
                     f"{start:08X} to {start + length - 1:08X} is not all within one "
                     "region of the target's flash."
                 )
+        self._from_reset()
         try:
             # pyOCD takes where each range starts and where it stops.
             FlashEraser(self._session, FlashEraser.Mode.SECTOR).erase(
@@ -248,12 +249,12 @@ class PyocdConnection(Connection):
     ) -> str | None:
         from pyocd.flash.loader import MemoryLoader
 
-        self._target()
+        if erase not in _CHIP_ERASE and erase != ERASE_NONE:
+            raise BackendError(f"There is no way of erasing called {erase!r}.")
+        self._from_reset()
         if erase == ERASE_NONE:
             self._program_unerased(segments, progress)
-            return
-        if erase not in _CHIP_ERASE:
-            raise BackendError(f"There is no way of erasing called {erase!r}.")
+            return None
         try:
             # smart_flash off: with it, pyOCD reads the flash first and
             # leaves alone a page it judges unchanged. Every byte in the file
@@ -269,6 +270,25 @@ class PyocdConnection(Connection):
             loader.commit()
         except Exception as exc:
             raise _said("Programming", exc) from exc
+
+    def _from_reset(self) -> None:
+        """Reset the target and stop it at its first instruction, before a flash
+        routine is run on it.
+
+        pyOCD stops the processor wherever it happens to be and runs its
+        routine there. Reported on an XMC4500 attached to its firmware as it
+        ran: stopped amid the firmware, with its interrupts and the rest of
+        what it had set up still on, the erase routine ended in a HardFault
+        (IPSR=3). Reset first, the routine runs on a device as it starts,
+        which is what flash routines are written for, and what SEGGER's own
+        download does.
+        """
+        try:
+            self._target().reset_and_halt()
+        except BackendError:
+            raise
+        except Exception as exc:
+            raise _said("Resetting the target before erasing or programming it", exc) from exc
 
     def _program_unerased(self, segments: Sequence[Segment], progress: Progress) -> None:
         """Write these bytes to flash erased beforehand, erasing nothing.
