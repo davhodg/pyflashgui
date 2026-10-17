@@ -162,6 +162,18 @@ def test_a_backend_that_always_erases_is_not_asked_not_to(flasher, said, monkeyp
     assert said.at(WARNING)[-1] == "Simulated cannot program without erasing."
 
 
+def test_what_a_reset_had_to_do_is_said_after_it(connected, said, monkeypatch):
+    monkeypatch.setattr(
+        connected.connection, "reset", lambda halt, kind: "Connected again, leaving it running."
+    )
+    connected.reset(kind="pin")
+    finish(connected)
+    assert said.lines[-2:] == [
+        ("information", f"Reset {TARGET} by its reset pin."),
+        ("information", "Connected again, leaving it running."),
+    ]
+
+
 def test_a_backend_working_in_stages_names_each_on_the_bar(flasher):
     steps = []
     flasher.progress.connect(lambda label, fraction: steps.append((label, fraction)))

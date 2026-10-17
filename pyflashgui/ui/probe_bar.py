@@ -15,7 +15,14 @@ morning.
 from __future__ import annotations
 
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtWidgets import QComboBox, QCompleter, QLabel, QPushButton, QToolBar
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QCompleter,
+    QLabel,
+    QPushButton,
+    QToolBar,
+)
 
 from pyflashgui import backends
 from pyflashgui.backends.base import ProbeInfo, TargetInfo
@@ -28,6 +35,7 @@ PROBE_KEY = "probe.id"
 TARGET_KEY = "probe.target"
 FREQUENCY_KEY = "probe.frequency"
 INTERFACE_KEY = "probe.interface"
+STOP_KEY = "probe.stop"
 
 #: The debug clock, in hertz, with None for whatever the probe chooses. Slow
 #: ones first: a long or untidy cable is the usual reason for needing one.
@@ -69,8 +77,14 @@ INTERFACE_TIP = (
     "which it has."
 )
 CONNECT_TIP = (
-    "Attach the probe to the target. The target is stopped while it is\n"
-    "connected, and runs again when it is disconnected or reset."
+    "Attach the probe to the target. The target is stopped on connecting\n"
+    "-- through pyOCD, unless Stop when connecting is unticked -- and runs\n"
+    "again when it is disconnected or reset."
+)
+STOP_TIP = (
+    "Stop the target on connecting, as pyOCD does unless told otherwise.\n"
+    "Untick to attach to it as it is, running: to read what a program is\n"
+    "doing without stopping it. Erasing and programming stop it either way."
 )
 
 
@@ -145,6 +159,9 @@ class ProbeBar(QToolBar):
         self.button = QPushButton("Connect")
         self.button.setCheckable(True)
         self.button.setToolTip(CONNECT_TIP)
+        #: Only where the backend can do otherwise: see _show_interfaces.
+        self.stop = QCheckBox("Stop when connecting")
+        self.stop.setToolTip(STOP_TIP)
 
         for label, widget in (
             ("Using", self.backend),
@@ -159,6 +176,7 @@ class ProbeBar(QToolBar):
         # Kept as actions, which is what a toolbar can show and hide.
         self._interface_label = self.addWidget(QLabel(" Interface: "))
         self._interface_action = self.addWidget(self.interface)
+        self._stop_action = self.addWidget(self.stop)
         self.addWidget(self.button)
 
         self._restore()
@@ -169,6 +187,7 @@ class ProbeBar(QToolBar):
         self.target.currentTextChanged.connect(self._on_target)
         self.frequency.currentIndexChanged.connect(self._on_frequency)
         self.interface.currentIndexChanged.connect(self._on_interface)
+        self.stop.toggled.connect(self._on_stop)
         self.button.toggled.connect(self._on_toggled)
         flasher.probes_changed.connect(self._show_probes)
         flasher.looking_for_probes.connect(self._on_looking)
@@ -185,6 +204,7 @@ class ProbeBar(QToolBar):
         self.backend.setCurrentIndex(max(index, 0))
         saved = self.ctx.settings.get(FREQUENCY_KEY)
         self.frequency.setCurrentIndex(max(self.frequency.findData(saved), 0))
+        self.stop.setChecked(str(self.ctx.settings.get(STOP_KEY, True)).lower() != "false")
         # Shown straight away, before the list it belongs to has arrived:
         # listing the targets means loading the flashing library, and the
         # window should not wait for that to say what was chosen.
@@ -220,6 +240,10 @@ class ProbeBar(QToolBar):
     def chosen_interface(self) -> str | None:
         return self.interface.currentText() or None
 
+    def chosen_stop(self) -> bool:
+        """Whether to stop the target on connecting: always, where the backend cannot not."""
+        return self.stop.isChecked() or not backends.get(self.backend.currentData()).can_attach
+
     def _show_interfaces(self) -> None:
         """The interfaces the chosen backend can be asked for, or no box at all.
 
@@ -237,6 +261,7 @@ class ProbeBar(QToolBar):
         self._loading = False
         for action in (self._interface_label, self._interface_action):
             action.setVisible(bool(offered))
+        self._stop_action.setVisible(backend.can_attach)
 
     # --- filling the boxes -----------------------------------------------------------
     def _show_probes(self, probes: list[ProbeInfo]) -> None:
@@ -327,6 +352,10 @@ class ProbeBar(QToolBar):
         if not self._loading and self.chosen_interface():
             self.ctx.settings.set(INTERFACE_KEY, self.chosen_interface())
 
+    def _on_stop(self, on: bool) -> None:
+        if not self._loading:
+            self.ctx.settings.set(STOP_KEY, on)
+
     def _on_frequency(self, _index: int) -> None:
         if not self._loading:
             self.ctx.settings.set(FREQUENCY_KEY, self.chosen_frequency())
@@ -341,6 +370,7 @@ class ProbeBar(QToolBar):
                 self.chosen_target(),
                 self.chosen_frequency(),
                 self.chosen_interface(),
+                self.chosen_stop(),
             )
         else:
             self.flasher.disconnect()
@@ -372,6 +402,7 @@ class ProbeBar(QToolBar):
             self.target,
             self.frequency,
             self.interface,
+            self.stop,
         ):
             widget.setEnabled(not connected and not busy)
         self.refresh.setEnabled(self.refresh.isEnabled() and not self._looking)

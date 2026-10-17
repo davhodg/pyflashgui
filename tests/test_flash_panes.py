@@ -334,6 +334,21 @@ def test_a_backend_with_one_way_of_resetting_offers_only_that(window):
     assert files.reset_kind() == "default"
 
 
+def test_stop_beside_connect_is_offered_where_the_target_can_be_left_running(window):
+    bar = window.probe_bar
+    assert not bar._stop_action.isVisible(), "the simulated target always stops"
+    assert bar.chosen_stop()
+    bar.backend.setCurrentIndex(bar.backend.findData("pyocd"))
+    idle(window)
+    assert bar._stop_action.isVisible() and bar.stop.isChecked(), "ticked to begin with"
+    bar.stop.setChecked(False)
+    assert not bar.chosen_stop()
+    assert str(window.ctx.settings.get(probe_bar.STOP_KEY)).lower() == "false", "remembered"
+    bar.backend.setCurrentIndex(bar.backend.findData("simulated"))
+    idle(window)
+    assert bar.chosen_stop(), "where it cannot be left running, it is stopped"
+
+
 def test_there_are_no_ticks_beside_the_list(window):
     """What Program does is said on the button that does it."""
     from PySide6.QtWidgets import QCheckBox

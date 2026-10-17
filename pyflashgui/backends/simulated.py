@@ -248,6 +248,7 @@ class SimulatedBackend(Backend):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool = True,
     ) -> Connection:
         if probe not in {p.unique_id for p in PROBES}:
             raise BackendError(f"There is no probe with the id {probe}.")

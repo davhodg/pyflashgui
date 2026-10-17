@@ -181,9 +181,17 @@ def speed_text(hertz: int | None) -> str:
     return f"{hertz / 1_000_000:g} MHz" if hertz >= 1_000_000 else f"{hertz // 1000} kHz"
 
 
+#: Where every Cortex-M says which processor it is. Read after a reset to
+#: find out whether the target still answers.
+CPUID = 0xE000_ED00
+
+
 class PyocdConnection(Connection):
-    def __init__(self, session) -> None:
+    def __init__(self, session, reopen=None) -> None:
         self._session = session
+        #: Makes a new session on the same probe and target, attaching to it
+        #: as it is, for when a reset has taken the old one with it.
+        self._reopen = reopen
 
     def _target(self):
         if self._session is None:
@@ -315,7 +323,7 @@ class PyocdConnection(Connection):
         except Exception as exc:
             raise _said(f"Writing {len(data)} bytes at {address:08X}", exc) from exc
 
-    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> str | None:
         from pyocd.core.target import Target
 
         target = self._target()
@@ -330,6 +338,50 @@ class PyocdConnection(Connection):
                 target.reset(reset_type)
         except Exception as exc:
             raise _said("Resetting the target", exc) from exc
+        if self._answers():
+            return None
+        self._reattach(halt)
+        left = "stopped" if halt else "running"
+        return (
+            "The reset took the debug connection with it: connected again, leaving the "
+            f"target {left}."
+        )
+
+    def _answers(self) -> bool:
+        """Whether the target can still be reached, by reading which processor it is."""
+        try:
+            self._target().read32(CPUID)
+            return True
+        except Exception:
+            return False
+
+    def _reattach(self, halt: bool) -> None:
+        """Connect again, after a reset that took the debug connection with it.
+
+        Reported on an XMC4500 through a J-Link: reset by its reset pin, the
+        device reset its debug port as well, and SEGGER's library lost its
+        hold on it. It still said connected, and every read after failed
+        with "Unspecified error". Attached to as it is, so that what the
+        reset started is left running.
+        """
+        if self._reopen is None:
+            raise BackendError(
+                "The target no longer answers since it was reset: disconnect, and connect again."
+            )
+        old, self._session = self._session, None
+        _let_go(old)
+        try:
+            self._session = self._reopen()
+        except BackendError as exc:
+            raise BackendError(
+                f"The reset took the debug connection with it, and connecting again failed: "
+                f"{exc} Disconnect, and connect again."
+            ) from exc
+        if halt:
+            try:
+                self._target().halt()
+            except Exception as exc:
+                raise _said("Stopping the target after its reset", exc) from exc
 
     def close(self) -> None:
         session, self._session = self._session, None
@@ -347,6 +399,7 @@ class PyocdBackend(Backend):
     # a long or untidy cable, and slow for anything else.
     default_speed = "Default (1 MHz)"
     can_skip_erase = True
+    can_attach = True
     reset_kinds = (RESET_DEFAULT, RESET_PIN, RESET_SYSTEM, RESET_CORE)
     name = "pyocd"
     label = "pyOCD"
@@ -428,6 +481,7 @@ class PyocdBackend(Backend):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool = True,
     ) -> Connection:
         from pyocd.core.helpers import ConnectHelper
 
@@ -443,6 +497,9 @@ class PyocdBackend(Backend):
             raise BackendError(f"The probe {probe} is not plugged in.")
         options: dict = {
             "target_override": target,
+            # pyOCD stops the target on connecting unless told to attach to
+            # it as it is, running.
+            "connect_mode": "halt" if stop else "attach",
             # pyflashgui reports progress itself, through the callback.
             "hide_programming_progress": True,
         }
@@ -477,7 +534,9 @@ class PyocdBackend(Backend):
             del options["jlink.device"]
             session = self._open(chosen, options, target)
             notes.append(SLOW_JLINK)
-        connection = PyocdConnection(session)
+        # Attached to as it is: what a reset started is left running.
+        again = {**options, "connect_mode": "attach"}
+        connection = PyocdConnection(session, lambda: self._open(chosen, again, target))
         connection.speed = speed_text(session.options.get("frequency"))
         connection.notes = tuple(notes)
         return connection

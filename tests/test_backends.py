@@ -434,6 +434,9 @@ def test_each_way_of_resetting_is_the_pyocd_reset_type_of_that_name(kind, asked)
         def reset(self, reset_type=None):
             self.asked = reset_type
 
+        def read32(self, address):
+            return 0x410FC241  # answers after the reset
+
     class Session:
         target = FakeTarget()
 
@@ -485,3 +488,70 @@ def test_a_pack_device_pyocd_has_taken_in_is_listed_once(monkeypatch):
     monkeypatch.setattr(PyocdBackend, "_file_devices", staticmethod(lambda: []))
     names = [t.name for t in PyocdBackend().targets() if "xmc4500" in t.name]
     assert names == ["xmc4500-f100x1024"]
+
+
+def test_a_reset_that_takes_the_connection_with_it_connects_again():
+    """Reported on an XMC4500 through a J-Link: after a reset by its pin it
+    still said connected, and every operation failed with "Unspecified
+    error"."""
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    class Target:
+        def __init__(self, answers):
+            self.answers = answers
+
+        def reset(self, reset_type=None):
+            self.answers = False  # the debug port went with it
+
+        def read32(self, address):
+            if not self.answers:
+                raise RuntimeError("Unspecified error")
+            return 0x410FC241
+
+    class Session:
+        def __init__(self, answers):
+            self.target = Target(answers)
+            self.closed = False
+
+        def close(self):
+            self.closed = True
+
+    old, new = Session(True), Session(True)
+    connection = PyocdConnection(old, reopen=lambda: new)
+    said = connection.reset(kind="pin")
+    assert said == (
+        "The reset took the debug connection with it: connected again, leaving the target running."
+    )
+    assert old.closed, "the lost session let go of"
+    assert connection._session is new
+    assert connection._answers()
+
+
+def test_a_reset_that_leaves_the_connection_keeps_it():
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    class Target:
+        def reset(self, reset_type=None):
+            pass
+
+        def read32(self, address):
+            return 0x410FC241
+
+    class Session:
+        target = Target()
+
+    reopened = []
+    connection = PyocdConnection(Session(), reopen=lambda: reopened.append(1))
+    assert connection.reset(kind="system") is None, "nothing to say"
+    assert reopened == []
+
+
+@pytest.mark.parametrize(("stop", "mode"), [(True, "halt"), (False, "attach")])
+def test_pyocd_is_told_whether_to_stop_the_target_on_connecting(
+    fake_pyocd, monkeypatch, stop, mode
+):
+    from pyflashgui.backends import pyocd_packs
+
+    monkeypatch.setattr(pyocd_packs, "core_of", lambda target: "Cortex-M4")
+    backends.get("pyocd").connect("JLINK1", "xmc4500-f100x1024", stop=stop)
+    assert fake_pyocd["options"][-1]["connect_mode"] == mode

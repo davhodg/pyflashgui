@@ -98,8 +98,12 @@ class Flash:
         target: str | None = None,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool | None = None,
     ) -> None:
         """Connect, to what the bar has chosen unless told otherwise.
+
+        ``stop=False`` attaches to the target as it is, running, where the
+        backend can: as unticking Stop when connecting does.
 
         Nothing is done when that is what is connected already.
         """
@@ -117,9 +121,11 @@ class Flash:
             frequency = self._bar.chosen_frequency()
         if interface is None:
             interface = self._bar.chosen_interface()
+        if stop is None:
+            stop = self._bar.chosen_stop()
         self._do(
             "Connecting",
-            lambda: self._flasher.connect_to(probe, target, frequency, interface),
+            lambda: self._flasher.connect_to(probe, target, frequency, interface, stop),
         )
 
     def disconnect(self) -> None:

@@ -23,6 +23,8 @@ since the last version, and comes out in the next one.
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
   installation too.
+- **Stop when connecting** beside **Connect**, through pyOCD: untick it to attach to the target as it is,
+  running, rather than stopping it. `flash.connect(stop=False)` in the console.
 - **Program without erasing**, under the arrow beside **Program and verify**, writes to
   flash that **Erase...** has cleared already, so that it is not erased twice. Through
   pyOCD, and `flash.program(..., erase=False)` in the console. The tooltips of **Program
@@ -85,6 +87,10 @@ since the last version, and comes out in the next one.
 - A pack's device chosen as pyOCD spells it -- *xmc4500_f100x1024* for the pack's
   *xmc4500-f100x1024* -- was not known to be in the pack, so a J-Link worked a word at a
   time. Both spellings are one device, listed once.
+- An XMC4500 reset by its reset pin through pyOCD and a J-Link lost the debug connection
+  with it: pyflashgui still said connected, and everything after failed with
+  *Unspecified error*. A target that no longer answers after a reset is connected to
+  again, leaving it running, and the Event Log says so.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

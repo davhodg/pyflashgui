@@ -183,10 +183,11 @@ class Connection(ABC):
         raise BackendError("This way of reaching the probe cannot write to memory.")
 
     @abstractmethod
-    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> str | None:
         """Restart the target, and leave it running unless ``halt``.
 
-        ``kind`` is one of the backend's ``reset_kinds``.
+        ``kind`` is one of the backend's ``reset_kinds``. Returns anything
+        about it worth saying in the Event Log, a sentence, or None.
         """
 
     @abstractmethod
@@ -278,6 +279,9 @@ class Backend(ABC):
     #: The ways it can restart a target, the one used unless told otherwise
     #: first.
     reset_kinds: tuple[str, ...] = (RESET_DEFAULT,)
+    #: Whether it can connect leaving the target running, rather than only
+    #: stopping it: ``connect``'s ``stop``.
+    can_attach: bool = False
     #: Whether it can program without erasing first, for flash erased
     #: already: ``ERASE_NONE``.
     can_skip_erase: bool = False
@@ -309,6 +313,7 @@ class Backend(ABC):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool = True,
     ) -> Connection:
         """Attach the probe with this unique id to a target of this name.
 

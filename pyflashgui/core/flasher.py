@@ -266,11 +266,12 @@ class Flasher(QObject):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool = True,
     ) -> bool:
         backend = self.backend
 
         def work() -> tuple[Connection, list[Region]]:
-            connection = backend.connect(probe, target, frequency, interface)
+            connection = backend.connect(probe, target, frequency, interface, stop)
             try:
                 return connection, connection.regions()
             except Exception:
@@ -282,7 +283,8 @@ class Flasher(QObject):
             self.probe, self.target = probe, target
             self._regions_for = target
             at = f" at {self.connection.speed}" if self.connection.speed else ""
-            self.events.good(f"Connected to {target} through probe {probe}{at}.")
+            running = "" if stop or not backend.can_attach else ", leaving it running"
+            self.events.good(f"Connected to {target} through probe {probe}{at}{running}.")
             for note in self.connection.notes:
                 self.events.warning(note)
             self.connection_changed.emit(True)
@@ -511,8 +513,13 @@ class Flasher(QObject):
         return self._run(
             "Resetting",
             lambda: connection.reset(halt, kind),
-            lambda _r: self.events.information(said),
+            lambda note: self._reset_done(said, note),
         )
+
+    def _reset_done(self, said: str, note: str | None) -> None:
+        self.events.information(said)
+        if note:
+            self.events.information(note)
 
     # --- going away ------------------------------------------------------------------
     def shutdown(self) -> None:

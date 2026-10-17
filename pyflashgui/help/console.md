@@ -31,7 +31,7 @@ print(flash.read(0x20000000, 16).hex(" "))
 
 | Call | What it does |
 |---|---|
-| `connect(probe=None, target=None)` | connect, to what the bar has chosen unless told otherwise; nothing if that is connected already |
+| `connect(probe=None, target=None, stop=None)` | connect, to what the bar has chosen unless told otherwise; nothing if that is connected already. `stop=False` attaches leaving the target running, through pyOCD; unset, it is as **Stop when connecting** is |
 | `disconnect()` | let go of the probe |
 | `read(address, length, show=False)` | that many bytes of the target's memory, as `bytes`. `show=True` also lists them in Files as a read |
 | `write(address, data)` | write bytes to RAM or a peripheral's registers. Never to flash, which is programmed |

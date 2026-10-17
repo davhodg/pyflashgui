@@ -11,6 +11,7 @@ The bar across the top of the window says what pyflashgui is connected through a
 | **Target** | The device on the end of the probe. Type any part of its name to find it. |
 | **Speed** | How fast the probe clocks the debug port. *Default* leaves it to pyOCD, which uses 1 MHz, or to J-Link Commander, which lets the J-Link choose. The [Event Log](manual.md) says the speed on connecting. |
 | **Interface** | With J-Link Commander only: how the probe is wired to the device. |
+| **Stop when connecting** | Through pyOCD: whether connecting stops the target, ticked to begin with. Untick it to attach to the target as it is, running. |
 | **Connect** | Attaches the probe to the target, and becomes **Disconnect**. |
 
 The bar at the foot of the window says what is known of the target that is chosen: who makes it, its core where that is known, and how much flash and RAM it has.
@@ -19,7 +20,9 @@ What is chosen is kept in the [workspace](manual.md): the target and the speed b
 
 ## Connecting
 
-**The target is stopped while it is connected**, and runs again when it is disconnected or reset. Connecting to a device that is doing something is therefore not free: it stops doing it.
+**The target is stopped while it is connected**, and runs again when it is disconnected or reset. Connecting to a device that is doing something is therefore not free: it stops doing it. Through pyOCD, unticking **Stop when connecting** attaches to it as it is instead, still running, so that what a program is doing can be read without stopping it; the Event Log says *leaving it running*. Erasing and programming stop it either way.
+
+A reset that takes the debug connection with it -- an XMC4500 reset by its reset pin through a J-Link does -- is connected again by itself, leaving the target running, and the Event Log says so.
 
 If connecting fails, the [Event Log](manual.md) says what the probe reported. The usual causes are the target not being powered, the wrong target chosen, or a cable too long for the speed: try a lower **Speed**.
 

@@ -574,6 +574,7 @@ class JLinkBackend(Backend):
         target: str,
         frequency: int | None = None,
         interface: str | None = None,
+        stop: bool = True,
     ) -> Connection:
         if not probe:
             raise BackendError("No J-Link is chosen.")
