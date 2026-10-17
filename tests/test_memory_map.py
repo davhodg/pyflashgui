@@ -4,7 +4,7 @@
 
 from pyflashgui.core.events import ERROR, WARNING
 from pyflashgui.core.images import BINARY, Image, Segment
-from pyflashgui.core.memory_map import FLASH, RAM, ROM, Region, lay_out
+from pyflashgui.core.memory_map import FLASH, GENERIC, RAM, ROM, Region, lay_out
 
 FLASH_REGION = Region("flash", 0x0800_0000, 0x1_0000, FLASH, sector_size=0x1000, page_size=0x100)
 RAM_REGION = Region("ram", 0x2000_0000, 0x4000, RAM)
@@ -64,9 +64,28 @@ def test_bytes_for_ram_are_a_warning_and_not_a_refusal():
     layout = lay_out([image("ram.elf", (0x2000_0000, 0x100))], REGIONS)
     assert layout.programmable
     assert messages(layout, WARNING) == [
-        "ram.elf: 256 bytes at 20000000 to 200000FF are in RAM (ram), "
-        "and will be lost at the next reset."
+        "ram.elf: 256 bytes at 20000000 to 200000FF go to RAM (ram), not flash: "
+        "written there, they stay on the device only until it is next reset."
     ]
+
+
+def test_a_target_that_is_only_the_cortex_m_address_map_cannot_program():
+    """Reported: with pyOCD's cortex_m chosen, a file for an XMC4500's flash
+    was said to be in RAM and lost at the next reset -- read as the file
+    being lost. The map calls that RAM only because it may be."""
+    generic = (
+        Region("Code", 0x0000_0000, 0x2000_0000, GENERIC),
+        Region("SRAM", 0x2000_0000, 0x2000_0000, GENERIC),
+    )
+    layout = lay_out(
+        [image("app.hex", (0x0C00_0000, 0x100)), image("more.hex", (0x0C01_0000, 0x100))],
+        generic,
+    )
+    assert not layout.programmable
+    (said,) = messages(layout)
+    assert said.startswith("app.hex, more.hex: the target chosen is no device in particular")
+    assert "RAM" not in said and "Tools > pyOCD device packs" in said
+    assert not layout.usage
 
 
 def test_memory_that_cannot_be_written_is_an_error():

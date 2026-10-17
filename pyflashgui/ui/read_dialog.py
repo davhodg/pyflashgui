@@ -24,7 +24,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.core.flasher import size_text
-from pyflashgui.core.memory_map import FLASH, Region
+from pyflashgui.core.memory_map import FLASH, GENERIC, Region
 from pyflashgui.ui import fonts
 
 OTHER = "Another range"
@@ -62,8 +62,9 @@ class ReadDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Read from the target")
         # Another address for the same memory would read the same bytes twice
-        # over under a second name.
-        self._regions = [r for r in regions if not r.alias_of]
+        # over under a second name. The Cortex-M address map is half a
+        # gigabyte a region: not something to offer to read whole.
+        self._regions = [r for r in regions if not r.alias_of and r.kind != GENERIC]
 
         self.region = QComboBox()
         self.region.setAccessibleName("Region")

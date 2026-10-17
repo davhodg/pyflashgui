@@ -30,7 +30,7 @@ from pyflashgui.backends.base import (
     _nothing,
 )
 from pyflashgui.core.images import Segment
-from pyflashgui.core.memory_map import FLASH, OTHER, RAM, ROM, Region
+from pyflashgui.core.memory_map import FLASH, GENERIC, OTHER, RAM, ROM, Region
 
 #: What pyOCD's loader calls the two ways of erasing.
 _CHIP_ERASE = {ERASE_SECTORS: "sector", ERASE_CHIP: "chip"}
@@ -47,8 +47,12 @@ def _kind(region) -> str:
     return OTHER
 
 
-def regions_of(memory_map) -> list[Region]:
-    """A pyOCD memory map as pyflashgui's own regions, lowest address first."""
+def regions_of(memory_map, generic: bool = False) -> list[Region]:
+    """A pyOCD memory map as pyflashgui's own regions, lowest address first.
+
+    ``generic`` for the map of a target that is no device in particular,
+    whose regions are where memory may be and not what is there.
+    """
     out = []
     for region in memory_map:
         alias = region.alias
@@ -57,7 +61,7 @@ def regions_of(memory_map) -> list[Region]:
                 name=region.name,
                 start=region.start,
                 length=region.length,
-                kind=_kind(region),
+                kind=GENERIC if generic else _kind(region),
                 # pyOCD's "blocksize" is what is erased at a time, for flash.
                 sector_size=int(getattr(region, "blocksize", 0) or 0) if region.is_flash else 0,
                 page_size=int(getattr(region, "page_size", 0) or 0) if region.is_flash else 0,
@@ -87,7 +91,7 @@ def _said(doing: str, exc: Exception) -> BackendError:
 #: Said on connecting a J-Link through pyOCD where it cannot be told the device.
 SLOW_JLINK = (
     "Through pyOCD, this J-Link reads and writes the target a word at a time, which is slow: "
-    "a megabyte takes minutes. J-Link Commander, under Through, is much faster with a J-Link."
+    "a megabyte takes minutes. J-Link Commander, under Using, is much faster with a J-Link."
 )
 
 
@@ -98,6 +102,20 @@ def is_jlink(probe) -> bool:
     except Exception:  # pylink missing, or SEGGER's library with it
         return False
     return isinstance(probe, JLinkProbe)
+
+
+def is_generic(target) -> bool:
+    """Whether pyOCD knows this target as no device in particular: cortex_m.
+
+    Its memory map is then the address map every Cortex-M has, made up on
+    connecting, with no flash in it -- the region where a device's flash is
+    called RAM. A device of its own is a subclass, with its own map.
+    """
+    try:
+        from pyocd.coresight.coresight_target import CoreSightTarget
+    except Exception:
+        return False
+    return type(target) is CoreSightTarget
 
 
 def speed_text(hertz: int | None) -> str:
@@ -119,7 +137,8 @@ class PyocdConnection(Connection):
         return self._session.target
 
     def regions(self) -> list[Region]:
-        return regions_of(self._target().memory_map)
+        target = self._target()
+        return regions_of(target.memory_map, generic=is_generic(target))
 
     def erase_chip(self) -> None:
         from pyocd.flash.eraser import FlashEraser

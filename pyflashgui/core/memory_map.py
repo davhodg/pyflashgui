@@ -23,6 +23,11 @@ FLASH = "flash"
 RAM = "ram"
 ROM = "rom"
 OTHER = "other"
+#: Part of the address map every Cortex-M has, which is all a target chosen
+#: as no device in particular -- pyOCD's cortex_m -- knows. It says where
+#: memory may be, not what is there: not where the flash is, nor how to
+#: program it.
+GENERIC = "generic"
 
 
 @dataclass(frozen=True)
@@ -32,7 +37,7 @@ class Region:
     name: str
     start: int
     length: int
-    kind: str  # one of FLASH, RAM, ROM, OTHER
+    kind: str  # one of FLASH, RAM, ROM, OTHER, GENERIC
     #: What is erased at a time, in bytes. 0 where nothing is: RAM, ROM.
     sector_size: int = 0
     #: What is programmed at a time, in bytes. 0 where it does not apply.
@@ -180,15 +185,38 @@ def _placement(piece: Piece, complete: bool = True) -> Problem | None:
             f"{what} are in {region.name}, which is another address for "
             f"{region.alias_of} and cannot be programmed through.",
         )
+    if region.kind == GENERIC:
+        return None  # said once for every file, by _generic
     if region.kind == RAM:
         # Not refused: loading a program into RAM to run it is a real thing
         # to do. But it is not what a file meant for flash should be doing.
         return Problem(
-            WARNING, f"{what} are in RAM ({region.name}), and will be lost at the next reset."
+            WARNING,
+            f"{what} go to RAM ({region.name}), not flash: written there, they stay on "
+            "the device only until it is next reset.",
         )
     if region.kind != FLASH:
         return Problem(ERROR, f"{what} are in {region.name}, which cannot be written.")
     return None
+
+
+def _generic(pieces: Iterable[Piece]) -> Problem | None:
+    """Files laid over no more than the Cortex-M address map, said once.
+
+    An error, not the warning RAM would have: the map calls 0 to 1FFFFFFF
+    RAM because it may be, and on a real device the flash is there. What the
+    target does not know is how to program it.
+    """
+    names = list(dict.fromkeys(p.source for p in pieces if p.region and p.region.kind == GENERIC))
+    if not names:
+        return None
+    return Problem(
+        ERROR,
+        f"{', '.join(names)}: the target chosen is no device in particular, and knows only "
+        "the address map every Cortex-M has, not where this device's flash is or how to "
+        "program it. It can read and compare; to program, choose the device itself, "
+        "from its pack if it is not built in (Tools > pyOCD device packs).",
+    )
 
 
 def _usage(pieces: Iterable[Piece], regions: Sequence[Region]) -> list[Usage]:
@@ -230,5 +258,7 @@ def lay_out(images: Iterable[Image], regions: Sequence[Region], complete: bool =
     if layout.checked:
         found = (_placement(piece, complete) for piece in layout.pieces)
         layout.problems += [p for p in found if p is not None]
+        if generic := _generic(layout.pieces):
+            layout.problems.append(generic)
         layout.usage = _usage(layout.pieces, regions)
     return layout

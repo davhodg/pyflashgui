@@ -215,8 +215,11 @@ def test_there_is_nothing_to_compare_before_anything_is_read(window):
 def test_a_file_that_matches_says_so_and_has_nowhere_to_go(window, memory, tmp_path):
     compare_with(window, hex_file(tmp_path, "same.hex", BASE, pattern(0x100)))
     assert memory.compared.text() == "Compared with same.hex: 256 bytes compared, all the same."
-    # Said in the log with which pane it is of, since there may be several.
-    assert window.said[-1] == ("good", "Read 1: " + memory.compared.text())
+    # Said in the log with what was compared with what, since there may be several.
+    assert window.said[-1] == (
+        "good",
+        "Comparison result for Read 1 against same.hex: 256 bytes compared, all the same.",
+    )
     assert not memory.table.isColumnHidden(FILE)
     assert not memory.next_difference.isEnabled() and not memory.previous_difference.isEnabled()
     assert memory.model.file_row(0) == "", "a row that agrees has nothing to say"
@@ -286,7 +289,16 @@ def test_two_reads_are_compared_and_the_higher_in_the_list_is_the_one_shown(wind
         "Compared with Read 2: 1 byte differs of 256 bytes, the first at 08000007."
     )
     assert memory.model.headerData(FILE, Qt.Horizontal) == "Read 2"
-    assert window.memory_views[1].model.comparison is None, "the other is as it was"
+    # The other, open in a pane of its own, is marked against the first, and the
+    # log says it once.
+    other = window.memory_views[1]
+    assert other.compared.text() == (
+        "Compared with Read 1: 1 byte differs of 256 bytes, the first at 08000007."
+    )
+    assert [m for _level, m in window.said].count(
+        "Comparison result for Read 1 against Read 2: 1 byte differs of 256 bytes, the first "
+        "at 08000007."
+    ) == 1
 
 
 def test_of_a_read_and_a_file_it_is_the_read_that_is_shown(window, tmp_path):
@@ -296,7 +308,7 @@ def test_of_a_read_and_a_file_it_is_the_read_that_is_shown(window, tmp_path):
     select(window.files_view, 0, 1)
     window.files_view.compare_button.click()
     of_file, of_read = window.memory_views
-    assert of_file.model.comparison is None
+    assert of_file.compared.text() == "Compared with Read 1: 256 bytes compared, all the same."
     assert of_read.compared.text() == "Compared with app.hex: 256 bytes compared, all the same."
 
 

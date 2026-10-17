@@ -44,7 +44,8 @@ The keys work in the Memory pane that is being used.
 **Compare**, in the [Files](files.md) pane, compares the two entries selected there: two reads, two files, or a read and a file. One of them is shown, marked where the other differs from it. Of a read and a file it is the read that is shown, the file being what the target is held against; of two of a kind, the one higher in the list. Nothing is read from the target. It is the question [Verify](files.md) asks, of any stretch of memory and at any time after it was read.
 
 - **Only where the two overlap is compared.** Two of them rarely cover the same addresses. What the other has outside what is shown, and what is shown that the other says nothing about, are each counted and said, and neither is a difference.
-- **A line says what was found**: how many bytes were compared, how many differ and where the first is. The same line goes to the Event Log.
+- **A line says what was found**: how many bytes were compared, how many differ and where the first is. The Event Log has it too, as the comparison result for the one shown against the other.
+- **If the other is open in a Memory pane as well**, it is marked against the first, so the differences can be looked at from either side.
 - **A column appears, headed with the other's name**, with something in it on each row that differs: the other's own bytes where they differ, `..` for a byte that agrees and `--` for one the other does not mention. A row that agrees throughout is left blank.
 - **Next difference** and **Previous difference** go from one stretch of differing bytes to the next, going round, and say where it is and what each side has.
 

@@ -6,7 +6,7 @@ The bar across the top of the window says what pyflashgui is connected through a
 
 | | |
 |---|---|
-| **Through** | What reaches the probe. *pyOCD* works with many probes and Cortex-M devices. *J-Link Commander* works with a J-Link and every device SEGGER's software knows. *Simulated* is a probe and a target that exist only in memory, for trying pyflashgui with no hardware. |
+| **Using** | What reaches the probe. *pyOCD* works with many probes and Cortex-M devices. *J-Link Commander* works with a J-Link and every device SEGGER's software knows. *Simulated* is a probe and a target that exist only in memory, for trying pyflashgui with no hardware. |
 | **Probe** | The debug probe, by its description and serial number. **Find probes** looks again for what is plugged in, and opening the list does too when no probe was found. |
 | **Target** | The device on the end of the probe. Type any part of its name to find it. |
 | **Speed** | How fast the probe clocks the debug port. *Default* leaves it to pyOCD, which uses 1 MHz, or to J-Link Commander, which lets the J-Link choose. The [Event Log](manual.md) says the speed on connecting. |
@@ -50,7 +50,7 @@ Packs are kept in pyOCD's own folder for them, not in a workspace, so a pack ins
 
 ## J-Link Commander
 
-Choosing *J-Link Commander* under **Through** uses a J-Link by way of SEGGER's own command line program, which comes with SEGGER's J-Link software. It reaches every device that software knows, which is far more than Cortex-M: Cortex-A and Cortex-R, RISC-V and others. The price is that it works with a J-Link and nothing else, and needs SEGGER's software installed.
+Choosing *J-Link Commander* under **Using** uses a J-Link by way of SEGGER's own command line program, which comes with SEGGER's J-Link software. It reaches every device that software knows, which is far more than Cortex-M: Cortex-A and Cortex-R, RISC-V and others. The price is that it works with a J-Link and nothing else, and needs SEGGER's software installed.
 
 - **SEGGER's software is yours to install**, and its licence is between you and SEGGER. pyflashgui never carries it. It is for genuine SEGGER probes, and SEGGER describes J-Link Commander as a tool for development, not for production programming.
 - **Target** is the device's name as SEGGER's software has it, such as `STM32F103ZE`. The list is read from that software, with each device's maker, core and memory; a name not on it can be typed.

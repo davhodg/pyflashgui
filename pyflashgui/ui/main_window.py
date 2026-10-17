@@ -836,10 +836,16 @@ class MainWindow(QMainWindow):
         dock.topLevelChanged.connect(lambda _floating: self._update_memory_space())
 
     def _compare(self, shown: Entry, other: Entry) -> None:
-        """Show one entry, marked where another differs from it."""
+        """Show one entry, marked where another differs from it.
+
+        The other is marked too, against the first, when it is open in a pane
+        of its own: either one can be looked at to see the differences.
+        """
         self._open_memory(shown)
         if name := self._pane_of(shown):
             self.panes.view(name).compare_with(other.image)
+        if (name := self._pane_of(other)) and shown.image is not None:
+            self.panes.view(name).compare_with(shown.image, quiet=True)
 
     def _close_memory(self, entry: Entry) -> None:
         """An entry has gone from the list, and the pane that showed it goes too."""

@@ -671,13 +671,25 @@ class MemoryView(QWidget):
         if top.width() < wanted:
             top.resize(wanted, top.height())
 
-    def compare_with(self, image: Image) -> None:
-        """Mark where what is shown differs from another file or read."""
+    def compare_with(self, image: Image, quiet: bool = False) -> None:
+        """Mark where what is shown differs from another file or read.
+
+        ``quiet`` leaves the Event Log out of it: for the other half of a
+        comparison already said there.
+        """
         if not self.model.data_read:
             return
         made = compare_all(self.model.segments, image)
         self._show_comparison(made)
-        said = f"{self.title()}: " + comparison_text(made, self.model.address_of)
+        if quiet:
+            if made.different:
+                self._to_difference(True)
+            return
+        found = comparison_text(made, self.model.address_of)
+        # The line in the pane starts "Compared with ...", which in the log,
+        # away from the pane, does not say what was compared with it.
+        found = found.split(": ", 1)[1] if found.startswith("Compared with ") else found
+        said = f"Comparison result for {self.title()} against {made.name}: {found}"
         if made.compared == 0:
             self.ctx.events.warning(said)
         elif made.different:

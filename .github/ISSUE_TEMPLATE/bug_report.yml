@@ -35,8 +35,8 @@ body:
   - type: dropdown
     id: through
     attributes:
-      label: Through
-      description: What is chosen under Through in the bar across the top.
+      label: Using
+      description: What is chosen under Using in the bar across the top.
       options:
         - pyOCD
         - J-Link Commander

@@ -23,7 +23,7 @@ pyflashgui is a graphical flash programming tool: for Arm Cortex-M targets with 
 3. Look at the memory map under the list: it says whether they fit the target.
 4. **Connect**, then **Program and verify**.
 
-With no hardware, choose *Simulated* under **Through** and the same steps work on a target that exists only in memory.
+With no hardware, choose *Simulated* under **Using** and the same steps work on a target that exists only in memory.
 
 ## The window
 

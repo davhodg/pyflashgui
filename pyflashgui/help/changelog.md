@@ -26,6 +26,11 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- **Compare** marks the other entry too when it is open in a Memory pane, and the Event Log
+  says *Comparison result for* the one against the other.
+- **Through** in the bar across the top is **Using**.
+- A file in RAM is said to go to RAM, not flash, and to stay on the device until it is
+  next reset: it read as though the file itself would be lost.
 - The speed box's first choice is **Default**, with what that comes to: 1 MHz through pyOCD,
   and auto through J-Link Commander. The Event Log says the speed on connecting.
 - **Refresh** beside the probe is **Find probes**, and opening the list of probes looks
@@ -57,6 +62,9 @@ since the last version, and comes out in the next one.
   SEGGER's library is now named the device's core, from its pack, and works a block at a
   time. For a target with no pack the Event Log says it is slow, and that J-Link Commander
   is faster.
+- With pyOCD's *cortex_m* chosen, which knows only the address map every Cortex-M has,
+  a file for the device's flash was said to be in RAM. Programming is now refused with
+  why, and to choose the device itself; reading and comparing still work.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

@@ -363,3 +363,20 @@ def test_a_jlink_for_a_target_with_no_pack_says_it_is_slow(fake_pyocd, monkeypat
     connection = backends.get("pyocd").connect("JLINK1", "rp2350")
     assert "jlink.device" not in fake_pyocd["options"][-1]
     assert connection.notes == (pyocd_backend.SLOW_JLINK,)
+
+
+def test_pyocd_s_cortex_m_is_known_as_no_device_in_particular():
+    from pyocd.coresight.coresight_target import CoreSightTarget
+
+    from pyflashgui.backends.pyocd_backend import is_generic, regions_of
+    from pyflashgui.core.memory_map import GENERIC
+
+    class Device(CoreSightTarget):
+        pass
+
+    assert is_generic(object.__new__(CoreSightTarget))
+    assert not is_generic(object.__new__(Device)), "a device of its own has its own map"
+    # The map pyOCD makes up for it on connecting, as pyOCD makes it.
+    made = CoreSightTarget._create_default_cortex_m_memory_map(None)
+    assert {r.kind for r in regions_of(made, generic=True)} == {GENERIC}
+    assert {r.kind for r in regions_of(made)} != {GENERIC}

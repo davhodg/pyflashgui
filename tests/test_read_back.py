@@ -17,7 +17,7 @@ from pyflashgui.core import images
 from pyflashgui.core.events import EventLog
 from pyflashgui.core.flasher import Flasher
 from pyflashgui.core.images import Segment
-from pyflashgui.core.memory_map import FLASH, RAM, Region
+from pyflashgui.core.memory_map import FLASH, GENERIC, RAM, Region
 from pyflashgui.ui import files_view
 from pyflashgui.ui.memory_view import MemoryModel, parse_bytes, text_of
 from pyflashgui.ui.read_dialog import ReadDialog, parse_number
@@ -206,6 +206,12 @@ def test_with_no_memory_known_the_range_is_typed(app):
     dialog.address.setText("0")
     dialog.length.setText("400")
     assert dialog.values() == (0, 0x400)
+
+
+def test_the_cortex_m_address_map_is_not_offered_to_read_whole(app):
+    """Half a gigabyte a region: the range is typed instead."""
+    dialog = ReadDialog([Region("Code", 0, 0x2000_0000, GENERIC)])
+    assert dialog.address.text() == "" and dialog.values() is None
 
 
 def test_numbers_are_taken_as_they_are_typed():

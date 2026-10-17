@@ -58,7 +58,7 @@ TARGET_TIP = (
 )
 FREQUENCY_TIP = (
     "How fast the probe clocks the debug port. The first choice leaves it to\n"
-    "what is under Through: pyOCD's is 1 MHz, which is safe and slow, and a\n"
+    "what is under Using: pyOCD's is 1 MHz, which is safe and slow, and a\n"
     "J-Link through J-Link Commander finds its own. The Event Log says the\n"
     "speed on connecting. Lower it if connecting is unreliable: a long cable,\n"
     "or a target running from a slow clock."
@@ -147,7 +147,7 @@ class ProbeBar(QToolBar):
         self.button.setToolTip(CONNECT_TIP)
 
         for label, widget in (
-            ("Through", self.backend),
+            ("Using", self.backend),
             ("Probe", self.probe),
             (None, self.refresh),
             ("Target", self.target),
