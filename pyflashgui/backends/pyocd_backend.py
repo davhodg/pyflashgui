@@ -14,6 +14,7 @@ are plugged in before it can be drawn.
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Sequence
 
 from pyflashgui.backends import pyocd_packs
@@ -81,6 +82,15 @@ def _said(doing: str, exc: Exception) -> BackendError:
     """A library's exception as a sentence about what was being attempted."""
     detail = str(exc).strip() or type(exc).__name__
     return BackendError(f"{doing} failed: {detail}")
+
+
+def speed_text(hertz: int | None) -> str:
+    """A debug clock as somebody would say it."""
+    if not hertz:
+        return ""
+    if hertz % 1_000_000 == 0:
+        return f"{hertz // 1_000_000} MHz"
+    return f"{hertz / 1_000_000:g} MHz" if hertz >= 1_000_000 else f"{hertz // 1000} kHz"
 
 
 class PyocdConnection(Connection):
@@ -188,6 +198,9 @@ class PyocdConnection(Connection):
 
 
 class PyocdBackend(Backend):
+    # pyOCD's own, whatever the probe could do: 1 MHz, chosen to work with
+    # a long or untidy cable, and slow for anything else.
+    default_speed = "Default (1 MHz)"
     name = "pyocd"
     label = "pyOCD"
 
@@ -290,9 +303,19 @@ class PyocdBackend(Backend):
             options["pack"] = packs
         if needs_one_packet_at_a_time(chosen.description, chosen.product_name):
             options["cmsis_dap.limit_packets"] = True
+        session = None
         try:
             session = Session(chosen, auto_open=False, options=options)
             session.open()
         except Exception as exc:
+            # Let go of the probe whatever got as far as opening it: left
+            # open, every later attempt fails on a probe that is in use, and
+            # only switching backend and back -- which drops this one -- let
+            # it go.
+            if session is not None:
+                with contextlib.suppress(Exception):
+                    session.close()
             raise _said(f"Connecting to {target}", exc) from exc
-        return PyocdConnection(session)
+        connection = PyocdConnection(session)
+        connection.speed = speed_text(session.options.get("frequency"))
+        return connection

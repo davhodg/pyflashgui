@@ -14,7 +14,7 @@ morning.
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import QComboBox, QCompleter, QLabel, QPushButton, QToolBar
 
 from pyflashgui import backends
@@ -32,7 +32,7 @@ INTERFACE_KEY = "probe.interface"
 #: The debug clock, in hertz, with None for whatever the probe chooses. Slow
 #: ones first: a long or untidy cable is the usual reason for needing one.
 FREQUENCIES = (
-    ("Probe's own", None),
+    ("Default", None),  # renamed per backend: see Backend.default_speed
     ("100 kHz", 100_000),
     ("400 kHz", 400_000),
     ("1 MHz", 1_000_000),
@@ -56,8 +56,11 @@ TARGET_TIP = (
     "One that is not here may be in a pack: Tools > pyOCD device packs."
 )
 FREQUENCY_TIP = (
-    "How fast the probe clocks the debug port. Lower it if connecting is\n"
-    "unreliable: a long cable, or a target running from a slow clock."
+    "How fast the probe clocks the debug port. The first choice leaves it to\n"
+    "what is under Through: pyOCD's is 1 MHz, which is safe and slow, and a\n"
+    "J-Link through J-Link Commander finds its own. The Event Log says the\n"
+    "speed on connecting. Lower it if connecting is unreliable: a long cable,\n"
+    "or a target running from a slow clock."
 )
 INTERFACE_TIP = (
     "How the probe is wired to the device's debug port. SWD is the two-wire\n"
@@ -68,6 +71,16 @@ CONNECT_TIP = (
     "Attach the probe to the target. The target is stopped while it is\n"
     "connected, and runs again when it is disconnected or reset."
 )
+
+
+class ProbeBox(QComboBox):
+    """The probe box, which says when it is about to open."""
+
+    opening = Signal()
+
+    def showPopup(self) -> None:
+        self.opening.emit()
+        super().showPopup()
 
 
 class ProbeBar(QToolBar):
@@ -87,12 +100,16 @@ class ProbeBar(QToolBar):
             self.backend.addItem(backends.get(name).label, name)
         self.backend.setAccessibleName("Backend")
 
-        self.probe = QComboBox()
+        self.probe = ProbeBox()
         self.probe.setToolTip(PROBE_TIP)
         self.probe.setAccessibleName("Probe")
         self.probe.setMinimumWidth(fonts.width_for(self.probe, "M" * 22))
-        self.refresh = QPushButton("Refresh")
-        self.refresh.setToolTip("Look again for the probes that are plugged in.")
+        self.refresh = QPushButton("Find probes")
+        self.refresh.setToolTip(
+            "Look again for the probes that are plugged in: for one plugged in\n"
+            "since pyflashgui started. Opening the list looks again by itself\n"
+            "when no probe was found."
+        )
 
         # Editable: there are hundreds of targets, and typing three letters
         # of one is quicker than scrolling to it.
@@ -145,6 +162,7 @@ class ProbeBar(QToolBar):
         self.backend.currentIndexChanged.connect(self._on_backend)
         self.probe.currentIndexChanged.connect(self._on_probe)
         self.refresh.clicked.connect(self.flasher.refresh_probes)
+        self.probe.opening.connect(self._on_probe_list_opening)
         self.target.currentTextChanged.connect(self._on_target)
         self.frequency.currentIndexChanged.connect(self._on_frequency)
         self.interface.currentIndexChanged.connect(self._on_interface)
@@ -199,8 +217,14 @@ class ProbeBar(QToolBar):
         return self.interface.currentText() or None
 
     def _show_interfaces(self) -> None:
-        """The interfaces the chosen backend can be asked for, or no box at all."""
-        offered = backends.get(self.backend.currentData()).interfaces
+        """The interfaces the chosen backend can be asked for, or no box at all.
+
+        And what leaving the speed to it comes to, which differs: pyOCD's is
+        a slow and safe 1 MHz, and a J-Link finds its own.
+        """
+        backend = backends.get(self.backend.currentData())
+        self.frequency.setItemText(0, backend.default_speed)
+        offered = backend.interfaces
         self._loading = True
         self.interface.clear()
         self.interface.addItems(offered)
@@ -248,6 +272,13 @@ class ProbeBar(QToolBar):
         self.ctx.settings.set(BACKEND_KEY, name)
         self._show_interfaces()
         self.flasher.set_backend(name)
+
+    def _on_probe_list_opening(self) -> None:
+        """Look again when there was nothing to choose. Not otherwise: the answer
+        takes a moment, and a list that changes under the mouse is worse than
+        one a button brings up to date."""
+        if not self.chosen_probe() and not self.flasher.busy:
+            self.flasher.refresh_probes()
 
     def _on_probe(self, _index: int) -> None:
         if not self._loading and self.chosen_probe():

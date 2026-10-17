@@ -244,7 +244,8 @@ class Flasher(QObject):
             self.connection, self.regions = result
             self.probe, self.target = probe, target
             self._regions_for = target
-            self.events.good(f"Connected to {target} through probe {probe}.")
+            at = f" at {self.connection.speed}" if self.connection.speed else ""
+            self.events.good(f"Connected to {target} through probe {probe}{at}.")
             self.connection_changed.emit(True)
             self.regions_changed.emit()
 

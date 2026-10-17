@@ -501,3 +501,25 @@ def test_the_place_for_memory_is_kept_while_no_memory_pane_is_in_it(window, tmp_
     window._close_memory(entry)
     wait_for(space.isVisible)
     assert "Memory" not in [a.text() for a in window.view_menu.actions()], "not a pane"
+
+
+def test_the_speed_box_says_what_the_default_comes_to_for_each_backend(window):
+    bar = window.probe_bar
+    assert bar.frequency.itemText(0) == "Default"
+    bar.backend.setCurrentIndex(bar.backend.findData("pyocd"))
+    assert bar.frequency.itemText(0) == "Default (1 MHz)"
+    bar.backend.setCurrentIndex(bar.backend.findData("simulated"))
+    idle(window)
+
+
+def test_find_probes_looks_again_and_an_empty_list_does_when_opened(window, monkeypatch):
+    bar = window.probe_bar
+    assert bar.refresh.text() == "Find probes"
+    asked = []
+    monkeypatch.setattr(window.flasher, "refresh_probes", lambda: asked.append(True))
+    bar.probe.opening.emit()
+    assert asked == [], "a list with probes in it is not looked at again on opening"
+    bar._show_probes([])
+    assert bar.probe.currentText() == probe_bar.NO_PROBES
+    bar.probe.opening.emit()
+    assert asked == [True]

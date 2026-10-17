@@ -508,6 +508,8 @@ class JLinkConnection(Connection):
 
 
 class JLinkBackend(Backend):
+    # Commander's -speed auto: the J-Link finds the fastest that works.
+    default_speed = "Default (auto)"
     name = "jlink"
     label = "J-Link Commander"
     interfaces = INTERFACES
@@ -601,4 +603,6 @@ class JLinkBackend(Backend):
         # With nothing to do but leave: a run that comes back clean has
         # opened the probe and found the device answering.
         run(arguments, [], QUICK_S, f"Connecting to {target}")
-        return JLinkConnection(arguments, target, regions)
+        connection = JLinkConnection(arguments, target, regions)
+        connection.speed = "the speed J-Link chooses" if speed == "auto" else f"{speed} kHz"
+        return connection

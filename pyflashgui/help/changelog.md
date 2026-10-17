@@ -16,8 +16,9 @@ since the last version, and comes out in the next one.
 - *File > Run script...* and *File > Recent scripts*, the last five run in the workspace.
 - *Tools > pyOCD device packs...*: find a device that is not in the list of targets, and
   install the CMSIS-Pack that describes it, for use through pyOCD, or add a `.pack` file
-  downloaded by hand for a computer with no internet. An installed copy of pyflashgui had
-  no way to add one.
+  downloaded by hand for a computer with no internet. Every device is listed, narrowed as a
+  name is typed, with the address its pack is downloaded from. An installed copy of
+  pyflashgui had no way to add one.
 - *File > Workspace*: a new workspace, the one in use saved under another name, switching
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
@@ -25,6 +26,10 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- The speed box's first choice is **Default**, with what that comes to: 1 MHz through pyOCD,
+  and auto through J-Link Commander. The Event Log says the speed on connecting.
+- **Refresh** beside the probe is **Find probes**, and opening the list of probes looks
+  again by itself when none was found.
 - The launchers notice a `.venv` whose Python has been uninstalled or replaced, and offer
   to make it again. On Windows, `.venv` is made from Python 3.14, 3.13 or 3.12 through
   the `py` launcher when one is installed, since every library has a ready-made download
@@ -43,6 +48,11 @@ since the last version, and comes out in the next one.
 ### Removed
 
 - The **Erase everything first** tick. **Erase...** erases all of the flash.
+
+### Fixed
+
+- A pyOCD connect that failed kept hold of the probe, so every later one failed too until
+  the backend was switched and back.
 
 ## [0.1.0] - 2026-10-11
 

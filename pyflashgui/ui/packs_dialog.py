@@ -3,9 +3,13 @@
 """Tools > pyOCD device packs: find a device, and install the pack that describes it.
 
 From the top down, in the order it is done. The list of every device there
-is a pack for is fetched, once; a part is looked up in it, as it is typed,
-since the list is on this computer by then; its pack is installed; and the
-device is chosen as the target. Below that are the packs already here.
+is a pack for is fetched, once, and shown whole; typing narrows it, which is
+instant since the list is on this computer by then; the pack a device is in
+is installed; and the device is chosen as the target. Below that are the
+packs already here.
+
+Each pack's address is shown with it: a computer that cannot reach the
+internet is given the file by hand, downloaded from there on one that can.
 
 The dialog only asks. ``PackManager`` does the work, on a thread of its own,
 so the dialog can be closed while a pack is still coming down: the Event
@@ -17,9 +21,11 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QTimer, Signal
+from PySide6.QtCore import QSortFilterProxyModel, Qt, Signal
+from PySide6.QtGui import QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -28,13 +34,14 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QProgressBar,
     QPushButton,
+    QTreeView,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from pyflashgui.backends.pyocd_packs import MOST_FOUND, Device, Pack
+from pyflashgui.backends.pyocd_packs import Device, Pack
 from pyflashgui.core.context import Context
 from pyflashgui.core.pack_manager import PackManager
 from pyflashgui.ui import folders, messages
@@ -51,16 +58,13 @@ NEVER_FETCHED = (
 )
 FETCH = "Fetch the list"
 UPDATE = "Update the list"
-#: How long after the last letter typed the search is made.
-TYPING_MS = 250
 NOTHING_FOUND = (
     "No device has that in its name. If it is a new one, update the list: it may have been "
     "added since."
 )
-FIND_TIP = (
-    "Any part of the device's part number, in any case. The search is of\n"
-    "the list on this computer, and is made as you type."
-)
+FIND_TIP = "Any part of the device's part number, in any case. The list narrows\nas you type."
+COPY_TIP = "Copy the address, to download the pack by hand: for a computer with no internet."
+DEVICE_COLUMNS = ["Device", "Maker", "Pack", "Version", "Installed"]
 UPDATE_TIP = (
     "Download the list of every device there is a pack for. It is a few\n"
     "megabytes and takes a little while. Needed once, and after that only\n"
@@ -69,9 +73,11 @@ UPDATE_TIP = (
 INSTALL_TIP = "Download the pack the selected device is in. Every device in it comes with it."
 USE_TIP = "Choose the selected device as the target, in the bar across the top of the window."
 ADD_FILE_TIP = (
-    "Add a pack downloaded by hand from its maker's website, as a .pack\n"
-    "file: for a computer that cannot reach the internet. A copy is kept,\n"
-    "so the file can be moved or deleted afterwards."
+    "Add a pack downloaded by hand, as a .pack file: for a computer that\n"
+    "cannot reach the internet. Where each pack is downloaded from is shown\n"
+    "under the list when one of its devices is selected; Copy address takes\n"
+    "it to another computer. A copy of the file is kept here, so it can be\n"
+    "moved or deleted afterwards."
 )
 PACK_FILES = "CMSIS-Pack (*.pack);;All files (*)"
 REMOVE_TIP = (
@@ -106,12 +112,7 @@ class PacksDialog(QDialog):
         self.ctx = ctx
         self.setWindowTitle("pyOCD device packs")
         self.manager = manager
-        self.resize(680, 560)
-        #: Typing is not searching until it stops for a moment.
-        self._typing = QTimer(self)
-        self._typing.setSingleShot(True)
-        self._typing.setInterval(TYPING_MS)
-        self._typing.timeout.connect(self.find)
+        self.resize(860, 640)
         self._never_fetched = True
         #: Whether there is anything to search: the list, or a pack added
         #: from a file, which needs no list.
@@ -126,13 +127,29 @@ class PacksDialog(QDialog):
         self.text.setAccessibleName("Device")
         self.text.setClearButtonEnabled(True)
 
-        self.devices = QTreeWidget()
-        self.devices.setHeaderLabels(["Device", "Maker", "Pack", "Version", "Installed"])
+        #: Every device, whatever is typed; the view shows what the filter lets
+        #: through. Narrowing thousands of rows is a filter's job, not a
+        #: rebuild's.
+        self.model = QStandardItemModel(0, len(DEVICE_COLUMNS), self)
+        self.model.setHorizontalHeaderLabels(DEVICE_COLUMNS)
+        self.shown = QSortFilterProxyModel(self)
+        self.shown.setSourceModel(self.model)
+        self.shown.setFilterKeyColumn(0)
+        self.shown.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        self.devices = QTreeView()
+        self.devices.setModel(self.shown)
         self.devices.setRootIsDecorated(False)
+        self.devices.setUniformRowHeights(True)  # thousands of rows, all one line
         self.devices.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.devices.setAccessibleName("Devices found")
+        self.devices.setAccessibleName("Devices")
         self.result = QLabel()
         self.result.setWordWrap(True)
+        #: Where the selected device's pack comes from, to be copied.
+        self.address = QLabel()
+        self.address.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.address.setWordWrap(True)
+        self.copy_button = QPushButton("Copy address")
+        self.copy_button.setToolTip(COPY_TIP)
 
         self.install_button = QPushButton("Install pack")
         self.install_button.setToolTip(INSTALL_TIP)
@@ -172,9 +189,13 @@ class PacksDialog(QDialog):
             self.remove_button,
             self.add_file_button,
             self.update_button,
+            self.copy_button,
         ):
             button.setAutoDefault(False)
 
+        address_row = QHBoxLayout()
+        address_row.addWidget(self.address, 1)
+        address_row.addWidget(self.copy_button)
         found_row = QHBoxLayout()
         found_row.addWidget(self.install_button)
         found_row.addWidget(self.use_button)
@@ -193,6 +214,7 @@ class PacksDialog(QDialog):
         layout.addWidget(self.text)
         layout.addWidget(self.devices, 3)
         layout.addWidget(self.result)
+        layout.addLayout(address_row)
         layout.addLayout(found_row)
         layout.addWidget(QLabel("Installed on this computer:"))
         layout.addWidget(self.packs, 2)
@@ -201,15 +223,15 @@ class PacksDialog(QDialog):
         layout.addWidget(self.bar)
         layout.addWidget(closer)
 
-        self.text.textChanged.connect(lambda _text: self._typing.start())
-        self.text.returnPressed.connect(self.find)
+        self.text.textChanged.connect(lambda _text: self.find())
+        self.copy_button.clicked.connect(self._copy_address)
         self.install_button.clicked.connect(self._install)
         self.use_button.clicked.connect(self._use)
         self.remove_button.clicked.connect(self._remove)
         self.add_file_button.clicked.connect(self._add_file)
         self.update_button.clicked.connect(manager.fetch_list)
-        self.devices.itemSelectionChanged.connect(self._enable)
-        self.devices.itemDoubleClicked.connect(lambda *_: self._use())
+        self.devices.selectionModel().currentChanged.connect(lambda *_: self._on_device())
+        self.devices.doubleClicked.connect(lambda *_: self._use())
         self.packs.itemSelectionChanged.connect(self._enable)
         manager.found.connect(self._show_devices)
         manager.not_found.connect(self._not_found)
@@ -223,8 +245,15 @@ class PacksDialog(QDialog):
 
     # --- what is selected ------------------------------------------------------------
     def selected_device(self) -> Device | None:
-        item = self.devices.currentItem()
-        return None if item is None else item.data(0, Qt.UserRole)
+        index = self.devices.currentIndex()
+        if not index.isValid():
+            return None
+        row = self.shown.mapToSource(index).row()
+        return self.model.item(row, 0).data(Qt.UserRole)
+
+    def shown_names(self) -> list[str]:
+        """The devices the list shows now, top to bottom."""
+        return [self.shown.index(row, 0).data() for row in range(self.shown.rowCount())]
 
     def selected_pack(self) -> Pack | None:
         item = self.packs.currentItem()
@@ -232,54 +261,84 @@ class PacksDialog(QDialog):
 
     # --- finding ---------------------------------------------------------------------
     def find(self) -> None:
-        """Search the list for what is typed. Nothing typed is nothing found."""
-        self._typing.stop()
-        if not self._searchable:
-            return
-        if not self.text.text().strip():
-            self.devices.clear()
+        """Narrow the list to what is typed. Nothing typed is every device."""
+        self.shown.setFilterFixedString("".join(self.text.text().split()))
+        if self.devices.currentIndex().isValid() is False and self.shown.rowCount():
+            self.devices.setCurrentIndex(self.shown.index(0, 0))
+        self._say_how_many()
+        self._on_device()
+
+    def _say_how_many(self) -> None:
+        total, shown = self.model.rowCount(), self.shown.rowCount()
+        if not total:
             self.result.setText("")
-            self._enable()
-            return
-        self.manager.find(self.text.text())
+        elif not shown:
+            self.result.setText(NOTHING_FOUND)
+        elif shown == total:
+            self.result.setText(f"{total} devices.")
+        else:
+            self.result.setText(f"{shown} of {total} devices.")
 
     def _show_devices(self, devices: list[Device]) -> None:
+        """Every device, in the model the filter narrows."""
         kept = self.selected_device()
-        self.devices.clear()
-        for device in devices[:MOST_FOUND]:
-            item = QTreeWidgetItem(
-                [
+        self.devices.setUpdatesEnabled(False)
+        self.model.removeRows(0, self.model.rowCount())
+        for device in devices:
+            row = [
+                QStandardItem(text)
+                for text in (
                     device.name,
                     device.vendor,
                     device.pack.label,
                     device.pack.version,
                     "Yes" if device.installed else "",
-                ]
-            )
-            item.setData(0, Qt.UserRole, device)
-            self.devices.addTopLevelItem(item)
-            if kept is not None and device.name == kept.name:
-                self.devices.setCurrentItem(item)
-        for column in range(self.devices.columnCount()):
-            self.devices.resizeColumnToContents(column)
-            self.devices.setColumnWidth(column, self.devices.columnWidth(column) + GAP)
-        if self.devices.currentItem() is None and devices:
-            self.devices.setCurrentItem(self.devices.topLevelItem(0))
-        if not devices:
-            self.result.setText(NOTHING_FOUND)
-        elif len(devices) > MOST_FOUND:
-            self.result.setText(
-                f"{len(devices)} devices have that in their name; the first {MOST_FOUND} are "
-                "shown. More of the name finds fewer."
-            )
-        else:
-            self.result.setText(f"{len(devices)} found." if len(devices) > 1 else "1 found.")
-        self._enable()
+                )
+            ]
+            for item in row:
+                item.setEditable(False)
+            row[0].setData(device, Qt.UserRole)
+            self.model.appendRow(row)
+        self.devices.setUpdatesEnabled(True)
+        # Measured from the longest text in each column rather than by the
+        # view, which would measure every one of thousands of rows to find it.
+        metrics = self.devices.fontMetrics()
+        header = self.devices.header()
+        for column, title in enumerate(DEVICE_COLUMNS):
+            texts = [self.model.item(row, column).text() for row in range(self.model.rowCount())]
+            longest = max([title, *texts], key=len)
+            width = max(metrics.horizontalAdvance(longest), header.sectionSizeHint(column))
+            self.devices.setColumnWidth(column, width + GAP)
+        # The one selected before, if it is still shown.
+        if kept is not None:
+            for row in range(self.shown.rowCount()):
+                if self.shown.index(row, 0).data() == kept.name:
+                    self.devices.setCurrentIndex(self.shown.index(row, 0))
+                    break
+        self.find()
 
     def _not_found(self, why: str) -> None:
-        self.devices.clear()
+        self.model.removeRows(0, self.model.rowCount())
         self.result.setText(why)
+        self._on_device()
+
+    def _on_device(self) -> None:
+        """Say where the selected device's pack comes from."""
+        device = self.selected_device()
+        if device is None:
+            self.address.setText("")
+        elif device.pack.file:
+            self.address.setText(f"Added from a file, kept as {device.pack.file}")
+        elif device.pack.address:
+            self.address.setText(f"Downloaded from {device.pack.address}")
+        else:
+            self.address.setText("The list does not say where this pack is downloaded from.")
         self._enable()
+
+    def _copy_address(self) -> None:
+        if (device := self.selected_device()) is not None and device.pack.address:
+            QApplication.clipboard().setText(device.pack.address)
+            self.status.setText(f"Copied {device.pack.address}")
 
     # --- what is installed -----------------------------------------------------------
     def _show_packs(self, packs: list[Pack], fetched: datetime | None) -> None:
@@ -289,28 +348,30 @@ class PacksDialog(QDialog):
         self.packs.clear()
         for pack in packs:
             item = QTreeWidgetItem(
-                [pack.label, pack.version, "a file" if pack.file else "download"]
+                [pack.label, pack.version, "A file added by hand" if pack.file else pack.address]
             )
+            item.setToolTip(2, pack.file or pack.address)
             item.setData(0, Qt.UserRole, pack)
             self.packs.addTopLevelItem(item)
-        self.packs.resizeColumnToContents(0)
-        self.packs.setColumnWidth(0, self.packs.columnWidth(0) + GAP)
+        for column in (0, 1):
+            self.packs.resizeColumnToContents(column)
+            self.packs.setColumnWidth(column, self.packs.columnWidth(column) + GAP)
         self._enable()
-        # What was found says which of it is installed, and that has changed;
-        # and a list that has just arrived is one to search.
-        if not self.manager.busy:
-            self.find()
+        # Every device again: which are installed has changed, and a list
+        # that has just arrived is one to show.
+        if not self.manager.busy and self._searchable:
+            self.manager.find("")
 
     def _install(self) -> None:
         if (device := self.selected_device()) is None:
             return
         pack = device.pack
-        where = f" from {pack.url}" if pack.url else ""
+        where = f" from {pack.address}" if pack.address else ""
         asked = messages.question(
             self,
             f"Download {pack}?",
             f"It is downloaded{where}, and kept on this computer for pyOCD to use. A pack "
-            "holds every device of its family, and can be tens of megabytes.",
+            "holds every device of its family, and can be over a hundred megabytes.",
             messages.Button.Yes | messages.Button.No,
             messages.Button.Yes,
         )
@@ -366,3 +427,5 @@ class PacksDialog(QDialog):
         self.update_button.setText(FETCH if self._never_fetched else UPDATE)
         # Nothing to search until there is a list, or a pack from a file.
         self.text.setEnabled(self._searchable)
+        device = self.selected_device()
+        self.copy_button.setEnabled(device is not None and bool(device.pack.address))

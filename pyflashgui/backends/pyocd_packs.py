@@ -41,9 +41,6 @@ from pyflashgui.core import paths
 #: there are, or None while that is not known yet.
 Tick = Callable[[int, int | None], None]
 
-#: More matches than this is a name too short to be looking for one device.
-MOST_FOUND = 500
-
 NO_LIST = (
     "The list of devices has not been fetched yet. Update the list first: it is what says "
     "which pack a device is in."
@@ -70,6 +67,18 @@ class Pack:
     def label(self) -> str:
         return f"{self.vendor}.{self.name}"
 
+    @property
+    def file_name(self) -> str:
+        """What the pack file is called, wherever it is."""
+        return f"{self.vendor}.{self.name}.{self.version}.pack"
+
+    @property
+    def address(self) -> str:
+        """Where the pack file can be downloaded, by hand as well: its maker's
+        folder, as the list gives it, and the file's name. Empty when the list
+        does not say."""
+        return f"{self.url.rstrip('/')}/{self.file_name}" if self.url else ""
+
     def __str__(self) -> str:
         return f"{self.label} {self.version}"
 
@@ -95,6 +104,25 @@ def open_cache(tick: Tick | None = None) -> Any:
                 tick(current, total or None)
 
     return Cache(tick is None, False)
+
+
+#: The list of devices as last read, and the file it was read from and when
+#: that was written: it is twenty megabytes of JSON, and the dialog asks for
+#: it several times over each time it opens.
+_read: tuple[str, float, dict] | None = None
+
+
+def _index(cache: Any) -> dict:
+    """The cache's list of devices, read again only when its file has changed."""
+    global _read
+    path = str(cache.index_path)
+    try:
+        written = Path(path).stat().st_mtime
+    except OSError:
+        return {}
+    if _read is None or _read[:2] != (path, written):
+        _read = (path, written, cache.index)
+    return _read[2]
 
 
 def _reference(pack: Pack) -> Any:
@@ -147,12 +175,10 @@ def fetch_list(tick: Tick | None = None) -> int:
 
 
 def find(text: str) -> list[Device]:
-    """The devices whose part number has ``text`` in it, in any case."""
+    """The devices whose part number has ``text`` in it, in any case: all of them for none."""
     wanted = "".join(text.split()).lower()
-    if not wanted:
-        return []
     cache = open_cache()
-    index = cache.index
+    index = _index(cache)
     from_files = [d for d in file_devices() if wanted in d.name.lower()]
     if not index and not file_packs():
         raise PackError(NO_LIST)
@@ -176,7 +202,7 @@ def find(text: str) -> list[Device]:
 def installed() -> list[Pack]:
     """The packs that have been downloaded."""
     cache = open_cache()
-    packs = {_pack_of(entry) for entry in cache.index.values()}
+    packs = {_pack_of(entry) for entry in _index(cache).values()}
     downloaded = [pack for pack in packs if _file(cache, pack).is_file()]
     return sorted(downloaded + file_packs(), key=lambda pack: pack.label.lower())
 
@@ -190,7 +216,7 @@ def install(pack: Pack, tick: Tick | None = None) -> None:
         raise _said(f"Downloading {pack}", exc) from exc
     # A download that did not arrive is not always an error where it is made.
     if not _file(cache, pack).is_file():
-        where = f" from {pack.url}" if pack.url else ""
+        where = f" from {pack.address}" if pack.address else ""
         raise PackError(
             f"{pack} was not downloaded{where}. Check that this computer can reach the "
             "internet; if the pack has since been replaced by a newer one, update the list."

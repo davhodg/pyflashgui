@@ -258,3 +258,46 @@ def test_an_xds110_is_asked_for_one_reply_at_a_time():
     assert needs_one_packet_at_a_time("Texas Instruments XDS110 (03.00.00.25)", None)
     assert needs_one_packet_at_a_time(None, "XDS110 with CMSIS-DAP")
     assert not needs_one_packet_at_a_time("Raspberry Pi Debug Probe (CMSIS-DAP)", "Debug Probe")
+
+
+def test_a_pyocd_connect_that_fails_lets_go_of_the_probe(monkeypatch):
+    """Reported: after one failed connect every later one failed, until switching
+    backend and back: the session that failed to open still held the probe."""
+    from pyocd.core import helpers, session
+
+    class Probe:
+        unique_id = "PROBE1"
+        description = "Some probe"
+        product_name = "Some probe"
+
+    closed = []
+
+    class Session:
+        def __init__(self, probe, auto_open=False, options=None):
+            self.options = options or {}
+
+        def open(self):
+            raise RuntimeError("no answer from the target")
+
+        def close(self):
+            closed.append(True)
+
+    monkeypatch.setattr(helpers.ConnectHelper, "get_all_connected_probes", lambda **_kw: [Probe()])
+    monkeypatch.setattr(session, "Session", Session)
+    with pytest.raises(BackendError, match="no answer from the target"):
+        backends.get("pyocd").connect("PROBE1", "cortex_m")
+    assert closed == [True]
+
+
+def test_a_debug_clock_is_said_as_somebody_would_say_it():
+    from pyflashgui.backends.pyocd_backend import speed_text
+
+    assert speed_text(1_000_000) == "1 MHz"
+    assert speed_text(4_000_000) == "4 MHz"
+    assert speed_text(400_000) == "400 kHz"
+    assert speed_text(None) == ""
+
+
+def test_each_backend_says_what_leaving_the_speed_to_it_comes_to():
+    assert backends.get("pyocd").default_speed == "Default (1 MHz)"
+    assert backends.get("jlink").default_speed == "Default (auto)"

@@ -7,9 +7,9 @@ The bar across the top of the window says what pyflashgui is connected through a
 | | |
 |---|---|
 | **Through** | What reaches the probe. *pyOCD* works with many probes and Cortex-M devices. *J-Link Commander* works with a J-Link and every device SEGGER's software knows. *Simulated* is a probe and a target that exist only in memory, for trying pyflashgui with no hardware. |
-| **Probe** | The debug probe, by its description and serial number. **Refresh** looks again for what is plugged in. |
+| **Probe** | The debug probe, by its description and serial number. **Find probes** looks again for what is plugged in, and opening the list does too when no probe was found. |
 | **Target** | The device on the end of the probe. Type any part of its name to find it. |
-| **Speed** | How fast the probe clocks the debug port. *Probe's own* leaves it to the probe. |
+| **Speed** | How fast the probe clocks the debug port. *Default* leaves it to pyOCD, which uses 1 MHz, or to J-Link Commander, which lets the J-Link choose. The [Event Log](manual.md) says the speed on connecting. |
 | **Interface** | With J-Link Commander only: how the probe is wired to the device. |
 | **Connect** | Attaches the probe to the target, and becomes **Disconnect**. |
 
@@ -33,18 +33,20 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 
 *Tools > pyOCD device packs...* installs one, from the internet or from a file:
 
-1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once.
-2. Type any part of the device's part number. The devices with that in their name are listed as you type.
-3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be tens of megabytes.
+1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once. Every device is listed.
+2. Type any part of the device's part number. The list narrows to the devices with that in their name as you type.
+3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be over a hundred megabytes.
 4. Press **Use as target**, or close the dialog and choose the device in the bar.
 
 The dialog can be closed while a pack is downloading: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
+
+Under the list is where the selected device's pack is downloaded from. The *From* column of the packs installed says the same for each of them.
 
 Once fetched, the button is **Update the list**: it downloads the list again, for a device newer than the list. **Remove...** deletes a pack from this computer, and its devices leave the list of targets.
 
 Packs are kept in pyOCD's own folder for them, not in a workspace, so a pack installed here is also there for pyOCD's command line, and one installed with `pyocd pack install` is there for pyflashgui. Only pyOCD uses them: J-Link Commander has SEGGER's own list of devices.
 
-**For a computer with no internet**, download the `.pack` file from the maker's website on one that has it, and press **Add from file...**. No list of devices is needed: the pack's devices are in the list of targets, and can be searched for here, straight away. A copy is kept in pyflashgui's own folder, so the file can be moved or deleted afterwards, and adding another version of the same pack replaces the one kept. The *From* column says which packs came from a file; **Remove...** deletes the copy.
+**For a computer with no internet**, find the device here on one that has it, and press **Copy address**: that is the address of its `.pack` file, on its maker's website. Download the file from there, take it across, and press **Add from file...** on the computer without internet. No list of devices is needed: the pack's devices are in the list of targets, and can be searched for here, straight away. A copy is kept in pyflashgui's own folder, so the file can be moved or deleted afterwards, and adding another version of the same pack replaces the one kept. The *From* column says which packs came from a file; **Remove...** deletes the copy.
 
 ## J-Link Commander
 

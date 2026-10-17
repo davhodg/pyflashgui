@@ -157,7 +157,14 @@ def test_a_device_is_found_by_any_part_of_its_name_in_any_case(fetched):
     assert [d.name for d in found] == ["XMC4500-F100x1024", "XMC4500-F144x768"]
     assert found[0].vendor == "Infineon" and found[0].pack == XMC and not found[0].installed
     assert [d.name for d in pyocd_packs.find("F407")] == ["STM32F407VG"]
-    assert pyocd_packs.find("nrf52") == [] and pyocd_packs.find("  ") == []
+    assert pyocd_packs.find("nrf52") == []
+    assert len(pyocd_packs.find("  ")) == 3, "nothing typed is every device"
+
+
+def test_a_pack_says_where_it_is_downloaded_from():
+    assert XMC.file_name == "Infineon.XMC4000_DFP.2.14.0.pack"
+    assert XMC.address == "https://example.invalid/xmc/Infineon.XMC4000_DFP.2.14.0.pack"
+    assert Pack("Acme", "Widget_DFP", "1.0.0").address == "", "the list does not say"
 
 
 def test_installing_a_pack_installs_every_device_in_it(fetched):
@@ -252,10 +259,10 @@ def names(tree) -> list[str]:
     return [tree.topLevelItem(i).text(0) for i in range(tree.topLevelItemCount())]
 
 
-def test_the_list_is_fetched_first_and_then_searched_as_it_is_typed(dialog, manager, store):
+def test_the_whole_list_is_shown_once_fetched_and_narrowed_as_it_is_typed(dialog, manager, store):
     assert dialog.fetched.text() == packs_dialog.NEVER_FETCHED
     assert dialog.update_button.text() == "Fetch the list"
-    assert not dialog.text.isEnabled(), "nothing to search yet"
+    assert not dialog.text.isEnabled() and dialog.shown_names() == [], "nothing to show yet"
 
     dialog.update_button.click()
     assert manager.busy and not dialog.update_button.isEnabled()
@@ -263,29 +270,36 @@ def test_the_list_is_fetched_first_and_then_searched_as_it_is_typed(dialog, mana
     assert dialog.fetched.text().startswith("The list of devices was fetched on ")
     assert dialog.update_button.text() == "Update the list" and dialog.text.isEnabled()
     assert store.downloaded == [], "the list, and no pack"
+    assert dialog.shown_names() == ["STM32F407VG", "XMC4500-F100x1024", "XMC4500-F144x768"]
+    assert dialog.result.text() == "3 devices."
 
-    dialog.text.setText("xmc4500")
-    assert names(dialog.devices) == [], "not on every letter"
-    wait_for(lambda: dialog.devices.topLevelItemCount() == 2)
-    assert names(dialog.devices) == ["XMC4500-F100x1024", "XMC4500-F144x768"]
-    assert dialog.result.text() == "2 found."
+    dialog.text.setText("xmc 4500")
+    assert dialog.shown_names() == ["XMC4500-F100x1024", "XMC4500-F144x768"], "at once"
+    assert dialog.result.text() == "2 of 3 devices."
+    assert dialog.selected_device().name == "XMC4500-F100x1024"
     assert dialog.install_button.isEnabled() and not dialog.use_button.isEnabled()
 
     dialog.text.setText("")
-    dialog.find()
-    assert names(dialog.devices) == [] and dialog.result.text() == ""
-    assert not dialog.install_button.isEnabled()
+    assert dialog.shown_names() == ["STM32F407VG", "XMC4500-F100x1024", "XMC4500-F144x768"]
 
 
-def test_what_was_typed_while_the_list_was_coming_is_searched_when_it_arrives(
-    dialog, manager, store
-):
+def test_the_selected_devices_pack_address_is_shown_and_copied(dialog, manager, fetched):
+    from PySide6.QtWidgets import QApplication
+
+    manager.refresh()
+    dialog.text.setText("xmc4500")
+    assert dialog.address.text() == f"Downloaded from {XMC.address}"
+    dialog.copy_button.click()
+    assert QApplication.clipboard().text() == XMC.address
+
+
+def test_a_list_updated_while_something_is_typed_stays_narrowed(dialog, manager, store):
     pyocd_packs.fetch_list()
     manager.refresh()
     dialog.text.setText("f407")
     manager.fetch_list()  # Update the list
     wait_for(lambda: not manager.busy)
-    assert names(dialog.devices) == ["STM32F407VG"]
+    assert dialog.shown_names() == ["STM32F407VG"]
 
 
 def test_workspace_has_open_folder_and_tools_does_not(app, store, tmp_path, monkeypatch):
@@ -311,8 +325,7 @@ def test_workspace_has_open_folder_and_tools_does_not(app, store, tmp_path, monk
 def test_a_name_no_device_has_says_to_update_the_list(dialog, fetched):
     dialog.manager.refresh()
     dialog.text.setText("nrf52")
-    dialog.find()
-    assert names(dialog.devices) == [] and dialog.result.text() == packs_dialog.NOTHING_FOUND
+    assert dialog.shown_names() == [] and dialog.result.text() == packs_dialog.NOTHING_FOUND
     assert not dialog.install_button.isEnabled()
 
 
@@ -321,7 +334,6 @@ def test_installing_asks_first_and_then_the_device_can_be_the_target(
 ):
     manager.refresh()
     dialog.text.setText("xmc4500")
-    dialog.find()
 
     asked = answer(monkeypatch, QMessageBox.No)
     dialog.install_button.click()
@@ -332,7 +344,13 @@ def test_installing_asks_first_and_then_the_device_can_be_the_target(
     wait_for(lambda: not manager.busy)
 
     assert names(dialog.packs) == ["Infineon.XMC4000_DFP"]
-    assert dialog.devices.topLevelItem(0).text(4) == "Yes"
+    assert dialog.shown.index(0, 4).data() == "Yes"
+    assert dialog.selected_device().name == "XMC4500-F100x1024", "still the one selected"
+    assert [dialog.packs.topLevelItem(0).text(c) for c in range(3)] == [
+        "Infineon.XMC4000_DFP",
+        "2.14.0",
+        XMC.address,
+    ]
     assert not dialog.install_button.isEnabled() and dialog.use_button.isEnabled()
 
     chosen = []
@@ -489,13 +507,15 @@ def test_the_dialog_adds_a_file_and_can_search_it_with_no_list(
     assert [dialog.packs.topLevelItem(0).text(c) for c in range(3)] == [
         "Acme.Widget_DFP",
         "1.2.3",
-        "a file",
+        "A file added by hand",
     ]
     assert said(manager, GOOD) == [
         "Added Acme.Widget_DFP 1.2.3 from downloaded.pack: 2 devices, now in the list of targets."
     ]
     assert dialog.text.isEnabled(), "a pack from a file needs no list to be searched"
+    assert dialog.shown_names() == ["WIDGET100", "WIDGET200"], "listed whole, with no list"
     dialog.text.setText("widget1")
-    dialog.find()
-    assert names(dialog.devices) == ["WIDGET100"]
+    assert dialog.shown_names() == ["WIDGET100"]
+    assert dialog.address.text().startswith("Added from a file, kept as ")
+    assert not dialog.copy_button.isEnabled(), "there is no address to copy"
     assert dialog.use_button.isEnabled() and not dialog.install_button.isEnabled()

@@ -114,6 +114,10 @@ class Connection(ABC):
     a probe left attached is one nothing else can use.
     """
 
+    #: The debug clock it runs at, said in the Event Log on connecting:
+    #: "4 MHz", or how the backend chooses it. Empty where it cannot say.
+    speed: str = ""
+
     @abstractmethod
     def regions(self) -> list[Region]:
         """The target's memory, as it turned out to be once connected."""
@@ -243,6 +247,9 @@ class Backend(ABC):
     #: Where it is not, a file outside them is worth a warning and is
     #: not refused: the backend may know of memory that it does not list.
     map_is_complete: bool = True
+    #: What the speed box offers first, for leaving the speed to the
+    #: backend: said with what that comes to, since it is not always fast.
+    default_speed: str = "Default"
     #: Whether a read can be made without the backend first setting the
     #: device up in its own way. See ``Connection.read_range``.
     can_skip_setup: bool = False
