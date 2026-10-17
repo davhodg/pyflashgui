@@ -384,7 +384,7 @@ def test_verify_erase_and_reset_from_their_buttons(window, tmp_path, monkeypatch
     idle(window)
     files.verify_only.trigger()
     idle(window)
-    assert said(window, GOOD)[-1] == "Verified: 4 bytes match the files."
+    assert said(window, GOOD)[-1].startswith("Verified: 4 bytes match the files, in ")
     files.erase_button.click()
     idle(window)
     board = backends.get("simulated").board(PROBE)

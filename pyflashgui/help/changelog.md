@@ -36,7 +36,8 @@ since the last version, and comes out in the next one.
   *Verifying...* -- even where there is no figure for how far along it is, and each stage
   starts the bar afresh rather than leaving the last one's 100%. Programming through
   J-Link Commander says in the Event Log how long J-Link took to erase, and to program and
-  check, or that the flash held the image already.
+  check, or that the flash held the image already. Reading and verifying say how long
+  they took, as erasing and programming do.
 - The Python Console takes several lines at once: Shift+Enter for another, or several
   pasted, and Enter runs them together.
 - **Reset** has the ways a target can be restarted under an arrow: the usual way, by

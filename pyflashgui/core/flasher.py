@@ -420,13 +420,20 @@ class Flasher(QObject):
             self.events.warning("There is nothing to verify: no file is ticked.")
             return False
 
+        started = time.monotonic()
+
         def work() -> Verification:
             return connection.verify(
                 segments, progress=self._progress("Verifying"), cancelled=self._cancel.is_set
             )
 
         def done(result: Verification) -> bool:
-            (self.events.good if result.ok else self.events.error)(verification_text(result))
+            took = f" in {time.monotonic() - started:.1f} s"
+            said = verification_text(result)
+            if result.ok:
+                self.events.good(f"{said[:-1]},{took}.")
+            else:
+                self.events.error(said)
             if then is not None:
                 then(result)
             return result.ok
@@ -451,6 +458,7 @@ class Flasher(QObject):
         if (connection := self._connection("Reading")) is None:
             return False
         target = self.target
+        started = time.monotonic()
 
         def work() -> bytes:
             return connection.read_range(
@@ -461,7 +469,10 @@ class Flasher(QObject):
             if then is not None:
                 then(data)
                 return
-            self.events.good(f"Read {size_text(len(data))} at {address:08X} of {target}.")
+            took = time.monotonic() - started
+            self.events.good(
+                f"Read {size_text(len(data))} at {address:08X} of {target} in {took:.1f} s."
+            )
             self.memory_read.emit(address, data, target)
 
         if not self._run("Reading", work, done):

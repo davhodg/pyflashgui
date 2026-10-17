@@ -135,7 +135,10 @@ def test_a_read_goes_into_memory_and_is_announced(flasher):
     assert flasher.busy
     finish(flasher)
     assert flasher.read == [(FLASH_AT, data, "sim_single")]
-    assert flasher.said[-1] == ("good", "Read 4.9 KiB at 08000000 of sim_single.")
+    level, said = flasher.said[-1]
+    assert level == "good"
+    assert said.startswith("Read 4.9 KiB at 08000000 of sim_single in ")
+    assert said.endswith(" s."), "with how long it took"
 
 
 def test_memory_the_target_does_not_have_is_an_error_and_nothing_is_announced(flasher):
@@ -627,7 +630,10 @@ def test_reading_saves_no_file_until_save_is_pressed(window, monkeypatch, tmp_pa
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: asked.append(a) or ("", ""))
     read(window, monkeypatch, "08000000", "100")
     assert asked == [], "a read made to look costs no file, and asks for none"
-    assert ("good", "Read 256 bytes at 08000000 of sim_single.") in window.said
+    assert any(
+        level == "good" and said.startswith("Read 256 bytes at 08000000 of sim_single in ")
+        for level, said in window.said
+    )
 
 
 def test_the_dialog_opens_on_the_whole_of_the_flash(window, monkeypatch):

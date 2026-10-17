@@ -258,7 +258,8 @@ def test_verify_alone_compares_and_changes_nothing(connected, said):
     finish(connected)
     connected.verify([image("app.bin", FLASH_AT, b"abcd")])
     assert finish(connected) == [("Verifying", True)]
-    assert said.at(GOOD)[-1] == "Verified: 4 bytes match the files."
+    assert said.at(GOOD)[-1].startswith("Verified: 4 bytes match the files, in ")
+    assert said.at(GOOD)[-1].endswith(" s."), "with how long it took"
 
     connected.verify([image("other.bin", FLASH_AT, b"abXd")])
     assert finish(connected) == [("Verifying", False)]
