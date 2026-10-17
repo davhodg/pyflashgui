@@ -37,7 +37,14 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from pyflashgui.backends.base import ERASE_SECTORS
+from pyflashgui.backends.base import (
+    ERASE_NONE,
+    ERASE_SECTORS,
+    RESET_CORE,
+    RESET_DEFAULT,
+    RESET_PIN,
+    RESET_SYSTEM,
+)
 from pyflashgui.core import images
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
@@ -62,6 +69,31 @@ ADDRESS_TIP = (
 #: How long after a file changes it is read again. A linker writes a file in
 #: pieces, and reading it between two of them reads half a file.
 SETTLE_MS = 300
+
+
+#: Each way Reset can restart a target, as the arrow beside it offers them.
+RESETS = {
+    RESET_DEFAULT: (
+        "Reset the usual way",
+        "The way the backend resets this target unless told otherwise: for\n"
+        "most, the processor asking for the whole device to be reset.",
+    ),
+    RESET_PIN: (
+        "Reset by the reset pin",
+        "Pull the device's reset line, as its reset button does. For a device\n"
+        "that does not start the usual way. Needs the probe wired to the reset\n"
+        "pin: some, the Raspberry Pi Debug Probe among them, are not.",
+    ),
+    RESET_SYSTEM: (
+        "Reset by software",
+        "The processor asks for the whole device to be reset (SYSRESETREQ).",
+    ),
+    RESET_CORE: (
+        "Restart the processor only",
+        "Restart the processor alone, leaving the rest of the device as it is\n"
+        "and passing over any start-up code of the chip's own.",
+    ),
+}
 
 
 @dataclass(eq=False)
@@ -244,16 +276,27 @@ class FilesView(QWidget):
         #: enough that reading it all back is not worth the wait.
         self.program_button = SplitButton(
             "Program and verify",
-            "Write the ticked files and reads to the target, read the flash back\n"
-            "to check it holds what was written, and restart the target so that\n"
-            "what was written runs. Only the sectors written to are erased.",
+            "Erase the sectors the ticked files and reads write to, write them, and\n"
+            "read the flash back to check it holds what was written. The rest of the\n"
+            "flash is kept. The target is left stopped: Reset starts it.",
             self.program,
         )
         self.program_only = self.program_button.add(
             "Program",
-            "Write and restart the target without reading the flash back to\n"
-            "check it. Quicker for a large image; Verify, below, can be chosen after.",
+            "Erase the sectors written to and write, without reading the flash\n"
+            "back to check it. Quicker for a large image; Verify, below, can be\n"
+            "chosen after.",
             lambda: self.program(verify=False),
+        )
+        #: For flash erased already, with Erase...: erasing it again is time
+        #: spent for nothing. Not every backend can leave erasing out.
+        self.program_unerased = self.program_button.add(
+            "Program without erasing",
+            "Write, erasing nothing first: for flash that\n"
+            "Erase... has cleared already. Flash can only be written where it is\n"
+            "blank -- written over anything else it holds neither what was there\n"
+            "nor what was written -- so Verify, below, after it says whether it took.",
+            lambda: self.program(verify=False, erase=ERASE_NONE),
         )
         #: The second half of the button on its own: for a target programmed
         #: some other time, or by something else.
@@ -268,9 +311,15 @@ class FilesView(QWidget):
             "Erase the target's flash: all of it, some of its regions, or a range."
         )
         self.erase_button.clicked.connect(self.erase)
-        self.reset_button = QPushButton("Reset")
-        self.reset_button.setToolTip("Restart the target.")
-        self.reset_button.clicked.connect(self.flasher.reset)
+        #: Pressed, the way chosen last for this target, which is remembered:
+        #: a device that restarts properly only one way is reset that way.
+        self.reset_button = SplitButton("Reset", "", self.reset)
+        self.reset_ways = {
+            kind: self.reset_button.add(label, tip, lambda k=kind: self.reset(k))
+            for kind, (label, tip) in RESETS.items()
+        }
+        for action in self.reset_ways.values():
+            action.setCheckable(True)
         self.read_button = QPushButton("Read...")
         self.read_button.setToolTip(
             "Read part of the target's memory back, changing nothing in the target.\n"
@@ -338,6 +387,8 @@ class FilesView(QWidget):
         self._settle.timeout.connect(self._reread_changed)
 
         flasher.connection_changed.connect(lambda _on: self._enable())
+        # Said on choosing another backend, which may not offer the same.
+        flasher.regions_changed.connect(self._enable)
         flasher.busy_changed.connect(self._on_busy)
         flasher.progress.connect(self._on_progress)
         flasher.finished.connect(self._on_finished)
@@ -610,13 +661,13 @@ class FilesView(QWidget):
             return True  # nothing real is on the end of it
         return self.confirm.ask(self, f"{key}:{self.flasher.target}", title, text)
 
-    def program(self, verify: bool = True) -> None:
-        """Write what is ticked, check it unless told not to, and restart the target.
+    def program(self, verify: bool = True, erase: str = ERASE_SECTORS) -> None:
+        """Write what is ticked, and check it unless told not to.
 
-        Only the sectors written to are erased: all of the flash is Erase...,
-        asked for by name. And the target is always restarted afterwards,
-        unless the check failed: it is left halted by being programmed, and
-        what was written is there to be run.
+        Only the sectors written to are erased, or none of it where the flash
+        was erased beforehand: all of the flash is Erase..., asked for by
+        name. The target is left as programming leaves it, stopped: starting
+        it is Reset's to do, when whoever is at the board is ready for it.
         """
         if (files := self.reread()) is None:
             return
@@ -632,7 +683,7 @@ class FilesView(QWidget):
             self.ctx.events.error("Not programmed: the Memory Map says what is wrong.")
             return
         if self.may_program():
-            self.flasher.program(files, erase=ERASE_SECTORS, verify=verify, reset=True)
+            self.flasher.program(files, erase=erase, verify=verify, reset=False)
 
     def may_program(self) -> bool:
         """Ask whether to program the target. A script is asked the same."""
@@ -642,6 +693,36 @@ class FilesView(QWidget):
             f"Program {target}?",
             f"This replaces what {target} holds in the sectors that what is ticked writes "
             "to. It cannot be undone.",
+        )
+
+    def reset(self, kind: str | None = None) -> None:
+        """Restart the target: this way, which is remembered, or the way chosen last."""
+        if kind is None:
+            kind = self.reset_kind()
+        else:
+            self.ctx.settings.set(self._reset_key(), kind)
+            self._show_reset_kind()
+        self.flasher.reset(kind=kind)
+
+    def reset_kind(self) -> str:
+        """The way Reset restarts the target now: the one chosen last for it."""
+        kinds = self.flasher.backend.reset_kinds
+        chosen = str(self.ctx.settings.get(self._reset_key(), "") or "")
+        return chosen if chosen in kinds else kinds[0]
+
+    def _reset_key(self) -> str:
+        return f"reset.{self.flasher.backend.name}.{self.flasher.target}"
+
+    def _show_reset_kind(self) -> None:
+        kinds, current = self.flasher.backend.reset_kinds, self.reset_kind()
+        for kind, action in self.reset_ways.items():
+            action.setVisible(kind in kinds)
+            action.setChecked(kind == current)
+        label = RESETS[current][0]
+        self.reset_button.setToolTip(
+            f"Restart the target: {label[0].lower()}{label[1:]}. Programming leaves it\n"
+            "stopped, and this starts it. The arrow has the other ways; the one\n"
+            "chosen there is used from then on for this target."
         )
 
     def verify(self) -> None:
@@ -681,6 +762,8 @@ class FilesView(QWidget):
         ready = connected and not busy
         ticked = any(e.enabled for e in self.entries)
         self.program_button.setEnabled(ready and ticked)
+        self.program_unerased.setVisible(self.flasher.backend.can_skip_erase)
+        self._show_reset_kind()
         self.erase_button.setEnabled(ready)
         self.reset_button.setEnabled(ready)
         self.read_button.setEnabled(ready)

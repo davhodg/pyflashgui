@@ -28,8 +28,10 @@ from dataclasses import dataclass
 from pyflashgui.core.images import Segment
 from pyflashgui.core.memory_map import Region
 
-#: Called with how far along something is, from 0.0 to 1.0.
-Progress = Callable[[float], None]
+#: Called with how far along something is, from 0.0 to 1.0, and -- where
+#: one piece of work is done in stages -- what is being done now, when that
+#: changes: "Erasing", then "Programming".
+Progress = Callable[..., None]
 #: Asked between steps whether to stop. True means somebody pressed Cancel.
 Cancelled = Callable[[], bool]
 
@@ -37,6 +39,24 @@ Cancelled = Callable[[], bool]
 ERASE_SECTORS = "sectors"
 #: Erase all of the flash first, so nothing of what was there is left.
 ERASE_CHIP = "chip"
+#: Erase nothing: the flash written to was erased beforehand. Flash can only
+#: be written where it is blank; written over anything else, it holds
+#: neither what was there nor what was written.
+ERASE_NONE = "none"
+
+#: Ways of restarting a target. Not every device restarts properly every
+#: way: an XMC4500 asked to reset itself through pyOCD stayed stopped, and
+#: started from its reset pin, as from its reset button.
+#: The backend's own choice for the target: for most, the next one.
+RESET_DEFAULT = "default"
+#: The processor asked to reset the whole device (SYSRESETREQ).
+RESET_SYSTEM = "system"
+#: The device's reset line pulled by the probe, as its reset button does.
+#: Only where the probe is wired to it: some, the Raspberry Pi Debug Probe
+#: among them, are not.
+RESET_PIN = "pin"
+#: The processor alone, leaving the rest of the device as it is.
+RESET_CORE = "core"
 
 #: What verifying reads at a time. Small enough that progress moves and a
 #: cancel is noticed; large enough that the probe is not asked a thousand
@@ -163,8 +183,11 @@ class Connection(ABC):
         raise BackendError("This way of reaching the probe cannot write to memory.")
 
     @abstractmethod
-    def reset(self, halt: bool = False) -> None:
-        """Restart the target, and leave it running unless ``halt``."""
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
+        """Restart the target, and leave it running unless ``halt``.
+
+        ``kind`` is one of the backend's ``reset_kinds``.
+        """
 
     @abstractmethod
     def close(self) -> None:
@@ -252,6 +275,12 @@ class Backend(ABC):
     #: What the speed box offers first, for leaving the speed to the
     #: backend: said with what that comes to, since it is not always fast.
     default_speed: str = "Default"
+    #: The ways it can restart a target, the one used unless told otherwise
+    #: first.
+    reset_kinds: tuple[str, ...] = (RESET_DEFAULT,)
+    #: Whether it can program without erasing first, for flash erased
+    #: already: ``ERASE_NONE``.
+    can_skip_erase: bool = False
     #: Whether a read can be made without the backend first setting the
     #: device up in its own way. See ``Connection.read_range``.
     can_skip_setup: bool = False

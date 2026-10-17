@@ -287,6 +287,16 @@ class ProbeBar(QToolBar):
             return
         name = self.backend.currentData()
         self.ctx.settings.set(BACKEND_KEY, name)
+        # Each backend names targets its own way -- pyOCD's xmc4500-f100x1024
+        # is J-Link's XMC4500-1024 -- so the one chosen for the last does not
+        # carry over. Each keeps its own, for switching back.
+        self.ctx.settings.set(f"{TARGET_KEY}.{self.flasher.backend.name}", self.chosen_target())
+        wanted = str(self.ctx.settings.get(f"{TARGET_KEY}.{name}", ""))
+        self._loading = True
+        self.target.clear()  # the last backend's list; the new one's is on its way
+        self.target.setEditText(wanted)
+        self._loading = False
+        self.ctx.settings.set(TARGET_KEY, wanted)
         self._show_interfaces()
         self.flasher.set_backend(name)
 

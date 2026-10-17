@@ -33,12 +33,13 @@ These need a probe [connected](probe.md) to a target.
 
 - **Read...** reads part of the target's memory back, changing nothing in the target. What is read joins the list and is shown in a [Memory](memory.md) pane of its own. It can be saved to a file from there.
 - **Erase...** erases the target's flash: all of it, some of its regions, or a range of addresses. See *Erasing* below.
-- **Program and verify** writes what is ticked -- files, reads, or both -- then reads the flash back to check it holds what was written, and restarts the target so that the new firmware runs. Before it starts, what is ticked is checked against the target's memory and against each other, as the [memory map](memory-map.md) shows: if anything is an error there -- two of them writing the same addresses is one -- nothing is programmed and the [Event Log](manual.md) says why. The arrow beside it has each half on its own:
-  - **Program** writes and restarts without the check: quicker for a large image.
+- **Program and verify** erases the sectors what is ticked writes to, writes it -- files, reads, or both -- then reads the flash back to check it holds what was written. Before it starts, what is ticked is checked against the target's memory and against each other, as the [memory map](memory-map.md) shows: if anything is an error there -- two of them writing the same addresses is one -- nothing is programmed and the [Event Log](manual.md) says why. The arrow beside it has each half on its own:
+  - **Program** erases and writes without the check: quicker for a large image.
+  - **Program without erasing** writes, erasing nothing first: for flash that **Erase...** has cleared already, so that it is not erased twice. Flash can only be written where it is blank; written over anything else, it holds neither what was there nor what was written, so **Verify** after it says whether it took. Offered through pyOCD; J-Link Commander erases what it has to by itself.
   - **Verify** reads the flash back and compares it with what is ticked, changing nothing and restarting nothing. If they differ, it says how many bytes do and where the first one is.
-- **Reset** restarts the target.
+- **Reset** restarts the target. Not every device starts properly every way, so the arrow beside it has the others the backend can do: *the usual way* (the backend's own choice), *by the reset pin* (as the board's reset button does; it needs the probe wired to the device's reset pin, which the Raspberry Pi Debug Probe is not), *by software*, and *the processor only*. The one chosen there is remembered for that target, and pressing **Reset** uses it from then on. Through J-Link Commander there is only its own way, which suits each device.
 
-Programming erases only the sectors it writes to, and the rest of the flash is kept; to clear all of it first, use **Erase...**. The target is restarted afterwards, since programming leaves it halted, but not if the check failed.
+Programming erases only the sectors it writes to, and the rest of the flash is kept; to clear all of it first, use **Erase...**. Programming leaves the target stopped, whichever way it was done: **Reset** starts it, when you are ready for it to run.
 
 **Program and Erase ask first**, once a session for each target, because what they replace cannot be got back. The question can be told not to ask again; *Tools > Reset > Re-enable all confirmations* brings it back. The simulated target is not asked about.
 

@@ -20,7 +20,12 @@ from collections.abc import Sequence
 from pyflashgui.backends import pyocd_packs
 from pyflashgui.backends.base import (
     ERASE_CHIP,
+    ERASE_NONE,
     ERASE_SECTORS,
+    RESET_CORE,
+    RESET_DEFAULT,
+    RESET_PIN,
+    RESET_SYSTEM,
     Backend,
     BackendError,
     Connection,
@@ -34,6 +39,13 @@ from pyflashgui.core.memory_map import FLASH, GENERIC, OTHER, RAM, ROM, Region
 
 #: What pyOCD's loader calls the two ways of erasing.
 _CHIP_ERASE = {ERASE_SECTORS: "sector", ERASE_CHIP: "chip"}
+#: pyflashgui's ways of resetting, as pyOCD's Target.ResetType names them.
+_RESET_TYPES = {
+    RESET_DEFAULT: "",
+    RESET_PIN: "HARDWARE",
+    RESET_SYSTEM: "SYSTEM",
+    RESET_CORE: "CORE",
+}
 
 
 def _kind(region) -> str:
@@ -102,6 +114,48 @@ def is_jlink(probe) -> bool:
     except Exception:  # pylink missing, or SEGGER's library with it
         return False
     return isinstance(probe, JLinkProbe)
+
+
+def _stages(progress: Progress) -> Progress:
+    """pyOCD's progress through programming, said as erasing and then programming.
+
+    pyOCD erases every sector it is to write, then writes them, and reports
+    each from 0 to 1 to the one callback: passed on as it is, the bar ran
+    through Programming twice. Within a stage it only ever goes forward, so
+    going back is the next stage starting.
+    """
+    stages = iter(("Erasing", "Programming"))
+    doing = next(stages)
+    reached = 0.0
+
+    def report(fraction: float) -> None:
+        nonlocal doing, reached
+        if fraction < reached:
+            doing = next(stages, doing)
+        reached = fraction
+        progress(fraction, doing)
+
+    return report
+
+
+def _let_go(session) -> Exception | None:
+    """Close a pyOCD session, and its probe even where closing the session fails.
+
+    pyOCD's close lets go of the target before the probe, and when the
+    first fails -- the board's power was turned off -- never closes the
+    probe. A J-Link left open that way is held by SEGGER's library: found by
+    Find probes, and "No emulator with serial number" to every connect.
+    Returns what went wrong, if anything did.
+    """
+    try:
+        session.close()
+        return None
+    except Exception as exc:
+        probe = getattr(session, "probe", None)
+        if probe is not None and getattr(probe, "is_open", False):
+            with contextlib.suppress(Exception):
+                probe.close()
+        return exc
 
 
 def is_generic(target) -> bool:
@@ -179,6 +233,9 @@ class PyocdConnection(Connection):
         from pyocd.flash.loader import MemoryLoader
 
         self._target()
+        if erase == ERASE_NONE:
+            self._program_unerased(segments, progress)
+            return
         if erase not in _CHIP_ERASE:
             raise BackendError(f"There is no way of erasing called {erase!r}.")
         try:
@@ -187,13 +244,58 @@ class PyocdConnection(Connection):
             # is written here, and verifying afterwards says whether it took.
             loader = MemoryLoader(
                 self._session,
-                progress=progress,
+                progress=_stages(progress),
                 chip_erase=_CHIP_ERASE[erase],
                 smart_flash=False,
             )
             for segment in segments:
                 loader.add_data(segment.address, segment.data)
             loader.commit()
+        except Exception as exc:
+            raise _said("Programming", exc) from exc
+
+    def _program_unerased(self, segments: Sequence[Segment], progress: Progress) -> None:
+        """Write these bytes to flash erased beforehand, erasing nothing.
+
+        pyOCD's own loader always erases first, so its flash builders are
+        used directly: one for each region written to, given the bytes and
+        told to program them. Bytes for RAM are written as they are.
+        """
+        target = self._target()
+        builders: dict = {}
+        total = sum(len(s) for s in segments) or 1
+        written = 0
+        try:
+            for segment in segments:
+                address, data = segment.address, bytes(segment.data)
+                while data:
+                    region = target.memory_map.get_region_for_address(address)
+                    if region is None or not (region.is_flash or region.is_writable):
+                        raise BackendError(f"{address:08X} cannot be written.")
+                    # pyOCD's regions end at their last byte, not after it.
+                    count = min(len(data), region.end - address + 1)
+                    if not region.is_flash:
+                        target.write_memory_block8(address, list(data[:count]))
+                        written += count
+                    else:
+                        if region not in builders:
+                            builders[region] = region.flash.get_flash_builder()
+                        builders[region].add_data(address, data[:count])
+                    data, address = data[count:], address + count
+            for region in sorted(builders, key=lambda r: r.start):
+                builder = builders[region]
+                size, before = builder.buffered_data_size, written
+
+                def report(fraction: float, size=size, before=before) -> None:
+                    progress((before + fraction * size) / total)
+
+                # Not keep_unwritten: the rest of a page written to is filled
+                # with what erased flash reads as, which writes nothing,
+                # rather than read back first.
+                builder.program(progress_cb=report, smart_flash=False, keep_unwritten=False)
+                written += size
+        except BackendError:
+            raise
         except Exception as exc:
             raise _said("Programming", exc) from exc
 
@@ -213,29 +315,39 @@ class PyocdConnection(Connection):
         except Exception as exc:
             raise _said(f"Writing {len(data)} bytes at {address:08X}", exc) from exc
 
-    def reset(self, halt: bool = False) -> None:
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
+        from pyocd.core.target import Target
+
         target = self._target()
+        if kind not in _RESET_TYPES:
+            raise BackendError(f"There is no way of resetting called {kind!r}.")
+        # None is pyOCD's own choice: the session's, or the target's.
+        reset_type = getattr(Target.ResetType, _RESET_TYPES[kind]) if _RESET_TYPES[kind] else None
         try:
             if halt:
-                target.reset_and_halt()
+                target.reset_and_halt(reset_type)
             else:
-                target.reset()
+                target.reset(reset_type)
         except Exception as exc:
             raise _said("Resetting the target", exc) from exc
 
     def close(self) -> None:
         session, self._session = self._session, None
-        if session is not None:
-            try:
-                session.close()
-            except Exception as exc:
-                raise _said("Disconnecting", exc) from exc
+        if session is not None and (failed := _let_go(session)) is not None:
+            detail = str(failed).strip() or type(failed).__name__
+            raise BackendError(
+                f"Disconnecting failed: the probe did not answer ({detail}). It has been "
+                "let go of anyway, so connecting again works once it answers. Was the "
+                "board's power or the probe's USB cable taken away?"
+            ) from failed
 
 
 class PyocdBackend(Backend):
     # pyOCD's own, whatever the probe could do: 1 MHz, chosen to work with
     # a long or untidy cable, and slow for anything else.
     default_speed = "Default (1 MHz)"
+    can_skip_erase = True
+    reset_kinds = (RESET_DEFAULT, RESET_PIN, RESET_SYSTEM, RESET_CORE)
     name = "pyocd"
     label = "pyOCD"
 
@@ -379,7 +491,6 @@ class PyocdBackend(Backend):
             # only switching backend and back -- which drops this one -- let
             # it go.
             if session is not None:
-                with contextlib.suppress(Exception):
-                    session.close()
+                _let_go(session)
             raise _said(f"Connecting to {target}", exc) from exc
         return session

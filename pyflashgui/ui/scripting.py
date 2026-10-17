@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING, Any
 
 from PySide6.QtCore import QEventLoop, QTimer
 
-from pyflashgui.backends.base import ERASE_SECTORS, Verification
+from pyflashgui.backends.base import ERASE_NONE, ERASE_SECTORS, Verification
 from pyflashgui.core import images
 from pyflashgui.core.events import ERROR, WARNING
 from pyflashgui.core.images import Image, ImageError
@@ -161,14 +161,22 @@ class Flash:
         self._do("Erasing", lambda: self._flasher.erase(ranges))
 
     def program(
-        self, *files: str | Path | Entry, address: int | None = None, verify: bool = True
+        self,
+        *files: str | Path | Entry,
+        address: int | None = None,
+        verify: bool = True,
+        erase: bool = True,
+        reset: bool = False,
     ) -> None:
         """Program these files, or what is ticked in Files when none are named.
 
         ``address`` is where a raw binary goes. The files are checked against
-        the target's memory first, as the Memory Map checks them, and the
-        target is restarted afterwards, as Program and verify does.
+        the target's memory first, as the Memory Map checks them. The target
+        is left stopped, as Program and verify leaves it, unless ``reset``.
+        ``erase=False`` writes to flash erased beforehand, erasing nothing.
         """
+        if not erase and not self._flasher.backend.can_skip_erase:
+            raise ScriptError(f"{self._flasher.backend.label} cannot program without erasing.")
         loaded = self._images(files, address)
         self._check_layout(loaded)
         self._ready()
@@ -176,7 +184,9 @@ class Flash:
             raise ScriptError("Not programmed: the question was answered No.")
         self._do(
             "Programming",
-            lambda: self._flasher.program(loaded, erase=ERASE_SECTORS, verify=verify, reset=True),
+            lambda: self._flasher.program(
+                loaded, erase=ERASE_SECTORS if erase else ERASE_NONE, verify=verify, reset=reset
+            ),
         )
 
     def verify(self, *files: str | Path | Entry, address: int | None = None) -> bool:
@@ -186,9 +196,18 @@ class Flash:
         self._do("Verifying", lambda: self._flasher.verify(loaded, then=found.append), found)
         return found[0].ok
 
-    def reset(self, halt: bool = False) -> None:
-        """Restart the target, and leave it stopped at its first instruction if ``halt``."""
-        self._do("Resetting", lambda: self._flasher.reset(halt))
+    def reset(self, halt: bool = False, kind: str = "default") -> None:
+        """Restart the target, and leave it stopped at its first instruction if ``halt``.
+
+        ``kind`` is how: "default", or through pyOCD "pin", "system" or "core".
+        """
+        if kind not in self._flasher.backend.reset_kinds:
+            raise ScriptError(
+                f"{self._flasher.backend.label} cannot reset that way: "
+                + ", ".join(self._flasher.backend.reset_kinds)
+                + " are what it can do."
+            )
+        self._do("Resetting", lambda: self._flasher.reset(halt, kind))
 
     # --- waiting ---------------------------------------------------------------------
     def wait(self, seconds: float) -> None:

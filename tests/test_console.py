@@ -6,7 +6,7 @@ import time
 
 import bincopy
 import pytest
-from PySide6.QtCore import QCoreApplication, QSettings, QTimer
+from PySide6.QtCore import QCoreApplication, QSettings, Qt, QTimer
 
 from pyflashgui import backends
 from pyflashgui.ui import probe_bar
@@ -75,7 +75,7 @@ def typed(console: ConsoleView, *lines: str) -> str:
     console.output.clear()
     for line in lines:
         console.input.setText(line)
-        console.input.returnPressed.emit()
+        console.input.entered.emit()
     return console.output.toPlainText()
 
 
@@ -93,20 +93,21 @@ def test_each_call_waits_for_its_answer(flash, tmp_path):
 
     flash.program(hex_file(tmp_path, "app.hex", FLASH_AT, b"hello"))
     assert flash.read(FLASH_AT, 5) == b"hello"
-    assert board().resets == 1, "restarted, as Program and verify does"
+    assert board().resets == 0, "left stopped, as Program and verify leaves it"
     assert flash.verify(hex_file(tmp_path, "other.hex", FLASH_AT, b"HELLO")) is False
     assert flash.verify(str(tmp_path / "app.hex")) is True
 
     flash.erase(FLASH_AT, 0x1000)
     assert flash.read(FLASH_AT, 5) == b"\xff" * 5
-    flash.program(str(tmp_path / "app.hex"), verify=False)
+    flash.program(str(tmp_path / "app.hex"), verify=False, reset=True)
+    assert board().resets == 1, "started when asked to be"
     flash.erase()
     assert flash.read(FLASH_AT, 5) == b"\xff" * 5
 
     flash.write(RAM_AT, b"\x01\x02")
     assert flash.read(RAM_AT, 2) == b"\x01\x02"
     flash.reset(halt=True)
-    assert board().resets == 3
+    assert board().resets == 2
 
     flash.disconnect()
     assert not flash.connected
@@ -183,11 +184,41 @@ def test_a_script_error_is_a_sentence_and_a_mistake_is_a_traceback(console):
 
 def test_a_block_over_several_lines_is_run_when_it_ends(console):
     console.input.setText("for n in range(2):")
-    console.input.returnPressed.emit()
+    console.input.entered.emit()
     assert console.prompt.text() == "..."
     shown = typed(console, "    print('line', n)", "")
     assert "line 0" in shown and "line 1" in shown
     assert console.prompt.text() == ">>>"
+
+
+def test_several_lines_typed_or_pasted_run_together(console):
+    """Asked for: there was no way to type a second line, or paste several."""
+    shown = typed(console, "a = 2\nfor n in range(2):\n    print('line', n)\na * 3")
+    assert "line 0" in shown and "line 1" in shown
+    assert shown.rstrip().endswith("6"), "a value is shown, as the prompt shows it"
+    assert ">>> a = 2\n... for n in range(2):" in shown
+    assert console.prompt.text() == ">>>"
+
+
+def test_shift_enter_starts_another_line_indented_after_a_colon(console):
+    from PySide6.QtCore import QEvent
+    from PySide6.QtGui import QKeyEvent
+
+    console.input.setText("for n in range(2):")
+    shift_enter = QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.ShiftModifier)
+    console.input.keyPressEvent(shift_enter)
+    assert console.input.text() == "for n in range(2):\n    "
+    console.input.insertPlainText("print(n)")
+    enter = QKeyEvent(QEvent.KeyPress, Qt.Key_Return, Qt.NoModifier)
+    console.output.clear()
+    console.input.keyPressEvent(enter)
+    assert "0\n1" in console.output.toPlainText()
+    assert console.input.text() == ""
+
+
+def test_a_mistake_in_several_lines_is_shown_as_python_shows_it(console):
+    shown = typed(console, "a = (\nb = 1")
+    assert "SyntaxError" in shown
 
 
 def test_a_script_runs_with_the_same_names_and_prints_as_it_goes(window, console, tmp_path):

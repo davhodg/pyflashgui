@@ -8,7 +8,7 @@ import pytest
 from PySide6.QtCore import QCoreApplication
 
 from pyflashgui import backends
-from pyflashgui.backends.base import ERASE_CHIP, VERIFY_CHUNK
+from pyflashgui.backends.base import ERASE_CHIP, ERASE_NONE, VERIFY_CHUNK
 from pyflashgui.core.events import ERROR, GOOD, WARNING, EventLog
 from pyflashgui.core.flasher import Flasher, size_text, verification_text
 from pyflashgui.core.images import BINARY, Image, Segment
@@ -152,6 +152,29 @@ def test_programming_writes_verifies_resets_and_says_so(connected, said):
     assert "Programming" in labels and "Verifying" in labels
     assert labels.index("Programming") < labels.index("Verifying")
     assert ("Verifying", 1.0) in steps
+
+
+def test_a_backend_that_always_erases_is_not_asked_not_to(flasher, said, monkeypatch):
+    monkeypatch.setattr(type(flasher.backend), "can_skip_erase", False)
+    flasher.connect_to(PROBE, TARGET)
+    wait_for(lambda: flasher.connected)
+    assert not flasher.program([image("app.bin", FLASH_AT, b"abcd")], erase=ERASE_NONE)
+    assert said.at(WARNING)[-1] == "Simulated cannot program without erasing."
+
+
+def test_a_backend_working_in_stages_names_each_on_the_bar(flasher):
+    steps = []
+    flasher.progress.connect(lambda label, fraction: steps.append((label, fraction)))
+    report = flasher._progress("Programming")
+    for fraction, doing in ((0.0, "Erasing"), (1.0, "Erasing"), (0.0, "Programming")):
+        report(fraction, doing)
+    report(0.5)
+    assert steps == [
+        ("Erasing", 0.0),
+        ("Erasing", 1.0),
+        ("Programming", 0.0),
+        ("Programming", 0.5),
+    ]
 
 
 def test_what_was_not_asked_for_is_not_done(connected, said):

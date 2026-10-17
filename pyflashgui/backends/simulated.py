@@ -18,7 +18,12 @@ from collections.abc import Sequence
 
 from pyflashgui.backends.base import (
     ERASE_CHIP,
+    ERASE_NONE,
     ERASE_SECTORS,
+    RESET_CORE,
+    RESET_DEFAULT,
+    RESET_PIN,
+    RESET_SYSTEM,
     Backend,
     BackendError,
     Connection,
@@ -72,6 +77,8 @@ class _Board:
             if not r.alias_of
         }
         self.resets = 0
+        #: How each reset was asked for, in order.
+        self.reset_kinds: list[str] = []
 
     def storage(self, region: Region) -> bytearray:
         """The bytes behind a region, which for an alias are another's."""
@@ -136,14 +143,14 @@ class SimulatedConnection(Connection):
         progress: Progress = _nothing,
     ) -> None:
         board = self._open()
-        if erase not in (ERASE_SECTORS, ERASE_CHIP):
+        if erase not in (ERASE_SECTORS, ERASE_CHIP, ERASE_NONE):
             raise BackendError(f"There is no way of erasing called {erase!r}.")
         # Everything is placed before anything is changed, so that a file
         # that does not fit leaves the target as it was.
         placed = [(s, self._place(board, s.address, len(s))) for s in segments]
         if erase == ERASE_CHIP:
             self.erase_chip()
-        else:
+        elif erase == ERASE_SECTORS:
             for _segment, runs in placed:
                 for region, offset, length in runs:
                     if region.kind != FLASH:
@@ -158,7 +165,14 @@ class SimulatedConnection(Connection):
             position = 0
             for region, offset, length in runs:
                 data = segment.data[position : position + length]
-                board.memory[region.name][offset : offset + length] = data
+                memory = board.memory[region.name]
+                if region.kind == FLASH:
+                    # As real flash: writing clears bits and never sets them,
+                    # so over what is not blank it holds neither.
+                    data = bytes(
+                        a & b for a, b in zip(memory[offset : offset + length], data, strict=True)
+                    )
+                memory[offset : offset + length] = data
                 position += length
                 done += length
                 progress(done / total)
@@ -188,9 +202,12 @@ class SimulatedConnection(Connection):
             board.memory[region.name][offset : offset + length] = data[position : position + length]
             position += length
 
-    def reset(self, halt: bool = False) -> None:
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
         board = self._open()
+        if kind not in SimulatedBackend.reset_kinds:
+            raise BackendError(f"There is no way of resetting called {kind!r}.")
         board.resets += 1
+        board.reset_kinds.append(kind)
         # What a reset does to RAM on a real part is nothing anybody should
         # rely on. Cleared here, so that relying on it shows up.
         for region in board.regions:
@@ -206,6 +223,9 @@ class SimulatedConnection(Connection):
 class SimulatedBackend(Backend):
     name = "simulated"
     label = "Simulated"
+    can_skip_erase = True
+    # Each the same here, but offered, so that choosing between them can be tried.
+    reset_kinds = (RESET_DEFAULT, RESET_PIN, RESET_SYSTEM, RESET_CORE)
 
     def __init__(self) -> None:
         #: Probe id -> what it is attached to. Made when first connected to,

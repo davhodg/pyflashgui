@@ -23,9 +23,21 @@ since the last version, and comes out in the next one.
   between them, and renaming and deleting them.
 - *Tools > Settings > Add shortcut to desktop* on Windows; both shortcuts for a pip
   installation too.
+- **Program without erasing**, under the arrow beside **Program and verify**, writes to
+  flash that **Erase...** has cleared already, so that it is not erased twice. Through
+  pyOCD, and `flash.program(..., erase=False)` in the console. The tooltips of **Program
+  and verify** and **Program** say that they erase the sectors they write to.
 
 ### Changed
 
+- The Python Console takes several lines at once: Shift+Enter for another, or several
+  pasted, and Enter runs them together.
+- **Reset** has the ways a target can be restarted under an arrow: the usual way, by
+  the reset pin, by software, or the processor only. The one chosen is remembered for
+  the target. An XMC4500 reset the usual way through pyOCD stayed stopped, and starts
+  by its reset pin.
+- Changing **Using** no longer keeps the target chosen for the last backend, which names
+  targets its own way: each backend remembers its own, chosen again on switching back.
 - **Compare** marks the other entry too when it is open in a Memory pane, and the Event Log
   says *Comparison result for* the one against the other.
 - **Through** in the bar across the top is **Using**.
@@ -45,8 +57,8 @@ since the last version, and comes out in the next one.
 - *Open workspace folder* is *File > Workspace > Open folder*, with the rest of what is
   done with a workspace.
 - **Program and verify** is one button, with **Program** and **Verify** each on its own
-  under its arrow, in place of the Verify button and the Verify and Reset ticks: the
-  target is always restarted after programming.
+  under its arrow, in place of the Verify button and the Verify and Reset ticks.
+  Programming leaves the target stopped, however it was done: **Reset** starts it.
 - The launchers no longer ask about a Start menu entry: the first start says in the Event
   Log where a shortcut is made.
 
@@ -65,6 +77,11 @@ since the last version, and comes out in the next one.
 - With pyOCD's *cortex_m* chosen, which knows only the address map every Cortex-M has,
   a file for the device's flash was said to be in RAM. Programming is now refused with
   why, and to choose the device itself; reading and comparing still work.
+- Programming through pyOCD ran the bar through **Programming** twice: the first time is
+  pyOCD erasing the sectors it is about to write, and is now shown as **Erasing**.
+- With the board's power turned off while connected through pyOCD, a J-Link could not be
+  connected to again (*No emulator with serial number*) though Find probes found it: the
+  probe is now let go of even when disconnecting from the target fails.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

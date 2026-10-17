@@ -10,7 +10,7 @@ from PySide6.QtCore import QCoreApplication, QSettings, Qt
 from PySide6.QtWidgets import QMessageBox
 
 from pyflashgui import backends
-from pyflashgui.core.events import ERROR, GOOD, WARNING
+from pyflashgui.core.events import ERROR, GOOD, INFORMATION, WARNING
 from pyflashgui.ui import files_view, probe_bar
 from pyflashgui.ui.files_view import ADDRESS, END, FILE, FORMAT, SIZE, parse_address
 
@@ -228,7 +228,7 @@ def test_program_sends_what_the_file_holds_now(window, tmp_path):
     idle(window)
     flash = backends.get("simulated").board(PROBE).memory["flash"]
     assert bytes(flash[:4]) == b"new!"
-    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, verified, and reset")
+    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, verified, in ")
 
 
 def test_program_refuses_what_the_memory_map_calls_an_error(window, tmp_path):
@@ -246,22 +246,92 @@ def test_the_button_verifies_and_program_alone_is_under_its_arrow(window, tmp_pa
     files = window.files_view
     files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"abcd")])
     assert files.program_button.text() == "Program and verify"
-    assert [a.text() for a in files.program_button.menu().actions()] == ["Program", "Verify"]
+    assert [a.text() for a in files.program_button.menu().actions()] == [
+        "Program",
+        "Program without erasing",
+        "Verify",
+    ]
     connect(window)
 
     files.program_only.trigger()
     idle(window)
-    assert said(window, GOOD)[-1].startswith(
-        "Programmed 1 file, 4 bytes, and reset the target, in "
-    )
-    assert backends.get("simulated").board(PROBE).resets == 1, "restarted either way"
+    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, in ")
+    assert backends.get("simulated").board(PROBE).resets == 0, "left stopped: Reset starts it"
 
     files.program_button.click()
     idle(window)
-    assert said(window, GOOD)[-1].startswith(
-        "Programmed 1 file, 4 bytes, verified, and reset the target, in "
-    )
-    assert backends.get("simulated").board(PROBE).resets == 2
+    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, verified, in ")
+    assert backends.get("simulated").board(PROBE).resets == 0
+
+
+def test_programming_flash_erased_already_leaves_erasing_out(window, tmp_path, monkeypatch):
+    """Asked for after a test on an XMC4500: Erase..., then Program erased it
+    all over again."""
+    from pyflashgui.ui.erase_dialog import EraseDialog
+
+    monkeypatch.setattr(EraseDialog, "exec", lambda dialog: EraseDialog.Accepted)
+    files = window.files_view
+    files.add_files([hex_file(tmp_path, "app.hex", FLASH_AT, b"\x0f\x0f\x0f\x0f")])
+    connect(window)
+    files.erase_button.click()
+    idle(window)
+    files.program_unerased.trigger()
+    idle(window)
+    assert said(window, GOOD)[-1].startswith("Programmed 1 file, 4 bytes, without erasing, in ")
+    board = backends.get("simulated").board(PROBE)
+    assert bytes(board.memory["flash"][:4]) == b"\x0f" * 4
+
+    # Over flash that is not blank, it holds neither, as real flash would;
+    # and Verify says so.
+    files.add_files([hex_file(tmp_path, "other.hex", FLASH_AT, b"\xf0\xf0\xf0\xf0")])
+    files.entries[0].enabled = False
+    files.program_unerased.trigger()
+    idle(window)
+    assert bytes(board.memory["flash"][:4]) == b"\x00" * 4
+    files.verify_only.trigger()
+    idle(window)
+    assert "4 bytes differ of 4" in said(window, ERROR)[-1]
+
+
+def test_program_without_erasing_is_offered_only_where_it_can_be_done(window):
+    files = window.files_view
+    assert files.program_unerased.isVisible(), "simulated, as pyOCD, can"
+    assert backends.get("pyocd").can_skip_erase
+    window.flasher.set_backend("jlink")
+    idle(window)
+    assert not files.program_unerased.isVisible(), "J-Link Commander erases by itself"
+
+
+def test_reset_remembers_the_way_chosen_for_the_target(window):
+    """Reported on an XMC4500: reset the usual way through pyOCD it stayed
+    stopped, and started from its reset pin."""
+    files = window.files_view
+    connect(window)
+    board = backends.get("simulated").board(PROBE)
+    assert files.reset_kind() == "default"
+    assert [a.text() for a in files.reset_button.menu().actions() if a.isVisible()][-4:] == [
+        "Reset the usual way",
+        "Reset by the reset pin",
+        "Reset by software",
+        "Restart the processor only",
+    ]
+    files.reset_ways["pin"].trigger()
+    idle(window)
+    assert said(window, INFORMATION)[-1] == "Reset sim_single by its reset pin."
+    files.reset_button.click()
+    idle(window)
+    assert board.reset_kinds[-2:] == ["pin", "pin"], "pressed, the way chosen last"
+    assert files.reset_ways["pin"].isChecked()
+    assert "by the reset pin" in files.reset_button.toolTip()
+
+
+def test_a_backend_with_one_way_of_resetting_offers_only_that(window):
+    files = window.files_view
+    window.flasher.set_backend("jlink")
+    idle(window)
+    shown = [k for k, a in files.reset_ways.items() if a.isVisible()]
+    assert shown == ["default"]
+    assert files.reset_kind() == "default"
 
 
 def test_there_are_no_ticks_beside_the_list(window):
@@ -293,7 +363,7 @@ def test_verify_erase_and_reset_from_their_buttons(window, tmp_path, monkeypatch
     assert "4 bytes differ of 4" in said(window, ERROR)[-1]
     files.reset_button.click()
     idle(window)
-    assert board.resets == 2
+    assert board.resets == 1, "by Reset alone"
 
 
 def test_a_real_target_is_asked_about_before_it_is_changed(window, tmp_path, monkeypatch):
@@ -508,6 +578,25 @@ def test_the_speed_box_says_what_the_default_comes_to_for_each_backend(window):
     assert bar.frequency.itemText(0) == "Default"
     bar.backend.setCurrentIndex(bar.backend.findData("pyocd"))
     assert bar.frequency.itemText(0) == "Default (1 MHz)"
+    bar.backend.setCurrentIndex(bar.backend.findData("simulated"))
+    idle(window)
+
+
+def test_another_backend_does_not_keep_the_last_ones_target(window):
+    """Reported: the target stayed when Using changed, though each backend
+    names targets its own way. Each keeps its own, for switching back."""
+    bar = window.probe_bar
+    bar.choose_target("sim_single")
+    bar.backend.setCurrentIndex(bar.backend.findData("pyocd"))
+    idle(window)
+    assert bar.chosen_target() == ""
+    bar.choose_target("cortex_m")
+    bar.backend.setCurrentIndex(bar.backend.findData("simulated"))
+    idle(window)
+    assert bar.chosen_target() == "sim_single"
+    bar.backend.setCurrentIndex(bar.backend.findData("pyocd"))
+    idle(window)
+    assert bar.chosen_target() == "cortex_m"
     bar.backend.setCurrentIndex(bar.backend.findData("simulated"))
     idle(window)
 

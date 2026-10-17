@@ -23,7 +23,12 @@ from PySide6.QtCore import QObject, Signal
 
 from pyflashgui import backends
 from pyflashgui.backends.base import (
+    ERASE_NONE,
     ERASE_SECTORS,
+    RESET_CORE,
+    RESET_DEFAULT,
+    RESET_PIN,
+    RESET_SYSTEM,
     Backend,
     BackendError,
     CancelledError,
@@ -35,6 +40,12 @@ from pyflashgui.core.images import Image, Segment
 from pyflashgui.core.memory_map import FLASH, Region
 from pyflashgui.core.worker import Worker
 
+#: How each way of resetting is said in the Event Log: "Reset X by its reset pin."
+RESET_SAID = {
+    RESET_SYSTEM: "by software",
+    RESET_PIN: "by its reset pin",
+    RESET_CORE: "by restarting its processor only",
+}
 #: Progress is passed on when it has moved this far, and not otherwise: a
 #: library reporting every page would otherwise queue a thousand signals to
 #: move a bar a thousand times by less than a pixel.
@@ -170,14 +181,18 @@ class Flasher(QObject):
             self.busy = busy
             self.busy_changed.emit(busy)
 
-    def _progress(self, label: str) -> Callable[[float], None]:
+    def _progress(self, label: str) -> Callable[..., None]:
         """A progress callback for the worker thread, saying this is what is done.
 
         Emitting a signal from another thread is the one thing here that is
-        safe to do from it: Qt queues it for the GUI thread.
+        safe to do from it: Qt queues it for the GUI thread. A backend that
+        does the work in stages says so as it goes from one to the next.
         """
 
-        def report(fraction: float) -> None:
+        def report(fraction: float, doing: str | None = None) -> None:
+            nonlocal label
+            if doing is not None and doing != label:
+                label, self._last_progress = doing, -1.0
             fraction = max(0.0, min(1.0, float(fraction)))
             if fraction >= 1.0 or fraction - self._last_progress >= PROGRESS_STEP:
                 self._last_progress = fraction if fraction < 1.0 else -1.0
@@ -337,6 +352,9 @@ class Flasher(QObject):
         """Program these files, then verify and reset if asked to."""
         if (connection := self._connection("Programming")) is None:
             return False
+        if erase == ERASE_NONE and not self.backend.can_skip_erase:
+            self.events.warning(f"{self.backend.label} cannot program without erasing.")
+            return False
         segments: list[Segment] = [s for image in images for s in image.segments]
         if not segments:
             self.events.warning("There is nothing to program: no file is ticked.")
@@ -368,6 +386,8 @@ class Flasher(QObject):
                 )
                 return False
             parts = [f"Programmed {files}, {size_text(size)}"]
+            if erase == ERASE_NONE:
+                parts.append("without erasing")
             if result is not None:
                 parts.append("verified")
             if reset:
@@ -378,7 +398,8 @@ class Flasher(QObject):
         if not self._run("Programming", work, done):
             return False
         names = ", ".join(image.name for image in images)
-        self.events.information(f"Programming {self.target} with {names}...")
+        unerased = ", without erasing" if erase == ERASE_NONE else ""
+        self.events.information(f"Programming {self.target} with {names}{unerased}...")
         return True
 
     def verify(
@@ -475,14 +496,21 @@ class Flasher(QObject):
 
         return self._run("Writing", work, done)
 
-    def reset(self, halt: bool = False) -> bool:
-        """Restart the target, and leave it stopped at its first instruction if ``halt``."""
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> bool:
+        """Restart the target, and leave it stopped at its first instruction if ``halt``.
+
+        ``kind`` is how, one of the backend's ``reset_kinds``.
+        """
         if (connection := self._connection("Resetting")) is None:
             return False
-        said = f"Reset {self.target}" + (", and stopped it." if halt else ".")
+        if kind not in self.backend.reset_kinds:
+            self.events.warning(f"{self.backend.label} cannot reset {RESET_SAID.get(kind, kind)}.")
+            return False
+        how = f" {RESET_SAID[kind]}" if kind != RESET_DEFAULT else ""
+        said = f"Reset {self.target}{how}" + (", and stopped it." if halt else ".")
         return self._run(
             "Resetting",
-            lambda: connection.reset(halt),
+            lambda: connection.reset(halt, kind),
             lambda _r: self.events.information(said),
         )
 

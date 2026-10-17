@@ -36,6 +36,7 @@ from pathlib import Path
 from pyflashgui.backends.base import (
     ERASE_CHIP,
     ERASE_SECTORS,
+    RESET_DEFAULT,
     Backend,
     BackendError,
     Cancelled,
@@ -499,7 +500,9 @@ class JLinkConnection(Connection):
             commands = ["H", f"LoadBin {_named(path)}, 0x{address:X}", "G"]
             self._run(commands, WORK_S, f"Writing {len(data)} bytes at {address:08X}")
 
-    def reset(self, halt: bool = False) -> None:
+    def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
+        if kind != RESET_DEFAULT:
+            raise BackendError("J-Link Commander resets each device its own way, and no other.")
         # R restarts the device and leaves it stopped; G sets it going.
         self._run(["R"] if halt else ["R", "G"], QUICK_S, f"Resetting {self._device}")
 

@@ -2,9 +2,9 @@
 
 # Python Console
 
-*View > Python Console* opens a Python prompt inside pyflashgui, with the probe and the target to hand as `flash`. It is for what the buttons do not do by themselves: reading the same word over and over to watch it change, putting a test pattern into RAM, programming two images in turn, or a loop that programs, restarts and reads back.
+*View > Python Console* opens a Python prompt inside pyflashgui, with the probe and the target to hand as `flash`. It is for what the buttons do not do by themselves: reading the same word over and over to watch it change, putting a test pattern into RAM, programming two images in turn, or a loop that programs, resets and reads back.
 
-It behaves like the `python` prompt: a block over several lines carries on with `...`, Up and Down go back through what was typed, and a mistake shows Python's own traceback. **Run script...** runs a `.py` file with the same names. **Stop** stops a line or a script, and **Clear** clears the pane.
+It behaves like the `python` prompt: a block over several lines carries on with `...`, Up and Down go back through what was typed, and a mistake shows Python's own traceback. The box typed into takes several lines too: **Shift+Enter** starts another, indented as the one before and further after a colon, and several lines pasted at once arrive as they are. **Enter** then runs them all together, each value shown as the prompt shows it, and **Tab** indents. **Run script...** runs a `.py` file with the same names. **Stop** stops a line or a script, and **Clear** clears the pane.
 
 **File > Run script...** does the same from the menu, and shows the console first, so that what the script prints can be read. **File > Recent scripts** lists the last five run in the workspace, by either, newest first: one click runs one again. A script kept in the workspace's folder is remembered by where it is in it, and found wherever the workspace is taken.
 
@@ -36,9 +36,9 @@ print(flash.read(0x20000000, 16).hex(" "))
 | `read(address, length, show=False)` | that many bytes of the target's memory, as `bytes`. `show=True` also lists them in Files as a read |
 | `write(address, data)` | write bytes to RAM or a peripheral's registers. Never to flash, which is programmed |
 | `erase()`, `erase(address, length)` | erase all of the flash, or every sector a range falls in |
-| `program(*files, address=None, verify=True)` | program these files, or what is ticked in Files when none are named; `address` is where a raw binary goes. Checked against the memory map first, and the target is restarted afterwards |
+| `program(*files, address=None, verify=True, erase=True, reset=False)` | program these files, or what is ticked in Files when none are named; `address` is where a raw binary goes; `erase=False` writes to flash erased beforehand, erasing nothing. Checked against the memory map first. The target is left stopped unless `reset` |
 | `verify(*files, address=None)` | whether the target holds these files, or what is ticked: `True` or `False` |
-| `reset(halt=False)` | restart the target, stopped at its first instruction if `halt` |
+| `reset(halt=False, kind="default")` | restart the target, stopped at its first instruction if `halt`; through pyOCD `kind` can be `"pin"`, `"system"` or `"core"`, as under the arrow beside **Reset** |
 | `show(address, data)` | list bytes in Files as a read, to look at, compare or save |
 | `connected`, `target`, `probe`, `regions` | what is connected, and the target's memory |
 

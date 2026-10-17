@@ -380,3 +380,68 @@ def test_pyocd_s_cortex_m_is_known_as_no_device_in_particular():
     made = CoreSightTarget._create_default_cortex_m_memory_map(None)
     assert {r.kind for r in regions_of(made, generic=True)} == {GENERIC}
     assert {r.kind for r in regions_of(made)} != {GENERIC}
+
+
+def test_pyocd_s_erasing_then_programming_is_said_as_two_stages():
+    """Reported on an XMC4500: the bar ran through Programming twice, the
+    first time pyOCD erasing the sectors it was about to write."""
+    from pyflashgui.backends.pyocd_backend import _stages
+
+    said = []
+    report = _stages(lambda fraction, doing: said.append((doing, fraction)))
+    for fraction in (0.0, 0.25, 0.5, 0.5, 1.0, 0.0, 0.5, 1.0):  # two regions' worth of erasing
+        report(fraction)
+    assert [d for d, _f in said] == ["Erasing"] * 5 + ["Programming"] * 3
+    assert said[-1] == ("Programming", 1.0)
+
+
+def test_a_pyocd_disconnect_that_fails_still_lets_go_of_the_probe():
+    """Reported: with the board's power turned off while connected, every
+    connect after said "No emulator with serial number" though Find probes
+    found the J-Link. pyOCD gave up closing at the target and never closed
+    the probe, which SEGGER's library went on holding."""
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    class Probe:
+        is_open = True
+
+        def close(self):
+            self.is_open = False
+
+    class Session:
+        probe = Probe()
+
+        def close(self):
+            raise RuntimeError("Unspecified error")
+
+    session = Session()
+    connection = PyocdConnection(session)
+    with pytest.raises(BackendError, match=r"did not answer \(Unspecified error\)"):
+        connection.close()
+    assert not session.probe.is_open
+
+
+@pytest.mark.parametrize(
+    ("kind", "asked"),
+    [("default", None), ("pin", "HARDWARE"), ("system", "SYSTEM"), ("core", "CORE")],
+)
+def test_each_way_of_resetting_is_the_pyocd_reset_type_of_that_name(kind, asked):
+    from pyocd.core.target import Target
+
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    class FakeTarget:
+        def reset(self, reset_type=None):
+            self.asked = reset_type
+
+    class Session:
+        target = FakeTarget()
+
+    PyocdConnection(Session()).reset(kind=kind)
+    assert Session.target.asked == (getattr(Target.ResetType, asked) if asked else None)
+
+
+def test_j_link_commander_resets_only_its_own_way():
+    from pyflashgui.backends.jlink_backend import JLinkBackend
+
+    assert JLinkBackend.reset_kinds == ("default",)
