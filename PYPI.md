@@ -5,7 +5,7 @@
 # pyflashgui
 
 [![CI](https://github.com/davhodg/pyflashgui/actions/workflows/ci.yml/badge.svg)](https://github.com/davhodg/pyflashgui/actions/workflows/ci.yml)
-[![release](https://img.shields.io/github/v/release/davhodg/pyflashgui?include_prereleases)](https://github.com/davhodg/pyflashgui/releases)
+[![release](https://img.shields.io/github/v/release/davhodg/pyflashgui)](https://github.com/davhodg/pyflashgui/releases)
 [![PyPI](https://img.shields.io/pypi/v/pyflashgui)](https://pypi.org/project/pyflashgui/)
 ![python](https://img.shields.io/badge/python-3.12+-blue)
 ![platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey)
@@ -23,7 +23,7 @@ To install it:
 pip install pyflashgui
 ```
 
-To run it:
+To run it (`python -m pyflashgui` does the same):
 
 ```
 pyflashgui
@@ -35,9 +35,7 @@ To update it:
 pip install --upgrade pyflashgui
 ```
 
-Python 3.12 or newer, on Windows or Linux. `python -m pyflashgui` starts it too.
-
-**Python 3.15 on Windows is not supported yet:** a library pyOCD needs there has not been released for 3.15. Use 3.14, 3.13 or 3.12 until it has.
+**Python 3.15 on Windows is not supported yet:** libraries pyOCD needs there have not been released for 3.15. Use 3.14, 3.13 or 3.12 until they have.
 
 On Linux, Qt needs a system library to draw the window, and Debian, Ubuntu, Linux Mint and the like often leave it out:
 

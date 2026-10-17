@@ -61,8 +61,9 @@ def test_the_ci_badge_is_the_live_one():
 
 def test_the_release_badge_is_live():
     """Live rather than a static version number: until something is tagged it
-    says so, and after that it cannot disagree with the releases page."""
-    live = "https://img.shields.io/github/v/release/davhodg/pyflashgui?include_prereleases"
+    says so, and after that it cannot disagree with the releases page. Not with
+    include_prereleases: there are none, and asked for them it said "invalid"."""
+    live = "https://img.shields.io/github/v/release/davhodg/pyflashgui"
     assert f"[![release]({live})](https://github.com/davhodg/pyflashgui/releases)" in README
     assert "img.shields.io/badge/version-" not in README
 
