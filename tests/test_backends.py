@@ -665,3 +665,23 @@ def test_the_target_is_reset_and_stopped_before_a_flash_routine_runs(monkeypatch
     else:
         connection.erase_ranges([(0x0800_0000, 0x1000)])
     assert done == ["reset and stopped", "erased"]
+
+
+def test_flash_says_what_it_reads_as_once_erased():
+    """From the pack's flash routine, through pyOCD: 00 for an XMC4500."""
+    from pyocd.core.memory_map import FlashRegion, RamRegion
+
+    from pyflashgui.backends.pyocd_backend import regions_of
+
+    made = regions_of(
+        [
+            FlashRegion(start=0x0C00_0000, length=0x1000, blocksize=0x1000, erased_byte_value=0),
+            FlashRegion(start=0x0800_0000, length=0x1000, blocksize=0x1000),
+            RamRegion(start=0x2000_0000, length=0x1000),
+        ]
+    )
+    assert [(r.start, r.erased) for r in made] == [
+        (0x0800_0000, 0xFF),
+        (0x0C00_0000, 0x00),
+        (0x2000_0000, 0xFF),
+    ]

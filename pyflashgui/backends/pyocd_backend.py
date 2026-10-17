@@ -80,6 +80,8 @@ def regions_of(memory_map, generic: bool = False) -> list[Region]:
                 page_size=int(getattr(region, "page_size", 0) or 0) if region.is_flash else 0,
                 # An alias is given as the region itself, or as its name.
                 alias_of=getattr(alias, "name", alias) or "",
+                # From the pack's flash routine, for a device from a pack.
+                erased=int(getattr(region, "erased_byte_value", 0xFF)) if region.is_flash else 0xFF,
             )
         )
     return sorted(out, key=lambda r: r.start)

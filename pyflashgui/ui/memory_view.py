@@ -43,6 +43,7 @@ from pyflashgui.core.compare import DIFFERENT, Comparison, compare_all
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import Image, Segment
+from pyflashgui.core.memory_map import region_at
 from pyflashgui.ui import fonts
 from pyflashgui.ui.files_view import Entry, parse_address, save_entry
 
@@ -59,9 +60,10 @@ MOST_SHOWN = 8
 
 NOTHING = "Nothing is shown yet. Read... reads part of the connected target's memory."
 TRIM_TIP = (
-    "Erased flash reads as FF. With this ticked, the FF bytes after the last\n"
-    "byte that holds something are not saved, so the file is the size of\n"
-    "what is there and not the size of what was read."
+    "Erased flash reads as FF on most devices, and as 00 on some. With this\n"
+    "ticked, the erased bytes after the last byte that holds something are\n"
+    "not saved, so the file is the size of what is there and not the size of\n"
+    "what was read. The target's own erased value is used where it is known."
 )
 
 
@@ -717,7 +719,16 @@ class MemoryView(QWidget):
     def to_save(self) -> bytes:
         """What is shown, less the erased bytes at the end if that is ticked."""
         data = self.model.data_read
-        return data.rstrip(b"\xff") if self.trim.isChecked() else data
+        return data.rstrip(bytes([self._erased()])) if self.trim.isChecked() else data
+
+    def _erased(self) -> int:
+        """What the flash this was read from reads as erased: FF unless the
+        target says otherwise, as an XMC4500's 00 does."""
+        if self.model.segments:
+            region = region_at(self.flasher.regions, self.model.segments[0].address)
+            if region is not None:
+                return region.erased
+        return 0xFF
 
     def save(self) -> bool:
         """Ask where, and save what is shown there. Whether it was saved."""

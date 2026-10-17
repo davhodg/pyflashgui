@@ -104,6 +104,8 @@ since the last version, and comes out in the next one.
   a reset by the reset pin. Letting go is now given five seconds, on a thread of its own.
 - Closing pyflashgui while it is working on the target, or while a script runs, says why
   it stays open in a box as well as in the Event Log.
+- **Leave off the erased bytes at the end** left off only `FF`. Through pyOCD it now uses
+  what the device's flash reads as once erased, from its pack: `00` on an XMC4500.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

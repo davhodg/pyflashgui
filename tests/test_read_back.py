@@ -877,3 +877,21 @@ def test_an_s_record_is_given_addresses_wide_enough_for_what_it_holds(tmp_path):
     assert Path(low).read_text().splitlines()[0].startswith("S1"), "16-bit, as the name asks"
     assert Path(high).read_text().splitlines()[0].startswith("S3"), "32-bit, as the data needs"
     assert images.read(high).segments == (Segment(FLASH_AT, b"\x01\x02"),)
+
+
+def test_flash_that_erases_to_zero_has_its_zeros_left_off(window, monkeypatch, tmp_path):
+    """An XMC4500's flash reads 00 once erased: left off the end, not FF."""
+    import dataclasses
+
+    window.probe_bar.button.click()
+    wait_for(lambda: window.flasher.connected)
+    board = backends.get("simulated").board(PROBE)
+    board.memory["flash"][:256] = b"\x01\x00\x02" + b"\x00" * 0xFD
+    read(window, monkeypatch, "08000000", "100")
+    window.flasher.regions = [
+        dataclasses.replace(r, erased=0x00) if r.kind == FLASH else r
+        for r in window.flasher.regions
+    ]
+    memory = window.memory_view
+    memory.trim.setChecked(True)
+    assert memory.to_save() == b"\x01\x00\x02", "a 00 in the middle is part of what is there"

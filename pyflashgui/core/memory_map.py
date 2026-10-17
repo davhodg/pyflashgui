@@ -45,6 +45,9 @@ class Region:
     #: The region this one is another address for, if it is one. A device may
     #: show the same flash at several addresses and take writes at only one.
     alias_of: str = ""
+    #: What a byte of this flash reads as once erased: FF for most devices,
+    #: 00 for some -- an XMC4500's does.
+    erased: int = 0xFF
 
     @property
     def end(self) -> int:
