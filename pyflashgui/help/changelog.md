@@ -82,6 +82,9 @@ since the last version, and comes out in the next one.
 - With the board's power turned off while connected through pyOCD, a J-Link could not be
   connected to again (*No emulator with serial number*) though Find probes found it: the
   probe is now let go of even when disconnecting from the target fails.
+- A pack's device chosen as pyOCD spells it -- *xmc4500_f100x1024* for the pack's
+  *xmc4500-f100x1024* -- was not known to be in the pack, so a J-Link worked a word at a
+  time. Both spellings are one device, listed once.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly
   be seen; it now has an outline.
 - In the Windows 11 style, a cell being edited (a binary's address in the Files pane) no

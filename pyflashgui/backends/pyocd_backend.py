@@ -371,20 +371,25 @@ class PyocdBackend(Backend):
     def targets(self) -> list[TargetInfo]:
         from pyocd.target import TARGET
 
+        # Once a pack's devices have been used, pyOCD lists them among its
+        # own, spelt its way: "xmc4500_f100x1024" for the pack's
+        # "xmc4500-f100x1024". Listed once, as from their pack, and not
+        # again as built in.
         out = [
             TargetInfo(name, vendor=getattr(cls, "VENDOR", "") or "", source="built in")
             for name, cls in TARGET.items()
+            if "_pack_device" not in vars(cls)
         ]
-        seen = {t.name for t in out}
+        seen = {pyocd_packs.same_name(t.name) for t in out}
         for device in self._file_devices():
             name = device.name.lower()
-            if name not in seen:
-                seen.add(name)
+            if pyocd_packs.same_name(name) not in seen:
+                seen.add(pyocd_packs.same_name(name))
                 out.append(TargetInfo(name, vendor=device.vendor, source="pack file"))
         for device in self._pack_devices():
             name = device.part_number.lower()
-            if name not in seen:
-                seen.add(name)
+            if pyocd_packs.same_name(name) not in seen:
+                seen.add(pyocd_packs.same_name(name))
                 out.append(TargetInfo(name, vendor=device.vendor or "", source="pack"))
         return sorted(out, key=lambda t: t.name)
 

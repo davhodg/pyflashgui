@@ -314,10 +314,22 @@ def file_devices() -> list[Device]:
     return out
 
 
+def same_name(part: str) -> str:
+    """A device's name as pyOCD files it, whichever way it is spelt.
+
+    pyOCD adds the devices of the packs it has to its own list of targets
+    as "xmc4500_f100x1024", and the pack calls it "XMC4500-F100x1024": both
+    are one device, and are looked up as one.
+    """
+    import pyocd.target
+
+    return pyocd.target.normalise_target_type_name(part)
+
+
 def packs_for(target: str) -> list[str]:
     """The pack files with this device in, for pyOCD to be handed when connecting."""
-    wanted = target.lower()
-    return [d.pack.file for d in file_devices() if d.name.lower() == wanted]
+    wanted = same_name(target)
+    return [d.pack.file for d in file_devices() if same_name(d.name) == wanted]
 
 
 def add_file(source: str) -> tuple[Pack, int]:
@@ -356,15 +368,15 @@ def core_of(target: str) -> str:
     import pyocd.target  # noqa: F401  # see read_pack
     from pyocd.target.pack.cmsis_pack import CmsisPack
 
-    wanted = target.lower()
+    wanted = same_name(target)
     for path in packs_for(target):
         with zipfile.ZipFile(path) as archive:
             for device in CmsisPack(archive).devices:
-                if device.part_number.lower() == wanted and (core := _core(device)):
+                if same_name(device.part_number) == wanted and (core := _core(device)):
                     return core
     from pyocd.target.pack.pack_target import ManagedPacks
 
     for device in ManagedPacks.get_installed_targets():
-        if device.part_number.lower() == wanted and (core := _core(device)):
+        if same_name(device.part_number) == wanted and (core := _core(device)):
             return core
     return ""

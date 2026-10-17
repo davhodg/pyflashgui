@@ -445,3 +445,43 @@ def test_j_link_commander_resets_only_its_own_way():
     from pyflashgui.backends.jlink_backend import JLinkBackend
 
     assert JLinkBackend.reset_kinds == ("default",)
+
+
+def test_a_pack_device_spelt_pyocd_s_way_is_the_same_device(fake_pyocd, monkeypatch):
+    """Reported: chosen as xmc4500_f100x1024 -- pyOCD's spelling, in its list
+    once the pack had been used -- a J-Link was not named the core, and
+    worked a word at a time."""
+    from pyflashgui.backends import pyocd_packs
+
+    class Device:
+        part_number = "XMC4500-F100x1024"
+
+        def __init__(self):
+            self.processors_map = {"Cortex-M4": None}
+
+    from pyocd.target.pack import pack_target
+
+    monkeypatch.setattr(pyocd_packs, "packs_for", lambda target: [])
+    monkeypatch.setattr(pack_target.ManagedPacks, "get_installed_targets", lambda: [Device()])
+    assert pyocd_packs.core_of("xmc4500_f100x1024") == "Cortex-M4"
+    connection = backends.get("pyocd").connect("JLINK1", "xmc4500_f100x1024")
+    assert fake_pyocd["options"][-1]["jlink.device"] == "Cortex-M4"
+    assert connection.notes == ()
+
+
+def test_a_pack_device_pyocd_has_taken_in_is_listed_once(monkeypatch):
+    from pyocd.target import TARGET
+    from pyocd.target.pack import pack_target
+
+    from pyflashgui.backends.pyocd_backend import PyocdBackend
+
+    class Device:
+        part_number = "XMC4500-F100x1024"
+        vendor = "Infineon:7"
+
+    made = type("Xmc4500_f100x1024", (), {"_pack_device": Device()})
+    monkeypatch.setitem(TARGET, "xmc4500_f100x1024", made)
+    monkeypatch.setattr(pack_target.ManagedPacks, "get_installed_targets", lambda: [Device()])
+    monkeypatch.setattr(PyocdBackend, "_file_devices", staticmethod(lambda: []))
+    names = [t.name for t in PyocdBackend().targets() if "xmc4500" in t.name]
+    assert names == ["xmc4500-f100x1024"]
