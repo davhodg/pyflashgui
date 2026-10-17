@@ -838,7 +838,6 @@ class MainWindow(QMainWindow):
         if not name:
             return
         view = self.panes.view(name)
-        view.read_requested.connect(self._read_memory)
         view.saved.connect(self.files_view.refill)
         view.cropped.connect(self.files_view.add_crop)
         view.show_entry(entry)

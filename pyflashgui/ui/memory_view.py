@@ -59,7 +59,7 @@ AGREES, UNMENTIONED = "..", "--"
 #: How many bytes of a difference are spelled out in the line about it.
 MOST_SHOWN = 8
 
-NOTHING = "Nothing is shown yet. Read... reads part of the connected target's memory."
+NOTHING = "Nothing is shown yet. Read..., in the Files pane, reads part of the target's memory."
 CROP_TIP = (
     "Make a shorter copy of what is shown: a range of it, or all of it but the\n"
     "erased bytes at the end. It joins the Files list, named after this, to\n"
@@ -299,8 +299,6 @@ class MemoryModel(QAbstractTableModel):
 
 
 class MemoryView(QWidget):
-    #: Read... was pressed: somebody else asks what to read and reads it.
-    read_requested = Signal()
     #: What is shown has been saved: the list it is on says so no longer.
     saved = Signal()
     #: A shorter copy was made: where it starts, what it holds, the target
@@ -400,11 +398,6 @@ class MemoryView(QWidget):
         looking.addWidget(self.previous_button)
         looking.addWidget(self.next_button)
 
-        self.read_button = QPushButton("Read...")
-        self.read_button.setToolTip(
-            "Read part of the connected target's memory, changing nothing in the target."
-        )
-        self.read_button.clicked.connect(self.read_requested.emit)
         self.save_button = QPushButton("Save...")
         self.save_button.setToolTip(
             "Save what is shown here in a file: raw binary, Intel HEX or S-record.\n"
@@ -431,7 +424,6 @@ class MemoryView(QWidget):
         self.crop_button.clicked.connect(self.crop)
 
         buttons = QHBoxLayout()
-        buttons.addWidget(self.read_button)
         buttons.addWidget(self.save_button)
         buttons.addWidget(self.crop_button)
         buttons.addStretch(1)
@@ -526,7 +518,6 @@ class MemoryView(QWidget):
         self._enable()
 
     def _enable(self) -> None:
-        self.read_button.setEnabled(self.flasher.connected and not self.flasher.busy)
         anything = bool(self.model.data_read)
         self.save_button.setEnabled(anything and len(self.model.segments) == 1)
         self.crop_button.setEnabled(anything and len(self.model.segments) == 1)

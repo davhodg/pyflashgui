@@ -379,7 +379,8 @@ def test_there_is_no_memory_pane_until_something_is_read(window, monkeypatch):
     assert view.summary.text().startswith(
         "sim_single: 32 bytes from 08000000 to 0800001F, read at "
     )
-    assert view.save_button.isEnabled() and view.read_button.isEnabled()
+    assert view.save_button.isEnabled()
+    assert not hasattr(view, "read_button"), "Read... is the Files pane's"
 
 
 def test_each_read_has_a_pane_of_its_own_numbered_as_it_comes(window, monkeypatch):
@@ -641,17 +642,6 @@ def test_the_dialog_opens_on_the_whole_of_the_flash(window, monkeypatch):
     read(window, monkeypatch)
     assert window.memory_view.model.address == FLASH_AT
     assert len(window.memory_view.model.data_read) == 0x4_0000
-
-
-def test_read_in_a_memory_pane_opens_another_and_leaves_that_one_alone(window, monkeypatch):
-    connect_and_program(window, b"firmware")
-    read(window, monkeypatch, "08000000", "4")
-    first = window.memory_view
-    monkeypatch.setattr(ReadDialog, "exec", lambda dialog: ReadDialog.Accepted)
-    first.read_button.click()
-    wait_for(lambda: not window.flasher.busy and len(window.memory_views) == 2)
-    assert first.model.data_read == b"firm"
-    assert window.memory_views[1].model.data_read[:8] == b"firmware"
 
 
 def test_what_is_shown_is_saved_as_it_was_read_by_the_name_it_is_given(

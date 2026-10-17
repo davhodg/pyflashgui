@@ -39,6 +39,7 @@ since the last version, and comes out in the next one.
 
 ### Changed
 
+- A Memory pane has no **Read...** of its own: reading is the Files pane's.
 - The name offered for saving a read is where it starts and how long it is, as eight
   hexadecimal digits each, in place of the date and time.
 - Beside the progress bar, what is being done -- *Erasing...*, *Programming...*,

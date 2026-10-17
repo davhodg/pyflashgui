@@ -12,7 +12,7 @@ Memory panes open beside the Files pane, as tabs of one another. Each is a pane 
 
 ## Reading
 
-**Read...**, in the [Files](files.md) pane or in a Memory pane, asks what to read. It needs a probe [connected](probe.md) to a target, and changes nothing in the target.
+**Read...**, in the [Files](files.md) pane, asks what to read. It needs a probe [connected](probe.md) to a target, and changes nothing in the target.
 
 - **Region** offers the target's own regions, the flash first, and fills in the address and the length. Both can be typed over, in hexadecimal: what is wanted is as often the first few kilobytes as the whole region.
 - Where the target's memory is not known, as for a device whose name was typed and is not on the backend's list, there are no regions to choose and the range is typed.
