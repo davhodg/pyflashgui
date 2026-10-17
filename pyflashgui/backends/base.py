@@ -162,8 +162,11 @@ class Connection(ABC):
         segments: Sequence[Segment],
         erase: str = ERASE_SECTORS,
         progress: Progress = _nothing,
-    ) -> None:
+    ) -> str | None:
         """Erase what has to be erased and write these bytes.
+
+        Returns anything about how it went worth saying in the Event Log, a
+        sentence, or None.
 
         Not cancellable. Stopping half way through leaves a target that is
         neither what it was nor what it was going to be, which is worse than

@@ -349,6 +349,22 @@ def test_stop_beside_connect_is_offered_where_the_target_can_be_left_running(win
     assert bar.chosen_stop(), "where it cannot be left running, it is stopped"
 
 
+def test_the_bar_says_each_stage_as_it_starts(window):
+    """Reported with J-Link Commander: Programming 100% stayed while it went on
+    to verify, which gives no figure until it has finished."""
+    files = window.files_view
+    files._on_busy(True)
+    files._on_progress("Programming", 0.0)
+    assert files.doing.text() == "Programming..."
+    files._on_progress("Programming", 1.0)
+    assert files.progress.format() == "%p%" and files.progress.value() == 1000
+    files._on_progress("Verifying", 0.0)
+    assert files.doing.text() == "Verifying..."
+    assert files.progress.maximum() == 0, "moving, with no figure, not the last 100%"
+    files._on_busy(False)
+    assert files.doing.text() == ""
+
+
 def test_there_are_no_ticks_beside_the_list(window):
     """What Program does is said on the button that does it."""
     from PySide6.QtWidgets import QCheckBox

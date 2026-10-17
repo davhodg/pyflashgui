@@ -364,8 +364,8 @@ class Flasher(QObject):
         size = sum(len(s) for s in segments)
         started = time.monotonic()
 
-        def work() -> Verification | None:
-            connection.program(segments, erase=erase, progress=self._progress("Programming"))
+        def work() -> tuple[Verification | None, str | None]:
+            note = connection.program(segments, erase=erase, progress=self._progress("Programming"))
             result = None
             if verify:
                 self._last_progress = -1.0
@@ -376,10 +376,13 @@ class Flasher(QObject):
             # not what was meant to be, and starting it helps nobody.
             if reset and (result is None or result.ok):
                 connection.reset()
-            return result
+            return result, note
 
-        def done(result: Verification | None) -> bool:
+        def done(made: tuple[Verification | None, str | None]) -> bool:
+            result, note = made
             took = time.monotonic() - started
+            if note:
+                self.events.information(note)
             files = "1 file" if len(images) == 1 else f"{len(images)} files"
             if result is not None and not result.ok:
                 self.events.error(

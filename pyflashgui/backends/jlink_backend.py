@@ -248,6 +248,38 @@ def run(arguments: Sequence[str], commands: Sequence[str], timeout: float, doing
 
 
 # --- reading what Commander says ---------------------------------------------------------
+#: The line SEGGER's software ends a download with, saying how long each part
+#: took: ``J-Link: Flash download: Total: 3.052s (Prepare: 0.071s, Compare:
+#: 0.014s, Erase: 1.890s, Program & Verify: 1.029s, Restore: 0.046s)``. Older
+#: versions say "Total time needed".
+_DOWNLOAD = re.compile(
+    r"Flash download:\s*Total(?: time needed)?:\s*([\d.]+)\s*s\s*\(([^)]*)\)", re.I
+)
+_PART = re.compile(r"([A-Za-z& ]+?):\s*([\d.]+)\s*s")
+#: Said when the flash held the image already, and nothing was written.
+_SKIPPED = re.compile(r"Flash download:\s*Skipped", re.I)
+
+
+def download_text(output: str) -> str | None:
+    """What J-Link said a download did, as a sentence: what it took to erase,
+    and to program and check, which happen inside one command and cannot be
+    shown as they go. None if it did not say."""
+    if _SKIPPED.search(output) and not _DOWNLOAD.search(output):
+        return "J-Link found the flash held this already, and wrote nothing."
+    found = _DOWNLOAD.search(output)
+    if found is None:
+        return None
+    parts = {name.strip().lower(): float(seconds) for name, seconds in _PART.findall(found[2])}
+    said = []
+    if "erase" in parts:
+        said.append(f"erased in {parts['erase']:.1f} s")
+    if "program & verify" in parts:
+        said.append(f"programmed and checked in {parts['program & verify']:.1f} s")
+    if not said:
+        return None
+    return f"J-Link {' and '.join(said)}, {float(found[1]):.1f} s in all."
+
+
 #: One line of ShowEmuList for each J-Link:
 #: ``J-Link[0]: Connection: USB, Serial number: 801012345, ProductName: J-Link PLUS``
 _PROBE = re.compile(r"Serial number:\s*(\d+)(?:.*?ProductName:\s*([^,\r\n]+))?", re.I)
@@ -391,7 +423,7 @@ class JLinkConnection(Connection):
         segments: Sequence[Segment],
         erase: str = ERASE_SECTORS,
         progress: Progress = _nothing,
-    ) -> None:
+    ) -> str | None:
         if erase not in (ERASE_SECTORS, ERASE_CHIP):
             raise BackendError(f"There is no way of erasing called {erase!r}.")
         import bincopy
@@ -414,8 +446,9 @@ class JLinkConnection(Connection):
             # LoadFile erases the sectors it writes to, and checks what it
             # wrote, by itself.
             commands.append(f"LoadFile {_named(path)}")
-            self._run(commands, WORK_S, f"Programming {self._device}")
+            said = self._run(commands, WORK_S, f"Programming {self._device}")
         progress(1.0)
+        return download_text(said)
 
     def read(
         self, address: int, length: int, resume: bool = False, skip_setup: bool = False

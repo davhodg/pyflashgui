@@ -141,7 +141,7 @@ class SimulatedConnection(Connection):
         segments: Sequence[Segment],
         erase: str = ERASE_SECTORS,
         progress: Progress = _nothing,
-    ) -> None:
+    ) -> str | None:
         board = self._open()
         if erase not in (ERASE_SECTORS, ERASE_CHIP, ERASE_NONE):
             raise BackendError(f"There is no way of erasing called {erase!r}.")

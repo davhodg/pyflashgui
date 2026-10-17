@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QHBoxLayout,
     QHeaderView,
+    QLabel,
     QMessageBox,
     QProgressBar,
     QPushButton,
@@ -331,6 +332,10 @@ class FilesView(QWidget):
         self.progress.setRange(0, 1000)
         self.progress.setTextVisible(True)
         self.progress.setFormat("")
+        #: What is being done, beside the bar: a bar with no figure for how far
+        #: along it is -- J-Link Commander gives none while it works -- cannot
+        #: show any words.
+        self.doing = QLabel()
         self.cancel_button = QPushButton("Cancel")
         self.cancel_button.setToolTip(
             "Stop verifying or reading. Programming is not stopped part way: that would\n"
@@ -361,6 +366,7 @@ class FilesView(QWidget):
         # A row of its own: beside the buttons, the bar made the pane wider
         # than half the window it opens in, and the end of the row was cut off.
         progress_row = QHBoxLayout()
+        progress_row.addWidget(self.doing)
         progress_row.addWidget(self.progress, 1)
         progress_row.addWidget(self.cancel_button)
         listed = QWidget()
@@ -783,16 +789,22 @@ class FilesView(QWidget):
             self.progress.setRange(0, 1000)
             self.progress.setValue(0)
             self.progress.setFormat("")
+            self.doing.setText("")
         self._enable()
 
     def _on_progress(self, label: str, fraction: float) -> None:
-        if fraction <= 0.0:
-            return  # started, and nothing yet to show for it
-        self.progress.setRange(0, 1000)
-        self.progress.setValue(round(fraction * 1000))
         # The word as well as the bar: a bar alone does not say which of
         # erasing, programming and verifying it is part way through.
-        self.progress.setFormat(f"{label} %p%")
+        self.doing.setText(f"{label}...")
+        if fraction <= 0.0:
+            # Started, with nothing yet to show for it: moving, with no figure,
+            # rather than the last stage's 100% while this one runs.
+            self.progress.setRange(0, 0)
+            self.progress.setFormat("")
+            return
+        self.progress.setRange(0, 1000)
+        self.progress.setValue(round(fraction * 1000))
+        self.progress.setFormat("%p%")
 
     def _on_finished(self, _name: str, _ok: bool) -> None:
         self._enable()

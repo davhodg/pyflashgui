@@ -245,7 +245,7 @@ class PyocdConnection(Connection):
         segments: Sequence[Segment],
         erase: str = ERASE_SECTORS,
         progress: Progress = _nothing,
-    ) -> None:
+    ) -> str | None:
         from pyocd.flash.loader import MemoryLoader
 
         self._target()

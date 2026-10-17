@@ -449,3 +449,31 @@ def test_nothing_but_a_read_asked_for_that_way_leaves_it_out(connection, home):
     connection.reset()
     assert not any("-jlinkscriptfile" in run["options"] for run in runs(home))
     assert backends.get("jlink").can_skip_setup and not backends.get("pyocd").can_skip_setup
+
+
+@pytest.mark.parametrize(
+    ("said", "expected"),
+    [
+        (
+            "J-Link: Flash download: Total: 3.052s (Prepare: 0.071s, Compare: 0.014s, "
+            "Erase: 1.890s, Program & Verify: 1.029s, Restore: 0.046s)",
+            "J-Link erased in 1.9 s and programmed and checked in 1.0 s, 3.1 s in all.",
+        ),
+        (
+            "J-Link: Flash download: Total time needed: 13.580s (Prepare: 0.082s, Compare: "
+            "0.000s, Erase: 7.693s, Program & Verify: 5.739s, Restore: 0.064s)",
+            "J-Link erased in 7.7 s and programmed and checked in 5.7 s, 13.6 s in all.",
+        ),
+        (
+            "J-Link: Flash download: Skipped. Contents already match",
+            "J-Link found the flash held this already, and wrote nothing.",
+        ),
+        ("O.K.", None),
+    ],
+)
+def test_what_a_download_did_is_said_from_what_j_link_printed(said, expected):
+    """Asked for: LoadFile erases, programs and checks in one command, with
+    nothing to show while it does; afterwards it says how long each took."""
+    from pyflashgui.backends.jlink_backend import download_text
+
+    assert download_text(f"Downloading file...\n{said}\nO.K.\n") == expected
