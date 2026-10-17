@@ -490,7 +490,10 @@ def test_a_pack_device_pyocd_has_taken_in_is_listed_once(monkeypatch):
     assert names == ["xmc4500-f100x1024"]
 
 
-def test_a_reset_that_takes_the_connection_with_it_connects_again():
+def test_a_reset_that_takes_the_connection_with_it_connects_again(monkeypatch):
+    from pyflashgui.backends import pyocd_backend
+
+    monkeypatch.setattr(pyocd_backend.time, "sleep", lambda _s: None)
     """Reported on an XMC4500 through a J-Link: after a reset by its pin it
     still said connected, and every operation failed with "Unspecified
     error"."""
@@ -555,3 +558,70 @@ def test_pyocd_is_told_whether_to_stop_the_target_on_connecting(
     monkeypatch.setattr(pyocd_packs, "core_of", lambda target: "Cortex-M4")
     backends.get("pyocd").connect("JLINK1", "xmc4500-f100x1024", stop=stop)
     assert fake_pyocd["options"][-1]["connect_mode"] == mode
+
+
+def test_a_target_still_starting_after_its_reset_is_waited_for(monkeypatch):
+    """Reported: connecting again straight after a reset by the pin failed,
+    though the connection had not been lost -- the device was still starting."""
+    from pyflashgui.backends import pyocd_backend
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    waited = []
+    monkeypatch.setattr(pyocd_backend.time, "sleep", waited.append)
+
+    class Target:
+        silent = 0
+
+        def reset(self, reset_type=None):
+            self.silent = 2  # answers on the third time of asking
+
+        def read32(self, address):
+            if self.silent:
+                self.silent -= 1
+                raise RuntimeError("Unspecified error")
+            return 0x410FC241
+
+    class Session:
+        target = Target()
+
+    reopened = []
+    connection = PyocdConnection(Session(), reopen=lambda: reopened.append(1))
+    assert connection.reset(kind="pin") is None
+    assert reopened == [], "a target that answers in the end is not connected to again"
+    assert waited[0] >= 0.1, "never asked at once"
+
+
+def test_connecting_again_is_tried_more_than_once(monkeypatch):
+    from pyflashgui.backends import pyocd_backend
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    monkeypatch.setattr(pyocd_backend.time, "sleep", lambda _s: None)
+
+    class Target:
+        def reset(self, reset_type=None):
+            pass
+
+        def read32(self, address):
+            raise RuntimeError("Unspecified error")
+
+    class Session:
+        target = Target()
+
+        def close(self):
+            pass
+
+    class Fresh:
+        class target:  # noqa: N801 -- standing in for an attribute
+            pass
+
+    attempts = []
+
+    def reopen():
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise BackendError("Target is not connected neither coresight is not configured")
+        return Fresh()
+
+    connection = PyocdConnection(Session(), reopen=reopen)
+    assert connection.reset(kind="pin").startswith("The reset took the debug connection")
+    assert len(attempts) == 3

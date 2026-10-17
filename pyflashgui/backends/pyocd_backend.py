@@ -15,6 +15,7 @@ are plugged in before it can be drawn.
 from __future__ import annotations
 
 import contextlib
+import time
 from collections.abc import Sequence
 
 from pyflashgui.backends import pyocd_packs
@@ -184,6 +185,13 @@ def speed_text(hertz: int | None) -> str:
 #: Where every Cortex-M says which processor it is. Read after a reset to
 #: find out whether the target still answers.
 CPUID = 0xE000_ED00
+#: How long to give a target after a reset before asking it, and then before
+#: asking it again, each in turn. Never at once: a device starting up may not
+#: answer -- an XMC4500 runs its own start-up code first -- and that is not a
+#: lost connection.
+SETTLE_S = (0.1, 0.2, 0.5, 1.0)
+#: How long to wait before each attempt to connect again, when it was lost.
+REATTACH_S = (0.2, 0.5, 1.0, 2.0)
 
 
 class PyocdConnection(Connection):
@@ -348,12 +356,20 @@ class PyocdConnection(Connection):
         )
 
     def _answers(self) -> bool:
-        """Whether the target can still be reached, by reading which processor it is."""
-        try:
-            self._target().read32(CPUID)
-            return True
-        except Exception:
-            return False
+        """Whether the target can still be reached, by reading which processor it is.
+
+        Asked after a moment, then again a few times, a little later each
+        time, before the answer is no: straight after a reset, a device may
+        still be starting.
+        """
+        for wait in SETTLE_S:
+            time.sleep(wait)
+            try:
+                self._target().read32(CPUID)
+                return True
+            except Exception:
+                continue
+        return False
 
     def _reattach(self, halt: bool) -> None:
         """Connect again, after a reset that took the debug connection with it.
@@ -370,13 +386,22 @@ class PyocdConnection(Connection):
             )
         old, self._session = self._session, None
         _let_go(old)
-        try:
-            self._session = self._reopen()
-        except BackendError as exc:
+        # Not at once, and not only once: reported failing with "Target is not
+        # connected" when asked straight away, while the device was starting.
+        failed: BackendError | None = None
+        for wait in REATTACH_S:
+            time.sleep(wait)
+            try:
+                self._session = self._reopen()
+                break
+            except BackendError as exc:
+                failed = exc
+        else:
+            assert failed is not None
             raise BackendError(
                 f"The reset took the debug connection with it, and connecting again failed: "
-                f"{exc} Disconnect, and connect again."
-            ) from exc
+                f"{failed} Disconnect, and connect again."
+            ) from failed
         if halt:
             try:
                 self._target().halt()
