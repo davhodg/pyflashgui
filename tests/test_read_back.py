@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 from PySide6.QtCore import QCoreApplication, QItemSelectionModel, QSettings, Qt
-from PySide6.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from pyflashgui import backends
 from pyflashgui.backends import jlink_backend
@@ -704,7 +704,9 @@ def test_crop_makes_a_read_of_its_own_without_the_erased_end(window, monkeypatch
     memory = window.memory_view
     assert crop_with(monkeypatch, memory, lambda dialog: None)
     made = window.files_view.entries[-1]
-    assert made.is_read and made.unsaved and made.name == "Read 2"
+    assert made.unsaved and made.name == "Read 1 cropped", "named after it, not as a read"
+    assert made.cropped_from == "Read 1"
+    assert memory.title() == "Read 1"
     assert made.image.segments == (Segment(FLASH_AT, b"\x01\xff\x02"),), "an FF inside is kept"
     assert memory.model.data_read == b"\x01\xff\x02" + b"\xff" * 0xFD, "the first is untouched"
     assert window.said[-1][1].startswith("Cropped Read 1 to 08000000 to 08000002")
@@ -721,6 +723,8 @@ def test_crop_takes_a_range(window, monkeypatch):
 
     assert crop_with(monkeypatch, window.memory_view, a_range)
     assert window.files_view.entries[-1].image.segments == (Segment(FLASH_AT + 4, b"ware"),)
+    assert crop_with(monkeypatch, window.memory_view, a_range)
+    assert window.files_view.entries[-1].name == "Read 1 cropped 2", "a second is told apart"
 
 
 def test_crop_refuses_what_would_leave_nothing_or_run_past_the_end(app):
@@ -935,3 +939,70 @@ def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(window, m
     remembered = []
     crop_with(monkeypatch, memory, lambda dialog: remembered.append(dialog.erased_choice()))
     assert remembered == [0x00], "kept for the target"
+
+
+def test_a_memory_pane_s_tab_has_close_on_a_right_click(window, monkeypatch):
+    """Asked for: with several Memory panes as tabs, closing one by its tab."""
+    from PySide6.QtWidgets import QTabBar
+
+    connect_and_program(window, b"firmware")
+    read(window, monkeypatch, "08000000", "10")
+    read(window, monkeypatch, "08000000", "20")
+    first, second = window._memory_panes()
+    docks = window.panes.docks
+
+    bar = QTabBar()
+    bar.addTab("Event Log")
+    bar.addTab(docks[second].windowTitle())
+    assert window._memory_tab(bar, 0) == "", "another pane's tab is left to Qt's own menu"
+    assert window._memory_tab(bar, 1) == second
+
+    menu = window.memory_tab_menu(second)
+    labels = [a.text() for a in menu.actions()]
+    assert labels == ["Close", "Close the other Memory panes", "Close all Memory panes"]
+    menu.actions()[1].trigger()
+    assert not window.panes.on_screen(first) and window.panes.on_screen(second)
+    menu = window.memory_tab_menu(second)
+    assert not menu.actions()[1].isEnabled(), "no others left to close"
+    menu.actions()[0].trigger()
+    assert not window.panes.on_screen(second)
+    assert len(window.files_view.entries) == 2, "the reads are still on the list"
+
+
+def test_a_right_click_on_a_memory_tab_reaches_its_menu(window, monkeypatch):
+    """The click itself, on the tab bar Qt makes for panes in tabs."""
+    from PySide6.QtGui import QContextMenuEvent
+    from PySide6.QtWidgets import QTabBar
+
+    connect_and_program(window, b"firmware")
+    window.show()
+    for length in ("10", "20", "30"):
+        read(window, monkeypatch, "08000000", length)
+    QCoreApplication.processEvents()
+    titles = {window.panes.docks[n].windowTitle() for n in window._memory_panes()}
+    bars = [
+        b
+        for b in window.findChildren(QTabBar)
+        if b.isVisible() and any(b.tabText(i) in titles for i in range(b.count()))
+    ]
+    if not bars:
+        pytest.skip("Qt made no tab bar for the panes on this platform")
+    opened = []
+
+    class Shown:
+        """The menu, recorded rather than shown: shown, it waits for a click."""
+
+        def __init__(self, name):
+            self.name = name
+
+        def exec(self, _where):
+            opened.append(self.name)
+
+    monkeypatch.setattr(window, "memory_tab_menu", Shown)
+    bar = bars[0]
+    index = next(i for i in range(bar.count()) if bar.tabText(i) in titles)
+    centre = bar.tabRect(index).center()
+    QApplication.sendEvent(
+        bar, QContextMenuEvent(QContextMenuEvent.Mouse, centre, bar.mapToGlobal(centre))
+    )
+    assert opened and opened[0] in window._memory_panes()

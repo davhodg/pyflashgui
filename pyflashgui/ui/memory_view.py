@@ -62,8 +62,8 @@ MOST_SHOWN = 8
 NOTHING = "Nothing is shown yet. Read... reads part of the connected target's memory."
 CROP_TIP = (
     "Make a shorter copy of what is shown: a range of it, or all of it but the\n"
-    "erased bytes at the end. It joins the Files list as a read of its own,\n"
-    "to look at, compare or save."
+    "erased bytes at the end. It joins the Files list, named after this, to\n"
+    "look at, compare or save."
 )
 #: The choice of erased value for each target, under this and its name.
 ERASED_KEY = "memory.erased"
@@ -303,8 +303,9 @@ class MemoryView(QWidget):
     read_requested = Signal()
     #: What is shown has been saved: the list it is on says so no longer.
     saved = Signal()
-    #: A shorter copy was made: where it starts, what it holds, and what of.
-    cropped = Signal(int, bytes, str)
+    #: A shorter copy was made: where it starts, what it holds, the target
+    #: it is of, and the name of what it was cropped from.
+    cropped = Signal(int, bytes, str, str)
 
     def __init__(self, flasher: Flasher, ctx: Context) -> None:
         super().__init__()
@@ -514,6 +515,8 @@ class MemoryView(QWidget):
             return f"{entry.name} holds nothing."
         size = size_text(len(self.model.data_read))
         span = f"from {pieces[0].address:08X} to {max(s.end for s in pieces) - 1:08X}"
+        if entry.cropped_from:
+            return f"{entry.name}: {size} {span}, cropped from {entry.cropped_from}."
         if entry.is_read:
             return f"{entry.target}: {size} {span}, read at {entry.when}."
         said = f"{entry.name}: {entry.image.format}, {size} {span}"
@@ -755,7 +758,9 @@ class MemoryView(QWidget):
             f"Cropped {self.title()} to {start:08X} to {start + len(kept) - 1:08X}, "
             f"{size_text(len(kept))}."
         )
-        self.cropped.emit(start, kept, self.target)
+        # A crop of a crop is named after what the first came from: its bytes
+        # are that one's still, and "cropped cropped" says nothing more.
+        self.cropped.emit(start, kept, self.target, self.entry.cropped_from or self.title())
         return True
 
     def save(self) -> bool:

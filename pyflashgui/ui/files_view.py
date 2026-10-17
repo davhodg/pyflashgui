@@ -120,6 +120,8 @@ class Entry:
     #: Whether what was read is anywhere but here. True from the moment
     #: it is read until it has been saved.
     unsaved: bool = False
+    #: What it is a shorter copy of, for one made by Crop. Empty otherwise.
+    cropped_from: str = ""
 
     @property
     def is_read(self) -> bool:
@@ -164,7 +166,7 @@ def save_entry(parent: QWidget, ctx: Context, entry: Entry, data: bytes | None =
         parent,
         ctx,
         folders.EXPORT,
-        "Save what was read" if entry.is_read else "Save a copy",
+        "Save what was read" if entry.is_read and not entry.cropped_from else "Save a copy",
         images.WRITE_FILTER,
         Path.home(),
         # Where it starts and how long it is, both in hexadecimal: what
@@ -462,7 +464,25 @@ class FilesView(QWidget):
         the files have for the same addresses.
         """
         self._reads += 1
-        name = f"Read {self._reads}"
+        return self._add_held(f"Read {self._reads}", address, data, target)
+
+    def add_crop(self, address: int, data: bytes, target: str, source: str) -> Entry:
+        """Put a shorter copy of another entry on the list, and show it.
+
+        Named after what it was cropped from, and not as a read: nothing was
+        read from the target to make it.
+        """
+        base = f"{source} cropped"
+        taken = {e.name for e in self.entries}
+        name, count = base, 2
+        while name in taken:
+            name, count = f"{base} {count}", count + 1
+        return self._add_held(name, address, data, target, cropped_from=source)
+
+    def _add_held(
+        self, name: str, address: int, data: bytes, target: str, cropped_from: str = ""
+    ) -> Entry:
+        """An entry held here and not in a file, put on the list unticked and shown."""
         entry = Entry(
             path=name,
             enabled=False,
@@ -470,6 +490,7 @@ class FilesView(QWidget):
             target=target,
             when=f"{datetime.now():%H:%M:%S}",
             unsaved=True,
+            cropped_from=cropped_from,
         )
         self.entries.append(entry)
         self._changed()
@@ -562,7 +583,14 @@ class FilesView(QWidget):
             name.setFlags(Qt.ItemIsUserCheckable | Qt.ItemIsEnabled | Qt.ItemIsSelectable)
             name.setCheckState(Qt.Checked if entry.enabled else Qt.Unchecked)
             image = entry.image
-            if entry.is_read:
+            if entry.cropped_from:
+                source = f"cropped from {entry.cropped_from}"
+                source += ", not saved" if entry.unsaved else ""
+                name.setToolTip(
+                    f"A shorter copy of {entry.cropped_from}, made by Crop. Ticked, it is "
+                    "written by Program like a file."
+                )
+            elif entry.is_read:
                 source = f"{entry.target}, read {entry.when}"
                 source += ", not saved" if entry.unsaved else ""
                 name.setToolTip(

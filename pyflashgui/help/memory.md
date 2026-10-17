@@ -6,7 +6,7 @@ A **Memory** pane shows the bytes of one entry of the [Files](files.md) list -- 
 
 A file in several pieces, with nothing between them, is shown piece after piece: each starts a row of its own at its own address, and the gaps are not shown.
 
-Memory panes open beside the Files pane, as tabs of one another. Each is a pane like any other: it can be docked at an edge, tabbed with another pane, or given a window of its own, and **View** lists it. A new one opens as a tab with the last that is docked in the window, so moving one moves where the rest arrive.
+Memory panes open beside the Files pane, as tabs of one another. Each is a pane like any other: it can be docked at an edge, tabbed with another pane, or given a window of its own, and **View** lists it. A new one opens as a tab with the last that is docked in the window, so moving one moves where the rest arrive. A right click on a Memory pane's tab offers **Close**, **Close the other Memory panes** and **Close all Memory panes**; a closed pane comes back when its entry is shown again, and the entry stays on the list.
 
 **Closing a Memory pane loses nothing.** What it showed is still on the Files list, and **Show** there, or a double click, opens it again. It is taking a read off that list, or closing pyflashgui, that would lose one that has not been saved, and both say so first and offer to save it, to discard it, or to keep it. The pane of a file follows the file: when a build writes it again, the pane shows what it holds now.
 
@@ -61,7 +61,7 @@ To compare with a file that is not on the list, add it; untick it if it is not t
 
 ## Cropping
 
-**Crop...** makes a shorter copy of what is shown, as a read of its own on the Files list: unsaved, shown in a pane of its own, to look at, compare, save or program like any other. What it came from is left as it is. It offers two things:
+**Crop...** makes a shorter copy of what is shown, on the Files list as *Read 1 cropped* or *app.hex cropped*: unsaved, shown in a pane of its own, to look at, compare, save or program like any other. What it came from is left as it is. It offers two things:
 
 - **All of it but the erased bytes at the end**, for a read of more than is there. Erased flash reads as `FF` on most devices, so a whole 1 MiB flash holding 100 KiB of firmware is 1 MiB; the copy ends at the last byte that holds something, and an erased byte in the middle of what is there is kept. Some devices' flash reads `00` once erased instead -- an XMC4500's does -- so beside it is what erased reads as: *as the target says* (through pyOCD, from the device's pack; `FF` where nothing says), or `FF` or `00` where that is not right. pyOCD says `FF` for an XMC4500. The choice is kept for each target.
 - **A range of it**: where it starts and how long it is, in hexadecimal.

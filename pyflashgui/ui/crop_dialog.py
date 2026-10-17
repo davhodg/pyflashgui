@@ -3,9 +3,10 @@
 """A shorter copy of what a Memory pane shows: a range of it, or all of it but
 the erased bytes at its end.
 
-The copy is a read of its own on the Files list, unsaved, shown in a pane of
-its own: so Save goes on saving what is shown, and a copy is looked at,
-compared, saved or programmed like any other read.
+The copy is an entry of its own on the Files list, named after what it was
+cropped from, unsaved, and shown in a pane of its own: so Save goes on saving
+what is shown, and a copy is looked at, compared, saved or programmed like
+anything else on the list.
 """
 
 from __future__ import annotations
@@ -103,7 +104,7 @@ class CropDialog(QDialog):
         layout = QVBoxLayout(self)
         said = QLabel(
             f"A shorter copy of these {size_text(len(data))} from {address:08X}. It joins "
-            "the Files list as a read of its own, to look at, compare or save."
+            "the Files list, named after what it is cropped from, to look at, compare or save."
         )
         said.setWordWrap(True)
         layout.addWidget(said)

@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QPlainTextEdit,
     QStatusBar,
+    QTabBar,
     QWidget,
 )
 
@@ -495,6 +496,12 @@ class MainWindow(QMainWindow):
         self._update_memory_space()
 
     def eventFilter(self, watched, event) -> bool:
+        if (
+            event.type() == QEvent.ContextMenu
+            and isinstance(watched, QTabBar)
+            and self._tab_menu(watched, event)
+        ):
+            return True
         # How wide the Files pane is while a Memory pane is beside it, kept
         # as it changes: by the time the last one has closed, Qt has already
         # given the Files pane its room.
@@ -833,7 +840,7 @@ class MainWindow(QMainWindow):
         view = self.panes.view(name)
         view.read_requested.connect(self._read_memory)
         view.saved.connect(self.files_view.refill)
-        view.cropped.connect(self.files_view.add_read)
+        view.cropped.connect(self.files_view.add_crop)
         view.show_entry(entry)
         # Called what the list calls it, which is how the two are told to be one.
         self.panes.set_default_title(name, view.title())
@@ -848,6 +855,10 @@ class MainWindow(QMainWindow):
         dock.raise_()
         # Dragged out of the window or back into it: the space follows.
         dock.topLevelChanged.connect(lambda _floating: self._update_memory_space())
+        # Its tab, when it is one, is made by Qt as the panes are laid out:
+        # looked for once that has happened, and again whenever it is moved.
+        QTimer.singleShot(0, self._watch_tab_bars)
+        dock.dockLocationChanged.connect(lambda _area: QTimer.singleShot(0, self._watch_tab_bars))
 
     def _compare(self, shown: Entry, other: Entry) -> None:
         """Show one entry, marked where another differs from it.
@@ -876,6 +887,51 @@ class MainWindow(QMainWindow):
     def map_view(self) -> MapView:
         """Where the ticked entries land: part of the Files pane."""
         return self.files_view.map_view
+
+    # --- a Memory pane's tab, right-clicked ---------------------------------------
+    def _watch_tab_bars(self) -> None:
+        """Listen to the tab bars Qt makes for panes in tabs, for a right click.
+
+        Qt makes them as panes are put together, and answers a right click on
+        one with its own menu of panes, so each is watched as it appears.
+        """
+        for bar in self.findChildren(QTabBar):
+            if not bar.property("pyflashgui_watched"):
+                bar.setProperty("pyflashgui_watched", True)
+                bar.installEventFilter(self)
+
+    def _tab_menu(self, bar: QTabBar, event) -> bool:
+        """Close, for a Memory pane's tab: with several open, the tabs are where
+        they are told apart. Whether the right click was one of those."""
+        if not (name := self._memory_tab(bar, bar.tabAt(event.pos()))):
+            return False
+        self.memory_tab_menu(name).exec(event.globalPos())
+        return True
+
+    def _memory_tab(self, bar: QTabBar, index: int) -> str:
+        """The Memory pane a tab is for, by name: empty for another pane's."""
+        if index < 0:
+            return ""
+        title = bar.tabText(index)
+        return next(
+            (n for n in self._memory_panes() if self.panes.docks[n].windowTitle() == title), ""
+        )
+
+    def memory_tab_menu(self, name: str) -> QMenu:
+        """What a right click on a Memory pane's tab offers. Each is closed as its
+        own close button closes it: put away, and shown again with its entry."""
+        menu = QMenu(self)
+        others = [n for n in self._memory_panes() if n != name and self.panes.on_screen(n)]
+        menu.addAction("Close", lambda: self.panes.docks[name].close())
+        close_others = menu.addAction(
+            "Close the other Memory panes", lambda: [self.panes.docks[n].close() for n in others]
+        )
+        close_others.setEnabled(bool(others))
+        menu.addAction(
+            "Close all Memory panes",
+            lambda: [self.panes.docks[n].close() for n in [name, *others]],
+        )
+        return menu
 
     def _memory_panes(self) -> list[str]:
         """The Memory panes that are open, by name, oldest first."""

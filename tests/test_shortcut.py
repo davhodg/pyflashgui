@@ -238,10 +238,14 @@ def test_it_is_not_said_with_a_shortcut_there_already(no_window_yet, tmp_path, m
 def test_neither_launcher_asks_anything_at_the_end_of_setup():
     """Nothing outside the folder is written unasked, and nothing waits for a key."""
     root = Path(__file__).resolve().parent.parent
-    for name, after in (("pyflashgui.cmd", ":check"), ("pyflashgui.sh", "elif cmp")):
-        text = (root / name).read_text(encoding="utf-8")
+    for name, after in (("pyflashgui.cmd", "\n:check\n"), ("pyflashgui.sh", "elif cmp")):
+        text = (root / name).read_text(encoding="utf-8").replace("\r\n", "\n")
         assert "pyflashgui.core.shortcut" not in text
         # From the end of setup to starting pyflashgui. The one question a
-        # launcher does ask is about a .venv that can no longer run.
-        end = text[text.index("Setup finished") : text.index(after)]
+        # launcher does ask is about a .venv that can no longer run. Looked
+        # for from the end of setup on: "goto :check" near the top of the
+        # .cmd once made this stretch empty, and the test unable to fail.
+        start = text.index("Setup finished")
+        end = text[start : text.index(after, start)]
+        assert len(end.splitlines()) > 3, f"{name}: the end of setup was not found"
         assert "choice " not in end and "read -r" not in end, name
