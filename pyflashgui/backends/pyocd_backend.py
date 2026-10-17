@@ -103,16 +103,16 @@ def _said(doing: str, exc: Exception) -> BackendError:
 
 #: Said on connecting a J-Link through pyOCD where it cannot be told the device.
 SLOW_JLINK = (
-    "Through pyOCD, this J-Link reads and writes the target a word at a time, which is slow: "
-    "a megabyte takes minutes. J-Link Commander, under Using, is much faster with a J-Link."
+    "Through pyOCD, with no pack to give this device's core, reading and writing go a word "
+    "at a time, and a megabyte takes minutes. J-Link Commander, under Using, is quicker for it."
 )
 
 
 def is_jlink(probe) -> bool:
-    """Whether pyOCD reaches this probe through SEGGER's library."""
+    """Whether pyOCD reaches this probe as a J-Link, in its own mode."""
     try:
         from pyocd.probe.jlink_probe import JLinkProbe
-    except Exception:  # pylink missing, or SEGGER's library with it
+    except Exception:  # pylink not installed, or the J-Link software not found
         return False
     return isinstance(probe, JLinkProbe)
 
@@ -144,8 +144,8 @@ def _let_go(session) -> Exception | None:
 
     pyOCD's close lets go of the target before the probe, and when the
     first fails -- the board's power was turned off -- never closes the
-    probe. A J-Link left open that way is held by SEGGER's library: found by
-    Find probes, and "No emulator with serial number" to every connect.
+    probe. A J-Link left open that way stays open: Find probes lists it, and
+    every connect says "No emulator with serial number".
     Returns what went wrong, if anything did.
     """
     try:
@@ -395,9 +395,9 @@ class PyocdConnection(Connection):
         """Connect again, after a reset that took the debug connection with it.
 
         Reported on an XMC4500 through a J-Link: reset by its reset pin, the
-        device reset its debug port as well, and SEGGER's library lost its
-        hold on it. It still said connected, and every read after failed
-        with "Unspecified error". Attached to as it is, so that what the
+        device reset its debug port as well, and the connection with it.
+        pyflashgui still said connected, and every read after failed with
+        "Unspecified error". Attached to as it is, so that what the
         reset started is left running.
         """
         if self._reopen is None:
@@ -558,10 +558,10 @@ class PyocdBackend(Backend):
             options["cmsis_dap.limit_packets"] = True
         notes: list[str] = []
         if is_jlink(chosen):
-            # Named to SEGGER's library, a J-Link reads and writes memory a
-            # block at a time. Not named, pyOCD drives it a word at a time,
-            # each word a round trip over USB: a megabyte took five minutes.
-            # SEGGER's library takes a core's name as a device's.
+            # Told the device, a J-Link reads and writes memory a block at a
+            # time. Not told, pyOCD drives it a word at a time, each word a
+            # round trip over USB: a megabyte took five minutes. A core's
+            # name serves as the device's.
             try:
                 core = pyocd_packs.core_of(target)
             except Exception:
@@ -575,7 +575,7 @@ class PyocdBackend(Backend):
         except BackendError:
             if "jlink.device" not in options:
                 raise
-            # Whatever SEGGER's library made of the name, the slow way works.
+            # A name it does not take: connected without one, a word at a time.
             del options["jlink.device"]
             session = self._open(chosen, options, target)
             notes.append(SLOW_JLINK)

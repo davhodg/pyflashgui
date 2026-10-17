@@ -176,7 +176,7 @@ def test_what_a_reset_had_to_do_is_said_after_it(connected, said, monkeypatch):
 
 def test_closing_does_not_wait_for_ever_on_a_probe_that_will_not_let_go(connected, monkeypatch):
     """Reported: pyflashgui froze on closing, after a reset by the reset pin
-    through a J-Link, waiting on SEGGER's library to let go of the probe."""
+    through a J-Link, waiting to let go of the probe."""
     import threading
 
     from pyflashgui.core import flasher as flasher_module

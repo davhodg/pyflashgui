@@ -562,9 +562,9 @@ class Flasher(QObject):
             # using it, and waited for here rather than queued, so that it
             # happens before the application has gone -- but only so long.
             # Reported: closed after a reset by the reset pin through a J-Link,
-            # pyflashgui froze, the window's own thread waiting on SEGGER's
-            # library to let go. Given up on, the probe is let go of when the
-            # process ends.
+            # pyflashgui stopped answering, the window's own thread waiting
+            # for the probe to be let go of. Given up on, it is let go of when
+            # the process ends.
             closer = threading.Thread(
                 target=_close_quietly, args=(connection,), name="closing the probe", daemon=True
             )

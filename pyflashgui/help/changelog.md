@@ -78,30 +78,30 @@ since the last version, and comes out in the next one.
 
 - A pyOCD connect that failed kept hold of the probe, so every later one failed too until
   the backend was switched and back.
-- A J-Link through pyOCD read and wrote a word at a time, a megabyte in five minutes:
-  SEGGER's library is now named the device's core, from its pack, and works a block at a
-  time. For a target with no pack the Event Log says it is slow, and that J-Link Commander
-  is faster.
+- Through pyOCD, a J-Link is now told the device's core, from its pack, so it reads and
+  writes a block at a time: a megabyte in seconds rather than minutes. For a target with
+  no pack the Event Log says reading and writing go a word at a time, and that J-Link
+  Commander is quicker for it.
 - With pyOCD's *cortex_m* chosen, which knows only the address map every Cortex-M has,
   a file for the device's flash was said to be in RAM. Programming is now refused with
   why, and to choose the device itself; reading and comparing still work.
 - Programming through pyOCD ran the bar through **Programming** twice: the first time is
   pyOCD erasing the sectors it is about to write, and is now shown as **Erasing**.
-- With the board's power turned off while connected through pyOCD, a J-Link could not be
-  connected to again (*No emulator with serial number*) though Find probes found it: the
-  probe is now let go of even when disconnecting from the target fails.
+- With the board's power turned off while connected through pyOCD, the probe could not be
+  connected to again (*No emulator with serial number*) though Find probes found it:
+  pyflashgui now lets go of the probe even when disconnecting from the target fails.
 - A pack's device chosen as pyOCD spells it -- *xmc4500_f100x1024* for the pack's
-  *xmc4500-f100x1024* -- was not known to be in the pack, so a J-Link worked a word at a
-  time. Both spellings are one device, listed once.
-- An XMC4500 reset by its reset pin through pyOCD and a J-Link lost the debug connection
-  with it: pyflashgui still said connected, and everything after failed with
-  *Unspecified error*. A target that no longer answers after a reset is connected to
-  again, leaving it running, and the Event Log says so.
+  *xmc4500-f100x1024* -- was not known to be in the pack, so its core was not found. Both
+  spellings are one device, listed once.
+- An XMC4500 resets its debug port too when reset by its reset pin, and pyflashgui went
+  on saying connected, so everything after failed with *Unspecified error*. A target that
+  no longer answers after a reset is now connected to again, leaving it running, and the
+  Event Log says so.
 - Erasing or programming through pyOCD a target attached to as it ran -- an XMC4500 with
   its firmware going -- could end in a HardFault (*IPSR=3*): pyOCD ran its flash routine
   wherever it had stopped the firmware. The target is now reset and stopped first.
-- Closing pyflashgui while connected could leave it frozen, waiting on SEGGER's library to
-  let go of a J-Link after a reset by the reset pin. Letting go is now given five seconds.
+- Closing pyflashgui while connected could leave it waiting to let go of the probe, after
+  a reset by the reset pin. Letting go is now given five seconds, on a thread of its own.
 - Closing pyflashgui while it is working on the target, or while a script runs, says why
   it stays open in a box as well as in the Event Log.
 - In the dark on Windows 10, an unticked box in a list (the Files pane, Erase) could hardly

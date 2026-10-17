@@ -324,7 +324,7 @@ def fake_pyocd(monkeypatch):
 
         def open(self):
             if made["refuse"] is not None and made["refuse"](self.options):
-                raise RuntimeError("SEGGER's library did not take that")
+                raise RuntimeError("the name was not taken")
 
         def close(self):
             pass
@@ -399,7 +399,7 @@ def test_a_pyocd_disconnect_that_fails_still_lets_go_of_the_probe():
     """Reported: with the board's power turned off while connected, every
     connect after said "No emulator with serial number" though Find probes
     found the J-Link. pyOCD gave up closing at the target and never closed
-    the probe, which SEGGER's library went on holding."""
+    the probe, which so stayed open."""
     from pyflashgui.backends.pyocd_backend import PyocdConnection
 
     class Probe:
