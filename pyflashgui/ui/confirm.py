@@ -295,6 +295,14 @@ class Confirmations:
             self._store.add(key)
         return True
 
+    def described(self) -> list[str]:
+        """Each question not being asked, and for how long: for Help > Diagnostics."""
+        kept = self._store.keys() if self._store is not None else set()
+        return [
+            f"{key}: {'for good' if key in kept else 'this session'}"
+            for key in sorted(self._agreed)
+        ]
+
     def allow(self, key: str) -> None:
         """Record agreement without asking, for a case that carries no risk."""
         self._agreed.add(key)

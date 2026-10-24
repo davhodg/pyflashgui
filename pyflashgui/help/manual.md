@@ -27,7 +27,7 @@ With no hardware, choose *Simulated* under **Using** and the same steps work on 
 
 ## The window
 
-Everything pyflashgui has to say arrives in the **Event Log**, with warnings and errors in their own colours. A warning or an error opens the pane if it has been closed; an ordinary note does not. Right-click in it to clear it.
+Everything pyflashgui has to say arrives in the **Event Log**, with warnings and errors in their own colours. A warning or an error opens the pane if it has been closed; an ordinary note does not. Right-click in it to clear it. An error pyOCD or pylink reports for itself is put here too, named after the library; their other lines are kept for *Help > Diagnostics*.
 
 Each pane can be dragged to another edge of the window, floated, or closed, and **View** brings one back. *View > Reset layout* puts every pane back where it starts and the window back to the size it opens at.
 

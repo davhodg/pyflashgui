@@ -16,7 +16,10 @@ from __future__ import annotations
 
 import threading
 import time
+from collections import deque
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from PySide6.QtCore import QObject, Signal
@@ -57,6 +60,30 @@ def _close_quietly(connection) -> None:
         connection.close()
     except Exception:
         pass
+
+
+#: How many operations are remembered for Help > Diagnostics.
+REMEMBERED = 20
+
+
+@dataclass(frozen=True)
+class Operation:
+    """One thing done, or asked for, for Help > Diagnostics to list in order."""
+
+    #: When it was asked for, as a time of day.
+    when: str
+    name: str
+    #: done, failed, cancelled, or not done as asked -- a verify that found
+    #: differences, which is not a failure of the probe.
+    outcome: str
+    #: How long it took, in seconds.
+    took: float
+    #: What it failed with, where it did, as the Event Log said it.
+    said: str = ""
+
+    def line(self) -> str:
+        why = f": {self.said.splitlines()[0]}" if self.said else ""
+        return f"{self.when} {self.name}: {self.outcome}{why}, {self.took:.1f} s"
 
 
 #: Progress is passed on when it has moved this far, and not otherwise: a
@@ -128,6 +155,13 @@ class Flasher(QObject):
         self.regions: list[Region] = []
         self._regions_for = ""
         self.busy = False
+        #: What is being done while busy: "Programming". Empty otherwise.
+        self.doing = ""
+        #: The last few operations, oldest first, for Help > Diagnostics: the
+        #: order things happened in is most of what a fault report needs.
+        self.history: deque[Operation] = deque(maxlen=REMEMBERED)
+        #: The probes found when they were last looked for.
+        self.probes_found: list = []
         self._cancel = threading.Event()
         self._worker = Worker(self)
         self._last_progress = -1.0
@@ -156,9 +190,15 @@ class Flasher(QObject):
             if self.busy:
                 self.events.warning(f"{name} was not started: something else is still running.")
                 return False
+            self.doing = name
             self._set_busy(True)
             self._cancel.clear()
             self._last_progress = -1.0
+        asked, started = f"{datetime.now():%H:%M:%S}", time.monotonic()
+
+        def remember(outcome: str, said: str = "") -> None:
+            took = time.monotonic() - started
+            self.history.append(Operation(asked, name, outcome, took, said))
 
         def job() -> tuple[Any, str | None, bool]:
             # A backend's own error is a sentence already and is passed on as
@@ -176,13 +216,16 @@ class Flasher(QObject):
             if error is None:
                 result, error, cancelled = result
             if not quiet:
+                self.doing = ""
                 self._set_busy(False)
             if error is not None:
+                remember("cancelled" if cancelled else "failed", error)
                 (self.events.warning if cancelled else self.events.error)(error)
                 if not quiet:
                     self.finished.emit(name, False)
                 return
             ok = done(result)
+            remember("done" if ok is not False else "not done as asked")
             if not quiet:
                 self.finished.emit(name, ok is not False)
 
@@ -243,6 +286,7 @@ class Flasher(QObject):
 
         def done(result: tuple[list, str]) -> None:
             probes, error = result
+            self.probes_found = list(probes)
             if error:
                 self.events.warning(error)
             self.probes_changed.emit(probes)

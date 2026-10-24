@@ -28,7 +28,7 @@ body:
     attributes:
       label: Diagnostics
       description: |
-        *Help > Diagnostics...* copies a report to the clipboard: the versions of pyflashgui, Python, PySide6, pyOCD and what came with them, and the platform. Paste it here.
+        *Help > Diagnostics...* opens a report and copies it to the clipboard: the versions of pyflashgui, Python, PySide6, pyOCD and what came with them, the platform, the connection, the last operations and what pyOCD said about them. Paste it here. It names the probes' serial numbers, your workspace folder and the files in the Files pane; remove any of that if you would rather.
         If pyflashgui will not start at all, say so, and paste whatever it printed instead.
       render: text
 

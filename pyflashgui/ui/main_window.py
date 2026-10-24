@@ -4,6 +4,8 @@
 
 from __future__ import annotations
 
+from collections import deque
+from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QSettings, Qt, QTimer, Signal, Slot
@@ -35,11 +37,13 @@ from pyflashgui.core.context import Context
 from pyflashgui.core.events import PROBLEMS, EventLog
 from pyflashgui.core.excepthook import ExceptionLogger
 from pyflashgui.core.flasher import Flasher, size_text
+from pyflashgui.core.library_log import LibraryLog
 from pyflashgui.core.memory_map import FLASH, RAM, Region
 from pyflashgui.core.pack_manager import PackManager
 from pyflashgui.ui import event_colours, folders, messages, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.console_view import ConsoleView
+from pyflashgui.ui.diagnostics import RECENT_PROBLEMS
 from pyflashgui.ui.files_view import Entry, FilesView
 from pyflashgui.ui.help_menu import HelpMenu
 from pyflashgui.ui.map_view import MapView
@@ -146,8 +150,14 @@ class MainWindow(QMainWindow):
         #: the only thing that writes to the pane. Warnings and errors open it
         #: if it has been closed; notes do not.
         self.events = EventLog()
+        #: The last warnings and errors, for Help > Diagnostics: (time, level, text).
+        self.recent_problems: deque[tuple[str, str, str]] = deque(maxlen=RECENT_PROBLEMS)
         self._surfacing = False
         self.events.posted.connect(self._on_event)
+        #: What pyOCD and pylink say for themselves: kept for Help >
+        #: Diagnostics, and their errors put in the Event Log.
+        self.library_log = LibraryLog(self.events)
+        self.library_log.install()
 
         self.ctx = Context(events=self.events)
         #: Started with pythonw, which has no console, so a traceback from a
@@ -697,6 +707,7 @@ class MainWindow(QMainWindow):
         self.help_menu.shutdown()
         self.packs.shutdown()
         self.flasher.shutdown()
+        self.library_log.remove()
         self.exceptions.remove()
         super().closeEvent(event)
 
@@ -1017,6 +1028,7 @@ class MainWindow(QMainWindow):
         if at_end:
             bar.setValue(bar.maximum())
         if level in PROBLEMS:
+            self.recent_problems.append((f"{datetime.now():%H:%M:%S}", level, message))
             self._surface_log()
 
     def log_menu(self):

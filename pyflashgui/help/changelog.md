@@ -9,6 +9,21 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+### Added
+
+- An error pyOCD or pylink reports in its own log -- a flash routine that ended in a fault,
+  a probe that would not let go -- is put in the Event Log, named after the library. Their
+  other lines, from information up, are kept for *Help > Diagnostics*.
+
+### Changed
+
+- *Help > Diagnostics...* opens in a window of its own, with Refresh, Copy and Save, and is
+  no longer written to the Event Log. It says how the connection was made -- through pyOCD,
+  the options pyOCD was given and what it made of the target -- the probes found, the memory
+  map, the files, the last twenty operations in order with how each ended, what pyOCD and
+  pylink said, recent warnings and errors, J-Link Commander's location, pyOCD's packs, the
+  workspace and confirmations, and running threads.
+
 ## [0.2.0] - 2026-10-17
 
 ### Added

@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 from PySide6.QtCore import QObject, Qt, QUrl
-from PySide6.QtGui import QDesktopServices, QGuiApplication, QImage, QTextDocument
+from PySide6.QtGui import QDesktopServices, QImage, QTextDocument
 from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
@@ -47,7 +47,9 @@ from pyflashgui.core.updates import (
 from pyflashgui.core.updates import is_newer as version_is_newer
 from pyflashgui.core.worker import Worker
 from pyflashgui.help import manual_text
+from pyflashgui.ui import diagnostics as diagnostics_report
 from pyflashgui.ui import fonts, messages
+from pyflashgui.ui.diagnostics import DiagnosticsDialog
 
 
 class LicenceFile(NamedTuple):
@@ -368,7 +370,10 @@ def diagnostics(window) -> str:
     Written for copying into a bug report, which is where "it does not see my
     probe" needs the versions of everything underneath it.
     """
-    lines = [environment_report(), ""]
+    lines = [environment_report()]
+    # The connection, what was done and what pyOCD said: see ui/diagnostics.py.
+    lines += diagnostics_report.sections(window)
+    lines.append("")
 
     # What the packages above brought with them. A fault is as likely to be
     # in one of these -- a libusb too old for a probe -- and nobody
@@ -421,6 +426,8 @@ class HelpMenu(QObject):
         #: The manual, once opened: kept, so Documentation brings the same
         #: window forward -- on the page it was left at -- rather than a second.
         self.manual: ManualDialog | None = None
+        #: Diagnostics, kept like the manual, so asking again refreshes it.
+        self.diagnostics: DiagnosticsDialog | None = None
 
         menu = window.menuBar().addMenu("&Help")
         menu.addAction("Documentation", self._open_docs)
@@ -461,13 +468,26 @@ class HelpMenu(QObject):
         self.manual.activateWindow()
 
     def _show_diagnostics(self) -> None:
-        """Report the state of the window, and put it on the clipboard."""
-        report = diagnostics(self.window)
-        QGuiApplication.clipboard().setText(report)
-        # Through the Event Log like every other line, as information. Written
-        # into the pane directly it had no level of its own, and took the
-        # colour of whatever came before it -- red and bold after an error.
-        self.window.events.information("Diagnostics (copied to the clipboard):\n" + report)
+        """Report the state of the window in a window of its own, and copy it.
+
+        It was written into the Event Log, where a report this long pushed
+        everything else out of sight and could not be asked again without
+        making another. Still copied as it opens, as the bug report form
+        says it is.
+        """
+        if self.diagnostics is None:
+            self.diagnostics = DiagnosticsDialog(
+                self.window, lambda: diagnostics(self.window), self.window.ctx
+            )
+        else:
+            self.diagnostics.refresh()
+        self.diagnostics.copy_to_clipboard()
+        self.diagnostics.show()
+        self.diagnostics.raise_()
+        self.diagnostics.activateWindow()
+        # As information, like every other line: written into the pane
+        # directly it took the colour of whatever came before it.
+        self.window.events.information("Diagnostics report made, and copied to the clipboard.")
 
     def _show_licences(self) -> None:
         LicenceDialog(self.window).exec()

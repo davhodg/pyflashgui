@@ -17,6 +17,7 @@ from __future__ import annotations
 import contextlib
 import time
 from collections.abc import Sequence
+from pathlib import Path
 
 from pyflashgui.backends import pyocd_packs
 from pyflashgui.backends.base import (
@@ -202,6 +203,44 @@ class PyocdConnection(Connection):
         #: Makes a new session on the same probe and target, attaching to it
         #: as it is, for when a reset has taken the old one with it.
         self._reopen = reopen
+        #: The options pyOCD was given, for Help > Diagnostics.
+        self.options: dict = {}
+        #: How many times a reset took the connection with it and it was made again.
+        self.reattached = 0
+
+    def details(self) -> list[str]:
+        packs = self.options.get("pack") or []
+        given = ", ".join(f"{k}={v}" for k, v in sorted(self.options.items()) if k != "pack")
+        lines = [f"pyOCD options: {given or 'none'}"]
+        if packs:
+            lines.append(f"packs handed to pyOCD: {', '.join(Path(p).name for p in packs)}")
+        if self.reattached:
+            lines.append(f"connected again after a reset: {self.reattached} time(s)")
+        session = self._session
+        if session is None:
+            return [*lines, "session: closed"]
+        target, probe = getattr(session, "target", None), getattr(session, "probe", None)
+        if target is not None:
+            if is_generic(target):
+                where = "no device in particular: the generic Cortex-M"
+            elif "_pack_device" in vars(type(target)):
+                where = "from a pack"
+            else:
+                where = "built in"
+            lines.append(f"target class: {type(target).__name__}, {where}")
+            for core in getattr(target, "cores", {}).values():
+                architecture = getattr(getattr(core, "architecture", None), "name", "")
+                lines.append(
+                    f"core {getattr(core, 'core_number', '?')}: {getattr(core, 'name', '?')}"
+                    + (f" ({architecture})" if architecture else "")
+                )
+        if probe is not None:
+            wire = getattr(getattr(probe, "wire_protocol", None), "name", "") or "not known"
+            lines.append(
+                f"probe: {probe.description}; {type(probe).__name__}; "
+                f"{probe.vendor_name or '?'} {probe.product_name or '?'}; wire protocol {wire}"
+            )
+        return lines
 
     def _target(self):
         if self._session is None:
@@ -416,6 +455,7 @@ class PyocdConnection(Connection):
             time.sleep(wait)
             try:
                 self._session = self._reopen()
+                self.reattached += 1
                 break
             except BackendError as exc:
                 failed = exc
@@ -587,6 +627,7 @@ class PyocdBackend(Backend):
         connection = PyocdConnection(session, lambda: self._open(chosen, again, target))
         connection.speed = speed_text(session.options.get("frequency"))
         connection.notes = tuple(notes)
+        connection.options = dict(options)
         return connection
 
     @staticmethod

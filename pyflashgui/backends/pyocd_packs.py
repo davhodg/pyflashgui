@@ -314,6 +314,22 @@ def file_devices() -> list[Device]:
     return out
 
 
+def report() -> list[str]:
+    """For Help > Diagnostics: where the packs are, which there are, and how
+    old the list of devices is. Found from the files, without reading the
+    list itself, which is twenty megabytes."""
+    where = folder()
+    fetched = list_fetched()
+    lines = [
+        f"folder: {where}",
+        f"list of devices fetched {fetched:%Y-%m-%d %H:%M}" if fetched else "list never fetched",
+    ]
+    downloaded = sorted(p.relative_to(where).as_posix() for p in where.rglob("*.pack"))
+    lines += [f"installed: {name}" for name in downloaded] or ["none installed"]
+    lines += [f"added from a file: {p.name}" for p in sorted(files_folder().glob("*.pack"))]
+    return lines
+
+
 def same_name(part: str) -> str:
     """A device's name as pyOCD files it, whichever way it is spelt.
 

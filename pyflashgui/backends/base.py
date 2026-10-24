@@ -197,6 +197,16 @@ class Connection(ABC):
     def close(self) -> None:
         """Let go of the probe. Safe to call twice."""
 
+    def details(self) -> list[str]:
+        """What Help > Diagnostics says of this connection, a line each.
+
+        How the backend was asked to connect and what it found there, beyond
+        the probe and the target the window already knows. Read on the
+        window's thread while the worker may be using the connection, so
+        only what is already known is said: nothing here asks the probe.
+        """
+        return []
+
     def read_range(
         self,
         address: int,

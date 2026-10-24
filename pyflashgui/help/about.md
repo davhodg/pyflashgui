@@ -4,7 +4,31 @@
 
 **Help > Documentation** opens this manual. It ships inside pyflashgui; *Back* and *Contents* get you around it.
 
-**Help > Diagnostics...** writes a report of the versions of pyflashgui, Python and every package it runs on, and any panes out on their own, to the Event Log and copies it to the clipboard -- ready to paste into a bug report.
+**Help > Diagnostics...** opens a report in a window of its own, and copies it to the
+clipboard as it opens -- ready to paste into a bug report. **Refresh** makes it again,
+**Copy** copies it again and **Save...** writes it to a file. It gives:
+
+- the versions of pyflashgui, Python and every package it runs on;
+- **the connection**: what is chosen under Using, Probe, Target and Speed, what is
+  connected, and whether anything is being done; through pyOCD, the options pyOCD was
+  given, whether the target is built in, from a pack or the generic Cortex-M, its cores and
+  the probe's wire protocol; through J-Link Commander, how Commander is run;
+- the probes found when they were last looked for;
+- the target's memory as pyflashgui has it, and what the memory map says of the files
+  ticked;
+- each entry in the Files pane, and the Memory panes open;
+- **the last twenty operations**, in order -- connecting, erasing, programming, reading,
+  resetting -- each with how it ended and how long it took;
+- **what pyOCD and pylink said for themselves**: their last hundred lines, from information
+  up. Their errors are also put in the Event Log as they happen;
+- the last twenty warnings and errors from the Event Log;
+- J-Link Commander's location and every J-Link software folder found, and pyOCD's packs;
+- the workspace, any confirmation not being asked, and the threads running;
+- the panes out on their own, and how long starting took.
+
+A part of it that cannot be read says so and the rest is still given. It names the probes'
+serial numbers, the workspace folder and the files in the Files pane: remove any of that
+from a bug report if you would rather.
 
 The report names the version, and -- when pyflashgui is being run from a source checkout rather than an installed build -- the branch or tag and the commit it is on, read from `.git` without running git. Between two releases every build calls itself the same version, so that line is what tells one pull from another. It does not say whether any file has been edited since: that needs git itself, and the launcher runs without a console for it to use.
 

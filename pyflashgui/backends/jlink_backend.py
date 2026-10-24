@@ -146,6 +146,20 @@ def find_commander() -> list[str] | None:
     return None
 
 
+def report() -> list[str]:
+    """For Help > Diagnostics: the Commander used, how it was found, and every
+    J-Link software folder there is, newest first."""
+    found = find_commander()
+    if found is None:
+        lines = ["not found"]
+    else:
+        how = "chosen in Tools > Settings" if _chosen is not None else "found"
+        lines = [f"{' '.join(found)} ({how})"]
+    folders = _installed()
+    lines += [f"installed: {folder}" for folder in folders] or ["no J-Link software folder found"]
+    return lines
+
+
 def _is_seggers(program: Path) -> bool:
     """Whether a program of Commander's name is Commander, and not Java's jlink.
 
@@ -406,6 +420,11 @@ class JLinkConnection(Connection):
 
     def regions(self) -> list[Region]:
         return list(self._regions)
+
+    def details(self) -> list[str]:
+        if self._arguments is None:
+            return ["closed"]
+        return [f"device: {self._device}", f"Commander run with: {' '.join(self._arguments)}"]
 
     def erase_chip(self) -> None:
         self._run(["H", "Erase"], WORK_S, f"Erasing {self._device}")

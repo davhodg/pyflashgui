@@ -528,6 +528,37 @@ def test_a_reset_that_takes_the_connection_with_it_connects_again(monkeypatch):
     assert old.closed, "the lost session let go of"
     assert connection._session is new
     assert connection._answers()
+    assert "connected again after a reset: 1 time(s)" in connection.details()
+
+
+def test_a_pyocd_connection_says_how_it_was_made():
+    """For Help > Diagnostics: the options pyOCD was given and what it made of
+    the target, read from what is known without asking the probe."""
+    from types import SimpleNamespace
+
+    from pyflashgui.backends.pyocd_backend import PyocdConnection
+
+    class XMC4500:
+        def __init__(self):
+            self.cores = {0: SimpleNamespace(core_number=0, name="Cortex-M4", architecture=None)}
+
+    probe = SimpleNamespace(
+        description="J-Link OB",
+        vendor_name="SEGGER",
+        product_name="J-Link",
+        wire_protocol=SimpleNamespace(name="SWD"),
+    )
+    connection = PyocdConnection(SimpleNamespace(target=XMC4500(), probe=probe))
+    connection.options = {"connect_mode": "halt", "jlink.device": "Cortex-M4", "pack": ["a.pack"]}
+    said = connection.details()
+    assert said[0] == "pyOCD options: connect_mode=halt, jlink.device=Cortex-M4"
+    assert "packs handed to pyOCD: a.pack" in said
+    assert "target class: XMC4500, built in" in said
+    assert "core 0: Cortex-M4" in said
+    probe_line = next(line for line in said if line.startswith("probe: J-Link OB;"))
+    assert "wire protocol SWD" in probe_line
+    connection._session = None
+    assert connection.details()[-1] == "session: closed"
 
 
 def test_a_reset_that_leaves_the_connection_keeps_it():
