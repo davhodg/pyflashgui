@@ -7,7 +7,7 @@ the boxes they are typed into use a fixed-pitch font. It was written out as
 Consolas at 9 points wherever one was wanted, and that is two mistakes: 9 is
 the size of the text around it only until somebody asks their system for
 larger text, at which the labels grow and the data does not; and Consolas is
-a Windows font, so everywhere else Qt picked whatever it liked.
+a Windows font, so everywhere else Qt had to choose a stand-in.
 
 A box for an identifier was likewise so many pixels wide, which is eight
 characters at one size of text and five at another. Both are asked for here,

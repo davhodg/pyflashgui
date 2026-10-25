@@ -68,9 +68,12 @@ DEVICE_COLUMNS = ["Device", "Maker", "Pack", "Version", "Installed"]
 UPDATE_TIP = (
     "Download the list of every device there is a pack for. It is a few\n"
     "megabytes and takes a little while. Needed once, and after that only\n"
-    "for a device newer than the list."
+    "for a device newer than the list. Once started it cannot be stopped."
 )
-INSTALL_TIP = "Download the pack the selected device is in. Every device in it comes with it."
+INSTALL_TIP = (
+    "Download the pack the selected device is in. Every device in it comes with it.\n"
+    "Once started it cannot be stopped."
+)
 USE_TIP = "Choose the selected device as the target, in the bar across the top of the window."
 ADD_FILE_TIP = (
     "Add a pack downloaded by hand, as a .pack file: for a computer that\n"
@@ -80,6 +83,11 @@ ADD_FILE_TIP = (
     "moved or deleted afterwards."
 )
 PACK_FILES = "CMSIS-Pack (*.pack);;All files (*)"
+#: Under the bar while a download runs.
+CANNOT_STOP = (
+    "A download cannot be stopped once it has started. This window can be closed: the "
+    "Event Log says when it has arrived."
+)
 REMOVE_TIP = (
     "Delete the selected pack from this computer. Its devices leave the\n"
     "list of targets; it can be installed again."
@@ -178,6 +186,9 @@ class PacksDialog(QDialog):
         self.bar.setRange(0, 0)
         self.bar.setTextVisible(False)
         self.bar.setVisible(False)
+        self.cannot_stop = QLabel(CANNOT_STOP)
+        self.cannot_stop.setWordWrap(True)
+        self.cannot_stop.setVisible(False)
 
         closer = QDialogButtonBox(QDialogButtonBox.Close)
         closer.rejected.connect(self.reject)
@@ -221,6 +232,7 @@ class PacksDialog(QDialog):
         layout.addLayout(packs_row)
         layout.addWidget(self.status)
         layout.addWidget(self.bar)
+        layout.addWidget(self.cannot_stop)
         layout.addWidget(closer)
 
         self.text.textChanged.connect(lambda _text: self.find())
@@ -371,7 +383,8 @@ class PacksDialog(QDialog):
             self,
             f"Download {pack}?",
             f"It is downloaded{where}, and kept on this computer for pyOCD to use. A pack "
-            "holds every device of its family, and can be over a hundred megabytes.",
+            "holds every device of its family, and can be over a hundred megabytes. Once "
+            "started, the download cannot be stopped.",
             messages.Button.Yes | messages.Button.No,
             messages.Button.Yes,
         )
@@ -414,6 +427,7 @@ class PacksDialog(QDialog):
     # --- what can be pressed ---------------------------------------------------------
     def _on_busy(self, busy: bool) -> None:
         self.bar.setVisible(busy)
+        self.cannot_stop.setVisible(busy)
         self._enable()
 
     def _enable(self) -> None:

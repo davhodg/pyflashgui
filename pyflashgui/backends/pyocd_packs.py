@@ -248,9 +248,8 @@ def read_pack(path: Path) -> tuple[Pack, tuple[tuple[str, str], ...]]:
     from xml.etree import ElementTree
 
     # By the way in pyOCD's own modules take, before the part of it wanted
-    # here. Started part way in, pyOCD can import itself in a circle, which
-    # it does not survive; and the backend may be importing it on another
-    # thread at the same moment.
+    # here: its modules are written to be imported from the top, and the
+    # backend may be importing it on another thread at the same moment.
     import pyocd.target  # noqa: F401
     from pyocd.target.pack.cmsis_pack import CmsisPack
 
@@ -263,8 +262,8 @@ def read_pack(path: Path) -> tuple[Pack, tuple[tuple[str, str], ...]]:
                     f"{path.name} is not a CMSIS-Pack: there is no description (.pdsc) in it."
                 )
             root = ElementTree.fromstring(archive.read(min(described, key=lambda n: n.count("/"))))
-            # Read through this archive, which is closed after: one pyOCD opened
-            # itself would stay open, and Windows will not delete an open file.
+            # Read through this archive, which is closed after, so the file can
+            # be removed again: Windows will not delete an open file.
             found = {
                 (d.part_number, (d.vendor or "").split(":")[0]) for d in CmsisPack(archive).devices
             }

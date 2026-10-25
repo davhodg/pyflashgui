@@ -5,7 +5,7 @@
 The report went through the Event Log, and said only the versions and the
 panes out on their own. It opens in a window now, and says how the
 connection was made, what was done to the target in what order, and what
-pyOCD said for itself -- which went nowhere before.
+pyOCD said for itself, which pyflashgui did not keep before.
 """
 
 import logging
@@ -113,8 +113,8 @@ def test_it_opens_in_a_window_of_its_own_and_is_copied(app, window, tmp_path, mo
 
 # --- what pyOCD says for itself ----------------------------------------------------------
 def test_pyocd_s_errors_reach_the_event_log_and_everything_is_kept(app, window):
-    """pyOCD reports some faults only in its own log: a flash routine that ended
-    in a HardFault said "IPSR should be 0 but is 0x3" there and nowhere else."""
+    """pyOCD reports some faults in its own log: a flash routine that ended
+    in a HardFault is reported there as "IPSR should be 0 but is 0x3"."""
     log = logging.getLogger("pyocd.flash.flash")
     log.info("Erased 4096 bytes")
     log.warning("an ordinary warning")

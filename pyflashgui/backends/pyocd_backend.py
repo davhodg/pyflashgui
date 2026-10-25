@@ -7,7 +7,7 @@ exception said again in pyflashgui's words. Anything worth testing without a
 probe plugged in is in ``core`` or in the base class, and what is left here
 can only be tried on hardware.
 
-pyOCD is imported inside the methods that use it. It is the slowest thing
+pyOCD is imported inside the methods that use it. It is the largest thing
 pyflashgui loads, and a window should not wait for it to say which probes
 are plugged in before it can be drawn.
 """
@@ -91,9 +91,8 @@ def regions_of(memory_map, generic: bool = False) -> list[Region]:
 def needs_one_packet_at_a_time(*names: str | None) -> bool:
     """Whether a probe called this must be sent one command and then waited for.
 
-    pyOCD's own advice for the TI XDS110, whose firmware loses track when
-    several commands are outstanding. Set for every one of them, since it
-    is not known which versions are free of it, and the cost is only speed.
+    pyOCD's own advice for the TI XDS110: one command at a time. Set for
+    every one of them, as pyOCD advises, and the cost is only speed.
     """
     return any("xds110" in (name or "").lower() for name in names)
 
@@ -145,11 +144,11 @@ def _stages(progress: Progress) -> Progress:
 def _let_go(session) -> Exception | None:
     """Close a pyOCD session, and its probe even where closing the session fails.
 
-    pyOCD's close lets go of the target before the probe, and when the
-    first fails -- the board's power was turned off -- never closes the
-    probe. A J-Link left open that way stays open: Find probes lists it, and
-    every connect says "No emulator with serial number".
-    Returns what went wrong, if anything did.
+    Closing a session lets go of the target, then of the probe. With the
+    board's power turned off, letting go of the target raises, and the probe
+    is still open: a J-Link still open is listed by Find probes, and every
+    connect says "No emulator with serial number". So the probe is closed
+    here as well. Returns what went wrong, if anything did.
     """
     try:
         session.close()
@@ -316,13 +315,12 @@ class PyocdConnection(Connection):
         """Reset the target and stop it at its first instruction, before a flash
         routine is run on it.
 
-        pyOCD stops the processor wherever it happens to be and runs its
-        routine there. Reported on an XMC4500 attached to its firmware as it
-        ran: stopped amid the firmware, with its interrupts and the rest of
-        what it had set up still on, the erase routine ended in a HardFault
-        (IPSR=3). Reset first, the routine runs on a device as it starts,
-        which is what flash routines are written for, and what SEGGER's own
-        download does.
+        A flash routine runs on the processor as it is when stopped.
+        Reported on an XMC4500 attached to its firmware as it ran: stopped
+        amid the firmware, with its interrupts and the rest of what it had set
+        up still on, the erase routine ended in a HardFault (IPSR=3). Reset
+        first, the routine runs on a device as it starts, which is what flash
+        routines are written for.
         """
         try:
             self._target().reset_and_halt()
@@ -367,9 +365,8 @@ class PyocdConnection(Connection):
                     progress((before + fraction * size) / total)
 
                 # keep_unwritten: the rest of a page written to is read and
-                # written back as it is. Filled instead with what pyOCD takes
-                # erased flash to read as, it would be written to: pyOCD
-                # says FF for an XMC4500, whose erased flash reads 00.
+                # written back as it is, so it holds what it held, whatever
+                # erased flash reads as on this device.
                 builder.program(progress_cb=report, smart_flash=False, keep_unwritten=True)
                 written += size
         except BackendError:
@@ -484,7 +481,7 @@ class PyocdConnection(Connection):
 
 class PyocdBackend(Backend):
     # pyOCD's own, whatever the probe could do: 1 MHz, chosen to work with
-    # a long or untidy cable, and slow for anything else.
+    # a long or untidy cable. A faster one can be chosen in the bar.
     default_speed = "Default (1 MHz)"
     can_skip_erase = True
     can_attach = True

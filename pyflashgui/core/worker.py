@@ -56,8 +56,7 @@ class Worker(QThread):
 
         The ``done`` connection is dropped first: a queued result arriving
         after the owner has been torn down would be delivered to a dead
-        object, which Qt punishes with an access violation rather than an
-        exception.
+        object, which ends in an access violation rather than an exception.
         """
         if self._delivering:
             self._delivering = False

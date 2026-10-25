@@ -30,8 +30,8 @@ from pyflashgui.ui.read_dialog import parse_number
 
 ERASED_TIP = (
     "What erased flash reads as on this target: as the target's description\n"
-    "says, or FF or 00 where that is not right -- an XMC4500's reads 00, and\n"
-    "pyOCD says FF for it. Kept for each target."
+    "says, or FF or 00 to choose it here -- most devices' reads FF, and some,\n"
+    "an XMC4500 among them, read 00. Kept for each target."
 )
 
 

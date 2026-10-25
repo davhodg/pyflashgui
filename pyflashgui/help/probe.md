@@ -41,7 +41,7 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be over a hundred megabytes.
 4. Press **Use as target**, or close the dialog and choose the device in the bar.
 
-The dialog can be closed while a pack is downloading: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
+**A download cannot be stopped once it has started**, the list's or a pack's. The dialog can be closed while one runs: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
 
 Under the list is where the selected device's pack is downloaded from. The *From* column of the packs installed says the same for each of them.
 
@@ -60,7 +60,7 @@ Choosing *J-Link Commander* under **Using** uses a J-Link by way of SEGGER's own
 - **Interface** appears for this choice only: SWD, JTAG, cJTAG or FINE, as the device is wired.
 - **The Memory Map goes by SEGGER's list of the device's memory**, which says where its flash and RAM are and may not give every address they can be reached at. So a file outside what is listed is a warning and not a refusal, and SEGGER's software has the last word. The list does not say how the flash is divided into sectors, so the map does not say how much is erased.
 - **The bar shows that something is happening, not how far along it is**, since J-Link Commander does not say.
-- **A read can leave the device as it is.** SEGGER's software sets some devices up on connecting in ways that change them; the [Read](memory.md) dialog has a tick to leave that out.
+- **A read can leave the device as it is.** J-Link's software sets some devices up on connecting, and on some that set-up writes to them; the [Read](memory.md) dialog has a tick to leave it out.
 - **Connect** checks that the probe and the device answer. Nothing is held open between one operation and the next; each attaches again by itself.
 
 If pyflashgui does not find J-Link Commander, *Tools > Settings > J-Link Commander location...* says where it is.

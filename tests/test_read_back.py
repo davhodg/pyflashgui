@@ -910,7 +910,7 @@ def test_an_s_record_is_given_addresses_wide_enough_for_what_it_holds(tmp_path):
 
 
 def test_what_erased_reads_as_can_be_chosen_and_is_kept_for_the_target(window, monkeypatch):
-    """Reported: an XMC4500's erased flash reads 00, and pyOCD says FF for it."""
+    """Reported: an XMC4500's erased flash reads 00, where most devices' reads FF."""
     window.probe_bar.button.click()
     wait_for(lambda: window.flasher.connected)
     board = backends.get("simulated").board(PROBE)

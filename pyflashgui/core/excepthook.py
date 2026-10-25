@@ -3,9 +3,9 @@
 """Put unhandled exceptions in the Event Log instead of nowhere.
 
 pyflashgui is started with ``pythonw.exe``, which has no console. An exception
-raised inside a Qt slot does not propagate anywhere useful: PySide prints the
-traceback to a standard error stream that does not exist, the slot simply
-does not finish, and the window carries on looking perfectly healthy.
+raised inside a Qt slot is printed by PySide to standard error, which pythonw
+does not have: the slot does not finish, and the window carries on looking
+perfectly healthy.
 
 A stale call to a widget method -- ``.text()`` on what had become a combo box
 -- is enough: nothing is logged, no dialog appears, and whatever the slot was
@@ -27,10 +27,9 @@ from PySide6.QtCore import QObject, Qt, QtMsgType, Signal, Slot, qInstallMessage
 
 from pyflashgui.core.events import ERROR, INFORMATION
 
-#: Said of a Python traceback and of nothing else. Qt complains through the
-#: same handler about things that are often not pyflashgui's doing at all -- a
-#: platform plugin, a window manager -- and telling somebody those are bugs in
-#: this application is both wrong and unhelpful.
+#: Said of a Python traceback and of nothing else. Qt reports through the
+#: same handler what other parts of the system say -- a platform plugin, a
+#: window manager -- and those are not faults in this application.
 BUG = "Unhandled error (this is a bug in pyflashgui; the action it interrupted did not finish):"
 
 

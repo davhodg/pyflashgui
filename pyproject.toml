@@ -47,8 +47,11 @@ dependencies = [
     # (QStyleHints.setColorScheme).
     "PySide6-Essentials>=6.8",
     # Probes, targets and flash algorithms. 0.45 is the first to say it
-    # supports Python 3.14, and has the RP2350 as a built-in target.
-    "pyocd>=0.45",
+    # supports Python 3.14, and has the RP2350 as a built-in target; 0.46
+    # gives a pack's flash region what its flash routine says erased reads
+    # as -- 00 for an XMC4500 -- and fills the rest of a page written to
+    # with it.
+    "pyocd>=0.46",
     # Intel HEX, Motorola S-record and raw binary. pyOCD reads HEX and binary
     # itself and not S-record, and the memory map wants all three read one way.
     "bincopy>=20.0",

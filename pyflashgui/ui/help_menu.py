@@ -375,9 +375,9 @@ def diagnostics(window) -> str:
     lines += diagnostics_report.sections(window)
     lines.append("")
 
-    # What the packages above brought with them. A fault is as likely to be
-    # in one of these -- a libusb too old for a probe -- and nobody
-    # would think to name them.
+    # What the packages above brought with them. Their versions matter as
+    # much -- a libusb older than a probe needs -- and nobody would think
+    # to name them.
     if pulled := packages.pulled_in(packages.declared()):
         width = _label_width(pulled)
         lines.append("Installed with them")

@@ -72,13 +72,14 @@ NOT_FOUND = (
 )
 
 #: Said by Commander when the probe is there and the device does not answer.
-#: Looked for as well as its exit code, which has been seen to be 0 with it.
+#: Looked for as well as its exit code, which can be 0 with it.
 NO_TARGET = "Cannot connect to target"
 
-#: A J-Link script that does nothing where SEGGER's software would set the
+#: A J-Link script that does nothing where J-Link's software would set the
 #: device up after connecting to it. On some parts that set-up writes to
 #: the device -- an S32K3's RAM is filled, for its error correction -- and
-#: a read made to see what a running program left there finds it gone.
+#: a read made to see what a running program left there finds the set-up's
+#: bytes instead.
 NO_SETUP_SCRIPT = "int SetupTarget(void) {\n  return 0;\n}\n"
 
 #: Where Commander is, when it has been said. None to go and look.
@@ -554,7 +555,10 @@ class JLinkConnection(Connection):
 
     def reset(self, halt: bool = False, kind: str = RESET_DEFAULT) -> None:
         if kind != RESET_DEFAULT:
-            raise BackendError("J-Link Commander resets each device its own way, and no other.")
+            raise BackendError(
+                "Through J-Link Commander, a device is reset the usual way only. The other "
+                "ways are offered through pyOCD."
+            )
         # R restarts the device and leaves it stopped; G sets it going.
         self._run(["R"] if halt else ["R", "G"], QUICK_S, f"Resetting {self._device}")
 
@@ -600,8 +604,8 @@ class JLinkBackend(Backend):
                 # it that is not, and latin-1 reads any byte there is.
                 text = path.read_text(encoding="latin-1")
             except (BackendError, OSError):
-                # A Commander that will not write the list still programs a
-                # device whose name is typed in.
+                # Without the list, a device whose name is typed in is still
+                # programmed.
                 text = ""
         self._devices = {device.name.upper(): device for device in parse_devices(text)}
         return self._devices

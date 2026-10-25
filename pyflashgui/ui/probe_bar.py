@@ -66,7 +66,7 @@ TARGET_TIP = (
 )
 FREQUENCY_TIP = (
     "How fast the probe clocks the debug port. The first choice leaves it to\n"
-    "what is under Using: pyOCD's is 1 MHz, which is safe and slow, and a\n"
+    "what is under Using: pyOCD's is 1 MHz, which suits any wiring, and a\n"
     "J-Link through J-Link Commander finds its own. The Event Log says the\n"
     "speed on connecting. Lower it if connecting is unreliable: a long cable,\n"
     "or a target running from a slow clock."
@@ -248,7 +248,7 @@ class ProbeBar(QToolBar):
         """The interfaces the chosen backend can be asked for, or no box at all.
 
         And what leaving the speed to it comes to, which differs: pyOCD's is
-        a slow and safe 1 MHz, and a J-Link finds its own.
+        1 MHz, which suits any wiring, and a J-Link finds its own.
         """
         backend = backends.get(self.backend.currentData())
         self.frequency.setItemText(0, backend.default_speed)

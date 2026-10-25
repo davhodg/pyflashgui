@@ -50,7 +50,7 @@ RESET_SAID = {
     RESET_CORE: "by restarting its processor only",
 }
 #: How long letting go of the probe is waited for when the window closes, in
-#: seconds: a library that never comes back must not keep the window frozen.
+#: seconds: a probe that does not answer must not keep the window waiting.
 CLOSE_S = 5.0
 
 
@@ -202,8 +202,7 @@ class Flasher(QObject):
 
         def job() -> tuple[Any, str | None, bool]:
             # A backend's own error is a sentence already and is passed on as
-            # one. Anything else is a fault in pyflashgui or in a library,
-            # and says what kind it was.
+            # one. Anything else was not expected, and says what kind it was.
             try:
                 return work(), None, False
             except CancelledError as exc:

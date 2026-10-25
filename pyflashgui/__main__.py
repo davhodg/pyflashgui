@@ -89,7 +89,7 @@ def selftest() -> int:
 
     # libusb is a native library carried inside a Python package, which is
     # the kind of file a build leaves behind. Without it pyOCD lists no
-    # CMSIS-DAP v2 probe and no ST-Link, and says nothing about why.
+    # CMSIS-DAP v2 probe and no ST-Link, so the self-test checks for it.
     try:
         import libusb_package
 
@@ -160,7 +160,8 @@ def set_icon(app) -> None:
 
 #: The libraries Qt's X11 plugin needs that Debian, Ubuntu and Linux Mint can
 #: leave out, each with the package it comes in. Without one, Qt stops with
-#: "could not load the Qt platform plugin xcb" and does not say which.
+#: "could not load the Qt platform plugin xcb", so they are looked for first
+#: and the package to install is named.
 XCB_LIBRARIES = (
     ("libxcb-cursor.so.0", "libxcb-cursor0"),
     ("libxcb-icccm.so.4", "libxcb-icccm4"),

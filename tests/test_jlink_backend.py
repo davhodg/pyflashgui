@@ -401,7 +401,7 @@ def test_erasing_a_range_gives_commander_its_first_and_last_address(connection, 
 
 # --- the things a real J-Link has taught ----------------------------------------------
 def test_a_device_that_does_not_answer_is_a_failure_whatever_the_exit_code(backend, monkeypatch):
-    """Commander has been seen to say so and still leave with nothing wrong."""
+    """Commander can say so with an exit code of 0."""
     import subprocess
 
     def answers_and_leaves(command, **_kwargs):

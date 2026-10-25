@@ -12,11 +12,16 @@ since the last version, and comes out in the next one.
 ### Added
 
 - An error pyOCD or pylink reports in its own log -- a flash routine that ended in a fault,
-  a probe that would not let go -- is put in the Event Log, named after the library. Their
-  other lines, from information up, are kept for *Help > Diagnostics*.
+  a probe that did not answer on disconnecting -- is put in the Event Log, named after the
+  library. Their other lines, from information up, are kept for *Help > Diagnostics*.
 
 ### Changed
 
+- pyOCD 0.46 or newer is needed. With it, what a pack's device reads as once erased comes
+  from its flash routine -- `00` for an XMC4500 -- for *as the target says* in Crop, and
+  for the rest of a page a file only partly fills.
+- *Tools > pyOCD device packs*: the dialog, the tooltips and the question before a pack is
+  downloaded say that a download cannot be stopped once it has started.
 - *Help > Diagnostics...* opens in a window of its own, with Refresh, Copy and Save, and is
   no longer written to the Event Log. It says how the connection was made -- through pyOCD,
   the options pyOCD was given and what it made of the target -- the probes found, the memory
@@ -107,8 +112,8 @@ since the last version, and comes out in the next one.
 
 ### Fixed
 
-- A pyOCD connect that failed kept hold of the probe, so every later one failed too until
-  the backend was switched and back.
+- A connect through pyOCD that failed left the probe held, so every later one failed too
+  until the backend was switched and back.
 - Through pyOCD, a J-Link is now told the device's core, from its pack, so it reads and
   writes a block at a time: a megabyte in seconds rather than minutes. For a target with
   no pack the Event Log says reading and writing go a word at a time, and that J-Link
@@ -125,8 +130,8 @@ since the last version, and comes out in the next one.
   *xmc4500-f100x1024* -- was not known to be in the pack, so its core was not found. Both
   spellings are one device, listed once.
 - Erasing or programming through pyOCD a target attached to as it ran -- an XMC4500 with
-  its firmware going -- could end in a HardFault (*IPSR=3*): pyOCD ran its flash routine
-  wherever it had stopped the firmware. The target is now reset and stopped first.
+  its firmware going -- could end in a HardFault (*IPSR=3*): the flash routine ran where
+  the firmware had been stopped. The target is now reset and stopped first.
 - Closing pyflashgui while connected could leave it waiting to let go of the probe, after
   a reset by the reset pin. Letting go is now given five seconds, on a thread of its own.
 - Closing pyflashgui while it is working on the target, or while a script runs, says why

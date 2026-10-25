@@ -266,9 +266,11 @@ def test_the_whole_list_is_shown_once_fetched_and_narrowed_as_it_is_typed(dialog
 
     dialog.update_button.click()
     assert manager.busy and not dialog.update_button.isEnabled()
+    assert not dialog.cannot_stop.isHidden(), "it says a download cannot be stopped"
     wait_for(lambda: not manager.busy)
     assert dialog.fetched.text().startswith("The list of devices was fetched on ")
     assert dialog.update_button.text() == "Update the list" and dialog.text.isEnabled()
+    assert dialog.cannot_stop.isHidden()
     assert store.downloaded == [], "the list, and no pack"
     assert dialog.shown_names() == ["STM32F407VG", "XMC4500-F100x1024", "XMC4500-F144x768"]
     assert dialog.result.text() == "3 devices."

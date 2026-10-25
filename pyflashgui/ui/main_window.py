@@ -358,7 +358,7 @@ class MainWindow(QMainWindow):
         # behind the main window, might as well have been closed.
         QTimer.singleShot(0, self.panes.raise_detached)
         # Once the window is on screen: listing the targets loads the
-        # flashing library, which is the slowest thing there is to load.
+        # flashing library, which takes the longest of anything to load.
         QTimer.singleShot(0, self.probe_bar.start)
 
     # --- panes ---------------------------------------------------------------

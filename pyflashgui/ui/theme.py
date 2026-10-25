@@ -12,7 +12,7 @@ anything that reads the palette -- the Event Log's colours among them --
 follows the change as it happens.
 
 **Not every native style can be dark.** Windows 11's can; the one Qt uses on
-Windows 10 (``windowsvista``) draws light whatever is asked for -- which is why
+Windows 10 (``windowsvista``) draws in light colours only -- which is why
 pyflashgui stayed light on a Windows 10 set to dark, and why choosing Dark there
 did nothing. So where the native style cannot draw dark, Qt's own Fusion style
 is used for both, from the start. Switching to it only when dark was chosen

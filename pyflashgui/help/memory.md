@@ -16,7 +16,7 @@ Memory panes open beside the Files pane, as tabs of one another. Each is a pane 
 
 - **Region** offers the target's own regions, the flash first, and fills in the address and the length. Both can be typed over, in hexadecimal: what is wanted is as often the first few kilobytes as the whole region.
 - Where the target's memory is not known, as for a device whose name was typed and is not on the backend's list, there are no regions to choose and the range is typed.
-- **Leave the device as it is (skip J-Link's own set-up)** is offered with J-Link Commander only. On connecting, SEGGER's software sets some devices up in ways that change them: on an S32K3 it fills the RAM, so a read made to see what a running program left there finds it gone. With this ticked, that set-up is left out for this read. It is not ticked to begin with, and wants leaving alone unless that is the trouble: on a part whose set-up is what lets it be read at all, a read without it fails. Programming and erasing always have the set-up.
+- **Leave the device as it is (skip J-Link's own set-up)** is offered with J-Link Commander only. On connecting, J-Link's software sets some devices up for debugging: on an S32K3 that set-up fills the RAM, for its error correction, so a read made to see what a running program left there finds the set-up's bytes instead. With this ticked, that set-up is left out for this read. It is not ticked to begin with, and wants leaving alone unless that is the trouble: on a part whose set-up is what lets it be read at all, a read without it fails. Programming and erasing always have the set-up.
 
 What is read is kept in memory, joins the Files list and is shown in a new pane. The line above the bytes says which target it came from, the range and when. The bar in the Files pane shows how far along a read is, and **Cancel** there stops it.
 
@@ -63,7 +63,7 @@ To compare with a file that is not on the list, add it; untick it if it is not t
 
 **Crop...** makes a shorter copy of what is shown, on the Files list as *Read 1 cropped* or *app.hex cropped*: unsaved, shown in a pane of its own, to look at, compare, save or program like any other. What it came from is left as it is. It offers two things:
 
-- **All of it but the erased bytes at the end**, for a read of more than is there. Erased flash reads as `FF` on most devices, so a whole 1 MiB flash holding 100 KiB of firmware is 1 MiB; the copy ends at the last byte that holds something, and an erased byte in the middle of what is there is kept. Some devices' flash reads `00` once erased instead -- an XMC4500's does -- so beside it is what erased reads as: *as the target says* (through pyOCD, from the device's pack; `FF` where nothing says), or `FF` or `00` where that is not right. pyOCD says `FF` for an XMC4500. The choice is kept for each target.
+- **All of it but the erased bytes at the end**, for a read of more than is there. Erased flash reads as `FF` on most devices, so a whole 1 MiB flash holding 100 KiB of firmware is 1 MiB; the copy ends at the last byte that holds something, and an erased byte in the middle of what is there is kept. Some devices' flash reads `00` once erased instead -- an XMC4500's does -- so beside it is what erased reads as: *as the target says* (through pyOCD, from the device's pack; `FF` where nothing says), or `FF` or `00` to choose it here. The choice is kept for each target.
 - **A range of it**: where it starts and how long it is, in hexadecimal.
 
 The dialog says what will be kept as the choice changes, and the Event Log says what was.

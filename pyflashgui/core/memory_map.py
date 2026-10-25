@@ -46,8 +46,8 @@ class Region:
     #: show the same flash at several addresses and take writes at only one.
     alias_of: str = ""
     #: What a byte of this flash reads as once erased, as far as the backend
-    #: knows: FF for most devices, 00 for some. Not to be relied on -- pyOCD
-    #: says FF for an XMC4500, whose erased flash reads 00.
+    #: knows: FF for most devices, 00 for some, an XMC4500 among them. FF
+    #: where nothing says, so a Memory pane lets it be chosen as well.
     erased: int = 0xFF
 
     @property

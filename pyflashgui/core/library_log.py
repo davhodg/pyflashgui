@@ -3,7 +3,7 @@
 """What pyOCD and pylink say for themselves, kept for Help > Diagnostics.
 
 Both write to Python's logging rather than raising everything they have to
-say: a probe that would not let go when disconnecting, a flash routine that
+say: a probe that did not answer on disconnecting, a flash routine that
 reported a fault, the parts of the debug port found on connecting. With no
 handler of their own those lines went to a console pyflashgui started with
 pythonw does not have, and were lost.

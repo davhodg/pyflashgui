@@ -660,8 +660,8 @@ def test_connecting_again_is_tried_more_than_once(monkeypatch):
 
 @pytest.mark.parametrize("operation", ["erase_chip", "erase_ranges"])
 def test_the_target_is_reset_and_stopped_before_a_flash_routine_runs(monkeypatch, operation):
-    """Reported on an XMC4500 attached to its running firmware: pyOCD stopped
-    it amid the firmware, and the erase routine ended in a HardFault."""
+    """Reported on an XMC4500 attached to its running firmware: stopped amid
+    the firmware, the erase routine ended in a HardFault."""
     from pyocd.flash import eraser
 
     from pyflashgui.backends.pyocd_backend import PyocdConnection
