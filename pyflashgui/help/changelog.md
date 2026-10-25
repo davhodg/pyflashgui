@@ -9,6 +9,8 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-25
+
 ### Added
 
 - An error pyOCD or pylink reports in its own log -- a flash routine that ended in a fault,
@@ -174,6 +176,7 @@ since the last version, and comes out in the next one.
   for updates.
 - Launchers for a source folder on Windows and Linux, and the build of the Windows installer.
 
-[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/davhodg/pyflashgui/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/davhodg/pyflashgui/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/davhodg/pyflashgui/releases/tag/v0.1.0

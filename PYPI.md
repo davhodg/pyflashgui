@@ -57,6 +57,7 @@ A probe is usable without root on Linux once a udev rule allows it; pyOCD publis
 - **Workspaces**: one for each board or project, holding its probe, target, files and layout.
 - **A Python console** with the probe and the target as `flash`: read, write RAM, erase, program, verify and reset from a prompt or a script, each call waiting for its answer. *File > Run script...* runs one, and keeps the last five a click away.
 - **A simulated probe and target**, to try all of it with no hardware.
+- **Help > Diagnostics**: how the connection was made, the last operations in order and what pyOCD reported, ready to paste into a bug report.
 
 The [manual](https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/manual.md) covers each of these, and is also under **Help > Documentation** in the application.
 
