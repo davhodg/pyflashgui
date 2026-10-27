@@ -9,6 +9,12 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+### Changed
+
+- *Tools > pyOCD device packs*: fetching the list says *Processing what was downloaded* once
+  every file has arrived, for the half minute or so that takes, in place of a count that
+  had reached its end.
+
 ## [0.2.1] - 2026-10-25
 
 ### Added

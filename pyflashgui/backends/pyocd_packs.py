@@ -93,7 +93,15 @@ class Device:
     installed: bool
 
 
-def open_cache(tick: Tick | None = None) -> Any:
+#: Called once, when fetching the list moves on from downloading to what
+#: comes after: the library reads every description -- over fifteen hundred --
+#: and writes the list of devices from them, twenty megabytes, which takes
+#: half a minute or so with no count of its own to show.
+Stage = Callable[[str], None]
+PROCESSING = "Processing what was downloaded"
+
+
+def open_cache(tick: Tick | None = None, stage: Stage | None = None) -> Any:
     """pyOCD's own store of packs. Replaced in the tests, which have no network."""
     import cmsis_pack_manager
 
@@ -102,6 +110,14 @@ def open_cache(tick: Tick | None = None) -> Any:
         def _verbose_on_tick_fn(self, total, current):
             if tick is not None:
                 tick(current, total or None)
+
+        # The first thing the library does after the last download. Should a
+        # later version of it name this otherwise, it is not called and the
+        # step is not said: nothing else changes.
+        def _call_rust_parse(self, pdsc_index):
+            if stage is not None:
+                stage(PROCESSING)
+            return super()._call_rust_parse(pdsc_index)
 
     return Cache(tick is None, False)
 
@@ -158,14 +174,20 @@ def list_fetched() -> datetime | None:
         return None
 
 
-def fetch_list(tick: Tick | None = None) -> int:
-    """Download the index of every pack. Returns how many devices it has."""
-    cache = open_cache(tick)
+def fetch_list(tick: Tick | None = None, stage: Stage | None = None) -> int:
+    """Download the index of every pack. Returns how many devices it has.
+
+    ``stage`` is told when the downloads have ended and what they brought is
+    processed, which is as long again.
+    """
+    cache = open_cache(tick, stage)
     try:
         cache.cache_descriptors()
     except Exception as exc:
         raise _said("Fetching the list of devices", exc) from exc
-    count = len(open_cache().index)
+    # Through the copy kept of it, which the list of packs and the search
+    # that follow then use rather than reading twenty megabytes again.
+    count = len(_index(open_cache()))
     if not count:
         raise PackError(
             "Fetching the list of devices brought nothing back. It comes from the internet: "

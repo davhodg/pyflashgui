@@ -58,13 +58,13 @@ class Store:
         self.silent_fault = False
         self.downloaded: list[str] = []
 
-    def open(self, tick=None):
-        return Cache(self, tick)
+    def open(self, tick=None, stage=None):
+        return Cache(self, tick, stage)
 
 
 class Cache:
-    def __init__(self, store: Store, tick) -> None:
-        self.store, self.tick = store, tick
+    def __init__(self, store: Store, tick, stage=None) -> None:
+        self.store, self.tick, self.stage = store, tick, stage
         self.data_path = str(store.folder)
         self.index_path = str(store.folder / "index.json")
 
@@ -81,6 +81,9 @@ class Cache:
         if self.tick is not None:
             self.tick(1, 2)
             self.tick(2, 2)
+        # What the library does after the last download, said as it starts.
+        if self.stage is not None:
+            self.stage(pyocd_packs.PROCESSING)
         if not self.store.silent_fault:
             Path(self.index_path).write_text(json.dumps(INDEX), encoding="utf-8")
 
@@ -141,6 +144,31 @@ def test_fetching_the_list_says_how_many_devices_and_how_it_went(store):
     assert pyocd_packs.fetch_list(lambda arrived, total: ticks.append((arrived, total))) == 3
     assert ticks == [(1, 2), (2, 2)]
     assert pyocd_packs.list_fetched() is not None
+
+
+def test_processing_after_the_last_download_is_said(store):
+    """Reading every description and writing the list take half a minute or
+    so after the count has reached its end: said, so that a bar still going
+    is not taken for something stuck."""
+    said = []
+    pyocd_packs.fetch_list(lambda arrived, total: said.append(f"{arrived} of {total}"), said.append)
+    assert said == ["1 of 2", "2 of 2", pyocd_packs.PROCESSING]
+
+
+def test_it_is_said_as_the_library_starts_processing(monkeypatch):
+    """The real store of packs, with the library's first step after the
+    downloads stood in for: said as it starts, and then done as before."""
+    import cmsis_pack_manager
+
+    done = []
+    monkeypatch.setattr(
+        cmsis_pack_manager.Cache, "_call_rust_parse", lambda self, index: done.append("parse")
+    )
+    said = []
+    pyocd_packs.open_cache(stage=said.append)._call_rust_parse(None)
+    assert said == [pyocd_packs.PROCESSING] and done == ["parse"]
+    pyocd_packs.open_cache()._call_rust_parse(None)  # nobody to tell: nothing said
+    assert said == [pyocd_packs.PROCESSING] and done == ["parse", "parse"]
 
 
 def test_a_list_that_did_not_arrive_is_said_to_be_the_network(store):
@@ -264,12 +292,15 @@ def test_the_whole_list_is_shown_once_fetched_and_narrowed_as_it_is_typed(dialog
     assert dialog.update_button.text() == "Fetch the list"
     assert not dialog.text.isEnabled() and dialog.shown_names() == [], "nothing to show yet"
 
+    progress = []
+    manager.progress.connect(progress.append)
     dialog.update_button.click()
     assert manager.busy and not dialog.update_button.isEnabled()
     assert not dialog.cannot_stop.isHidden(), "it says a download cannot be stopped"
     wait_for(lambda: not manager.busy)
     assert dialog.fetched.text().startswith("The list of devices was fetched on ")
     assert dialog.update_button.text() == "Update the list" and dialog.text.isEnabled()
+    assert "Processing what was downloaded, which takes a while..." in progress
     assert dialog.cannot_stop.isHidden()
     assert store.downloaded == [], "the list, and no pack"
     assert dialog.shown_names() == ["STM32F407VG", "XMC4500-F100x1024", "XMC4500-F144x768"]

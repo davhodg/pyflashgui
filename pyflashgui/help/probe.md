@@ -36,7 +36,7 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 
 *Tools > pyOCD device packs...* installs one, from the internet or from a file:
 
-1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once. Every device is listed.
+1. Press **Fetch the list**. It downloads the list of every device there is a pack for, which takes a little while and is needed once. Once the count of files downloaded has reached its end, what they brought is processed into the list, which says so and takes about as long again. Every device is listed.
 2. Type any part of the device's part number. The list narrows to the devices with that in their name as you type.
 3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be over a hundred megabytes.
 4. Press **Use as target**, or close the dialog and choose the device in the bar.

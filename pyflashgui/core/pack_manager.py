@@ -126,7 +126,15 @@ class PackManager(QObject):
             self.events.good(message)
             self.progress.emit(message)
 
-        self._run(doing, lambda: pyocd_packs.fetch_list(self._tick(doing)), done)
+        def stage(now: str) -> None:
+            # A step with no count of its own, after the last download: the
+            # bar goes back and forth, and this says why it still does.
+            try:
+                self.progress.emit(f"{now}, which takes a while...")
+            except RuntimeError:  # the window went while it was running
+                pass
+
+        self._run(doing, lambda: pyocd_packs.fetch_list(self._tick(doing), stage), done)
 
     def install(self, pack: Pack) -> None:
         doing = f"Downloading {pack}"
