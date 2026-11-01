@@ -126,6 +126,10 @@ pyflashgui can instead drive a J-Link through SEGGER's own J-Link Commander, whi
 
 On Linux a probe is usable without root once a udev rule allows it; pyOCD publishes [a set of them](https://github.com/pyocd/pyOCD/tree/main/udev). Vendor software is never bundled with pyflashgui: install the vendor's own, and pyflashgui finds it.
 
+### Isolating the probe
+
+A USB isolator between the PC and the probe breaks a ground loop between them. [usb2-480mbps-isolator](https://github.com/davhodg/usb2-480mbps-isolator) is an open-source, hand-solderable one in the works, for USB 2.0 at every speed up to 480 Mbit/s, that limits the current it takes to what the PC's port can supply. **Available soon:** it is still being designed, and is for functional isolation only, not certified for safety isolation.
+
 ## Built with
 
 | Package | For | Licence |
