@@ -34,7 +34,7 @@ from pyflashgui.backends import jlink_backend
 from pyflashgui.backends.base import TargetInfo
 from pyflashgui.core import shortcut, timing, workspaces
 from pyflashgui.core.context import Context
-from pyflashgui.core.events import PROBLEMS, EventLog
+from pyflashgui.core.events import PROBLEMS, EventLog, with_time
 from pyflashgui.core.excepthook import ExceptionLogger
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.library_log import LibraryLog
@@ -101,6 +101,14 @@ DEFAULT_WIDTH = 1100
 SHORTCUT_TOLD_KEY = "shortcut/told"
 #: Where J-Link Commander is, when it is not where it is looked for.
 COMMANDER_SETTING = "jlink/commander"
+#: In QSettings, like the theme: how somebody likes to read the log, not
+#: something about a workspace.
+LOG_TIMES_KEY = "event_log/times"
+LOG_TIMES_TIP = (
+    "The time of day each Event Log line was written, to the second, in front\n"
+    "of it: 14:03:27 Connected ... From the next line on; kept when lines are\n"
+    "copied."
+)
 DEFAULT_HEIGHT = 720
 
 
@@ -150,6 +158,8 @@ class MainWindow(QMainWindow):
         #: the only thing that writes to the pane. Warnings and errors open it
         #: if it has been closed; notes do not.
         self.events = EventLog()
+        #: Whether each Event Log line has the time of day in front of it.
+        self._log_times = QSettings().value(LOG_TIMES_KEY, False, type=bool)
         #: The last warnings and errors, for Help > Diagnostics: (time, level, text).
         self.recent_problems: deque[tuple[str, str, str]] = deque(maxlen=RECENT_PROBLEMS)
         self._surfacing = False
@@ -308,6 +318,11 @@ class MainWindow(QMainWindow):
             "it by itself. It comes with SEGGER's J-Link software, and is only\n"
             "needed to use a J-Link through it."
         )
+        self.log_times_action = self.settings_menu.addAction("Time on Event Log lines")
+        self.log_times_action.setCheckable(True)
+        self.log_times_action.setChecked(self._log_times)
+        self.log_times_action.setToolTip(LOG_TIMES_TIP)
+        self.log_times_action.toggled.connect(self._set_log_times)
         # Below the line: not how pyflashgui behaves, but how this copy of it
         # is set up on this machine. For a source folder and for pip: the
         # installer makes its own entries.
@@ -1020,7 +1035,8 @@ class MainWindow(QMainWindow):
             shape.setForeground(colour)
         if event_colours.bold_for(level):
             shape.setFontWeight(QFont.Bold)
-        cursor.insertText(message, shape)
+        line = with_time(message, datetime.now()) if self._log_times else message
+        cursor.insertText(line, shape)
         # Painted again as a whole. Written through a cursor, a line could be
         # drawn before its colour was laid out, and stayed in the plain text
         # colour until scrolling redrew it -- an error that did not look like one.
@@ -1030,6 +1046,16 @@ class MainWindow(QMainWindow):
         if level in PROBLEMS:
             self.recent_problems.append((f"{datetime.now():%H:%M:%S}", level, message))
             self._surface_log()
+
+    @Slot(bool)
+    def _set_log_times(self, on: bool) -> None:
+        QSettings().setValue(LOG_TIMES_KEY, on)
+        self._log_times = on
+        self.events.information(
+            "Event Log lines are written with the time of day."
+            if on
+            else "Event Log lines are written without the time."
+        )
 
     def log_menu(self):
         """Copy and Select All as usual, and Clear. Built apart from being shown."""

@@ -9,6 +9,15 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+### Added
+
+- **The Qt style in use** is shown greyed out at the bottom of *Tools > Settings > Theme*
+  and in its tooltip, and *Help > Diagnostics* gives it with the theme -- and, for *Match
+  the system*, whether the system gave light or dark.
+- **Time on Event Log lines**, under *Tools > Settings*: the time of day in front of each
+  line, to the second, kept when it is copied. Off to begin with, and kept with this
+  computer rather than the workspace, as the theme is.
+
 ### Changed
 
 - *Tools > pyOCD device packs*: fetching the list says *Processing what was downloaded* once

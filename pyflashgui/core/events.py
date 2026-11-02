@@ -22,6 +22,8 @@ plain text, and nothing has to be imported to name one.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 from PySide6.QtCore import QObject, Signal
 
 INFORMATION = "information"
@@ -41,6 +43,16 @@ LEVELS = (INFORMATION, GOOD, WARNING, ERROR)
 
 #: The levels that mean something needs looking at.
 PROBLEMS = (WARNING, ERROR)
+
+
+def with_time(line: str, at: datetime) -> str:
+    """A line with the time of day it was written in front, to the second.
+
+    To the second and no finer: a line is written a moment after it was said,
+    and the time is for reading a log back against a clock, not for timing
+    anything -- erasing, programming and reading say how long they took.
+    """
+    return f"{at:%H:%M:%S} {line}"
 
 
 class EventLog(QObject):

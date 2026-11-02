@@ -622,3 +622,10 @@ def test_a_copy_installed_with_pip_finds_its_licence_in_the_metadata(tmp_path, m
     monkeypatch.setattr(metadata, "distribution", lambda _name: metadata.PathDistribution(info))
     assert help_menu._find_in_metadata("LICENSE") == info / "licenses" / "LICENSE"
     assert help_menu._find_in_metadata("NOTICE") is None, "not one from somewhere else"
+
+
+def test_the_report_gives_the_style_and_theme(app):
+    from pyflashgui.ui import theme
+
+    report = environment_report()
+    assert theme.style_name() in report and theme.describe() in report
