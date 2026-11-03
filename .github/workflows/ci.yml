@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   # The supported range, and the Python after it. The installer's Python runs
-  # on both platforms, because platform differences (Qt, threads, USB) are
+  # on both platforms, and on Windows 10 as well as 11, because platform differences (Qt, threads, USB) are
   # what actually bite. The rest run on Linux: bugs that appear only on one
   # Python are real, but they are rarely platform specific. 3.15 is the newest:
   # PySide6 allows it from 6.12, and PyYAML, which pyOCD needs, has no wheel
@@ -31,6 +31,9 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, python: "3.14" }
+          # Server 2022 is built on Windows 10's code (build 20348): the
+          # nearest GitHub has to the Windows 10 pyflashgui still runs on.
+          - { os: windows-2022, python: "3.14" }
           - { os: ubuntu-latest, python: "3.15" }
           - { os: ubuntu-latest, python: "3.14" }
           - { os: ubuntu-latest, python: "3.13" }  # what current Debian, Ubuntu and Fedora ship
