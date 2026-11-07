@@ -155,6 +155,8 @@ and no way of uninstalling touches them; delete that folder to remove them too.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md): the policy for changes, setting up to work on pyflashgui, running the tests, and building the Windows installer. Everyone taking part is asked to follow the [code of conduct](CODE_OF_CONDUCT.md). Security problems go through [SECURITY.md](SECURITY.md).
 
+What is aimed for with a keyboard, a screen reader, large text and high contrast, what has been checked, and how to report a barrier, is in [ACCESSIBILITY.md](ACCESSIBILITY.md).
+
 ## Safety notice
 
 pyflashgui talks to real equipment. It is intended only for people trained and experienced in working with microcontrollers, debug probes and the equipment they are part of. It is a tool for development and the bench, and is not meant for production programming.

@@ -24,6 +24,10 @@ Fixed or Security. A release's description is taken from it.
 **Anything that can disturb equipment asks first.** Erasing, programming and resetting a
 target all go through pyflashgui's confirmations. A new action of that kind does the same.
 
+**What is on screen stays usable by everybody.** No font or size in pixels written into a pane,
+colour never the only signal, and every new control reachable by keyboard and named.
+[ACCESSIBILITY.md](ACCESSIBILITY.md) has the detail, and what has and has not been checked.
+
 **Dependencies stay few, and never GPL-only.** pyflashgui is Apache-2.0, and the Windows
 installer bundles what it depends on, so a GPL-only package cannot be used. LGPL is fine as a
 separate, replaceable package, as Qt and libusb are. A new dependency needs a reason in the pull

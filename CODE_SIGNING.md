@@ -58,10 +58,20 @@ request it raises is approved by an approver before anything is signed.
 This program will not transfer any information to other networked systems unless specifically
 requested by the user or the person installing or operating it.
 
-In practice that means two things, each asked for: *Help > Check for updates* (which asks
-GitHub, or PyPI for a pip installation, for the latest version), and opening a web page you
-chose. [SECURITY.md](SECURITY.md) lists them too, and treats pyflashgui going online when you
-did not ask it to as a fault to report.
+In practice that means three things, each asked for:
+
+- *Help > Check for updates*, which asks GitHub, or PyPI for a pip installation, for the
+  latest version;
+- *Tools > pyOCD device packs*, when you press **Fetch the list** (or **Update the list**) or
+  **Install pack**. The list starts from Arm's index of CMSIS-Packs at `www.keil.com`, and
+  each pack's description and the pack itself come from the website of the company that
+  publishes it, which the dialog shows before anything is installed. These downloads are
+  made by pyOCD's pack library, `cmsis-pack-manager`, and send nothing but the requests for
+  the files. Adding a `.pack` file from disc goes online for nothing;
+- opening a web page you chose.
+
+[SECURITY.md](SECURITY.md) lists them too, and treats pyflashgui going online when you did
+not ask it to as a fault to report.
 
 pyflashgui talks to debug probes and the device a probe is connected to, which is what it is
 for; that is not a networked system in this sense, and nothing read from one is sent anywhere
@@ -71,7 +81,9 @@ The services the update check contacts have privacy policies of their own: GitHu
 [Privacy Statement](https://docs.github.com/site-policy/privacy-policies/github-general-privacy-statement)
 for checking for updates to the installed build or a source folder, and the Python Software
 Foundation's [Privacy Notice](https://policies.python.org/python.org/Privacy-Notice/) for PyPI,
-for checking for updates to a pip installation.
+for checking for updates to a pip installation. Fetching the list of packs contacts Arm,
+whose [Privacy Notice](https://www.arm.com/company/policies/privacy) applies to it, and
+installing a pack contacts the company that publishes it, under that company's own policy.
 
 ## Changes to the system, and uninstalling
 

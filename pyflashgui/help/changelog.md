@@ -17,9 +17,13 @@ since the last version, and comes out in the next one.
 - **Time on Event Log lines**, under *Tools > Settings*: the time of day in front of each
   line, to the second, kept when it is copied. Off to begin with, and kept with this
   computer rather than the workspace, as the theme is.
+- An accessibility statement, `ACCESSIBILITY.md`, and a form for reporting a barrier.
 
 ### Changed
 
+- The privacy policy in `CODE_SIGNING.md`, and `SECURITY.md`, name fetching the list of
+  device packs and installing a pack as the third thing pyflashgui goes online for, and a
+  CMSIS-Pack among the files that are data.
 - *Tools > pyOCD device packs*: fetching the list says *Processing what was downloaded* once
   every file has arrived, for the half minute or so that takes, in place of a count that
   had reached its end.

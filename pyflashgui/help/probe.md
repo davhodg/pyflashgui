@@ -41,7 +41,7 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be over a hundred megabytes.
 4. Press **Use as target**, or close the dialog and choose the device in the bar.
 
-**A download cannot be stopped once it has started**, the list's or a pack's. The dialog can be closed while one runs: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; nothing else in pyflashgui does.
+**A download cannot be stopped once it has started**, the list's or a pack's. The dialog can be closed while one runs: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; apart from *Help > Check for updates*, nothing else in pyflashgui does.
 
 Under the list is where the selected device's pack is downloaded from. The *From* column of the packs installed says the same for each of them.
 
