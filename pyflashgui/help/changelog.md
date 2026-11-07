@@ -28,6 +28,11 @@ since the last version, and comes out in the next one.
   every file has arrived, for the half minute or so that takes, in place of a count that
   had reached its end.
 
+### Fixed
+
+- *View > Reset layout* left the Files pane or the Event Log floating, if it had been
+  undocked, rather than putting it back in the window.
+
 ## [0.2.1] - 2026-10-25
 
 ### Added

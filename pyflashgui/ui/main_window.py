@@ -492,6 +492,10 @@ class MainWindow(QMainWindow):
         under both, because its lines are long.
         """
         files, log = (self.panes.docks[n] for n in DEFAULT_VISIBLE)
+        # splitDockWidget leaves a floating pane floating, so Reset layout
+        # left an undocked Event Log out of the layout it put back.
+        for dock in (files, log):
+            dock.setFloating(False)
         self.addDockWidget(Qt.LeftDockWidgetArea, files)
         self.splitDockWidget(files, log, Qt.Vertical)
         self.resizeDocks([files, log], [7, 3], Qt.Vertical)
