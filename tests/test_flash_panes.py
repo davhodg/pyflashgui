@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """The probe bar and the Files pane with its memory map, on the simulated probe."""
 
+import os
 import time
 
 import bincopy
@@ -33,6 +34,20 @@ def hex_file(folder, name: str, address: int, data: bytes) -> str:
     path = folder / name
     path.write_text(made.as_ihex())
     return str(path)
+
+
+def rebuilt(folder, name: str, address: int, data: bytes) -> str:
+    """Write a file again as a build would: some time after it was last written.
+
+    On Windows a file's modified time moves in steps of about 16 ms on some
+    versions, Windows Server 2022 among them, and Qt's file watcher there goes
+    by that time. Written again within the same step, the file looks
+    untouched, so its time is moved on, as a later build would have it.
+    """
+    path = hex_file(folder, name, address, data)
+    later = os.stat(path).st_mtime_ns + 2_000_000_000
+    os.utime(path, ns=(later, later))
+    return path
 
 
 @pytest.fixture
@@ -202,7 +217,7 @@ def test_a_file_rebuilt_on_disc_is_read_again(window, tmp_path):
     files = window.files_view
     path = hex_file(tmp_path, "app.hex", FLASH_AT, bytes(16))
     files.add_files([path])
-    hex_file(tmp_path, "app.hex", FLASH_AT, bytes(4096))
+    rebuilt(tmp_path, "app.hex", FLASH_AT, bytes(4096))
     wait_for(lambda: files.table.item(0, SIZE).text() == "4.0 KiB")
 
 
@@ -454,7 +469,7 @@ def test_a_file_is_shown_in_a_memory_pane_like_a_read(window, tmp_path):
 def test_the_pane_of_a_file_follows_the_file(window, tmp_path):
     path = hex_file(tmp_path, "app.hex", FLASH_AT, bytes(16))
     window.files_view.add_files([path])
-    hex_file(tmp_path, "app.hex", FLASH_AT, bytes(range(32)))
+    rebuilt(tmp_path, "app.hex", FLASH_AT, bytes(range(32)))
     wait_for(lambda: len(window.memory_view.model.data_read) == 32, timeout=10.0)
     assert window.memory_view.model.row(1)[1].startswith("10 11")
 
