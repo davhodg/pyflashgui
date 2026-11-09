@@ -51,7 +51,7 @@ from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import Image, ImageError, Segment
 from pyflashgui.core.memory_map import lay_out
-from pyflashgui.ui import folders, fonts, messages
+from pyflashgui.ui import folders, fonts, icons, messages
 from pyflashgui.ui.buttons import SplitButton
 from pyflashgui.ui.confirm import Confirmations
 from pyflashgui.ui.erase_dialog import EraseDialog
@@ -251,21 +251,21 @@ class FilesView(QWidget):
         self.table.itemSelectionChanged.connect(self._enable)
         self.table.itemDoubleClicked.connect(self._on_double_click)
 
-        self.add_button = QPushButton("Add...")
+        self.add_button = icons.beside(QPushButton("Add..."), icons.ADD)
         self.add_button.setToolTip("Add firmware files: ELF, Intel HEX, S-record or raw binary.")
         self.add_button.clicked.connect(self._add_dialog)
-        self.remove_button = QPushButton("Remove")
+        self.remove_button = icons.beside(QPushButton("Remove"), icons.REMOVE)
         self.remove_button.setToolTip(
             "Take the selected off the list. A file is kept; a read that has not\n"
             "been saved is asked about first."
         )
         self.remove_button.clicked.connect(self.remove_selected)
-        self.show_button = QPushButton("Show")
+        self.show_button = icons.beside(QPushButton("Show"), icons.VIEW)
         self.show_button.setToolTip(
             "Show the bytes of the selected in a Memory pane. Double-clicking one\ndoes the same."
         )
         self.show_button.clicked.connect(self.show_selected)
-        self.compare_button = QPushButton("Compare")
+        self.compare_button = icons.beside(QPushButton("Compare"), icons.COMPARE)
         self.compare_button.setToolTip(
             "Compare the two that are selected -- two reads, two files, or one of\n"
             "each -- and mark where they differ in a Memory pane. Nothing is read\n"
@@ -283,6 +283,7 @@ class FilesView(QWidget):
             "flash is kept. The target is left stopped: Reset starts it.",
             self.program,
         )
+        icons.beside(self.program_button, icons.PROGRAM)
         self.program_only = self.program_button.add(
             "Program",
             "Erase the sectors written to and write, without reading the flash\n"
@@ -290,6 +291,7 @@ class FilesView(QWidget):
             "chosen after.",
             lambda: self.program(verify=False),
         )
+        icons.beside(self.program_only, icons.PROGRAM)
         #: For flash erased already, with Erase...: erasing it again is time
         #: spent for nothing. Not every backend can leave erasing out.
         self.program_unerased = self.program_button.add(
@@ -300,6 +302,7 @@ class FilesView(QWidget):
             "nor what was written -- so Verify, below, after it says whether it took.",
             lambda: self.program(verify=False, erase=ERASE_NONE),
         )
+        icons.beside(self.program_unerased, icons.PROGRAM)
         #: The second half of the button on its own: for a target programmed
         #: some other time, or by something else.
         self.verify_only = self.program_button.add(
@@ -308,21 +311,22 @@ class FilesView(QWidget):
             "and restarting nothing.",
             self.verify,
         )
-        self.erase_button = QPushButton("Erase...")
+        icons.beside(self.verify_only, icons.VERIFY)
+        self.erase_button = icons.beside(QPushButton("Erase..."), icons.ERASE)
         self.erase_button.setToolTip(
             "Erase the target's flash: all of it, some of its regions, or a range."
         )
         self.erase_button.clicked.connect(self.erase)
         #: Pressed, the way chosen last for this target, which is remembered:
         #: a device that restarts properly only one way is reset that way.
-        self.reset_button = SplitButton("Reset", "", self.reset)
+        self.reset_button = icons.beside(SplitButton("Reset", "", self.reset), icons.RESTART)
         self.reset_ways = {
             kind: self.reset_button.add(label, tip, lambda k=kind: self.reset(k))
             for kind, (label, tip) in RESETS.items()
         }
         for action in self.reset_ways.values():
             action.setCheckable(True)
-        self.read_button = QPushButton("Read...")
+        self.read_button = icons.beside(QPushButton("Read..."), icons.READ)
         self.read_button.setToolTip(
             "Read part of the target's memory back, changing nothing in the target.\n"
             "What is read joins the list, and is shown in a Memory pane of its own."
@@ -337,7 +341,7 @@ class FilesView(QWidget):
         #: along it is -- J-Link Commander gives none while it works -- cannot
         #: show any words.
         self.doing = QLabel()
-        self.cancel_button = QPushButton("Cancel")
+        self.cancel_button = icons.beside(QPushButton("Cancel"), icons.CANCEL)
         self.cancel_button.setToolTip(
             "Stop verifying or reading. Programming is not stopped part way: that would\n"
             "leave the target holding neither the old firmware nor the new."

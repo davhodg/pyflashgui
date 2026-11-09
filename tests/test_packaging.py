@@ -74,7 +74,11 @@ def test_every_shipped_file_is_declared_for_the_frozen_build(path):
     """The installer takes a different route and has to be told separately."""
     spec = (PROJECT / "build" / "pyflashgui.spec").read_text(encoding="utf-8")
     folder = path.parent.relative_to(PROJECT).as_posix()
-    assert folder in spec.replace("\\", "/"), (
+    # A folder is copied with what is under it, so its own or any folder
+    # above it, short of the project itself, will do.
+    folders = [folder, *(p.as_posix() for p in Path(folder).parents if p != Path("."))]
+    spec = spec.replace("\\", "/")
+    assert any(f'"{f}"' in spec for f in folders), (
         f"{path.relative_to(PROJECT)} would not be in the installer: add "
         f"{folder} to DATA in build/pyflashgui.spec"
     )

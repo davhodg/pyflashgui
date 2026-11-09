@@ -48,7 +48,7 @@ from pyflashgui.core.updates import is_newer as version_is_newer
 from pyflashgui.core.worker import Worker
 from pyflashgui.help import manual_text
 from pyflashgui.ui import diagnostics as diagnostics_report
-from pyflashgui.ui import fonts, messages, theme
+from pyflashgui.ui import fonts, icons, messages, theme
 from pyflashgui.ui.diagnostics import DiagnosticsDialog
 
 
@@ -218,9 +218,9 @@ class ManualDialog(QDialog):
         self.view.setOpenLinks(False)  # every link is ours to resolve first
         self.view.anchorClicked.connect(self._follow)
 
-        self.back_button = QPushButton("Back")
+        self.back_button = icons.beside(QPushButton("Back"), icons.BACK)
         self.back_button.clicked.connect(self.back)
-        self.contents_button = QPushButton("Contents")
+        self.contents_button = icons.beside(QPushButton("Contents"), icons.HOME)
         self.contents_button.clicked.connect(lambda: self.show_page(help_pages.MANUAL))
 
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -434,12 +434,14 @@ class HelpMenu(QObject):
         self.diagnostics: DiagnosticsDialog | None = None
 
         menu = window.menuBar().addMenu("&Help")
-        menu.addAction("Documentation", self._open_docs)
-        menu.addAction("Diagnostics...", self._show_diagnostics)
+        icons.beside(menu.addAction("Documentation", self._open_docs), icons.HELP)
+        icons.beside(menu.addAction("Diagnostics...", self._show_diagnostics), icons.DIAGNOSTICS)
         menu.addSeparator()
-        self.check_action = menu.addAction("Check for updates...", self._check_for_updates)
-        menu.addAction("Licences...", self._show_licences)
-        menu.addAction(f"About {APP_NAME}", self._show_about)
+        self.check_action = icons.beside(
+            menu.addAction("Check for updates...", self._check_for_updates), icons.UPDATES
+        )
+        icons.beside(menu.addAction("Licences...", self._show_licences), icons.LICENCE)
+        icons.beside(menu.addAction(f"About {APP_NAME}", self._show_about), icons.INFO)
         self.menu = menu
 
     def shutdown(self) -> None:

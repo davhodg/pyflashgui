@@ -138,6 +138,8 @@ A USB isolator between the PC and the probe breaks a ground loop between them. [
 | [pyOCD](https://pyocd.io) | probes, targets and flash algorithms | Apache-2.0 |
 | [bincopy](https://github.com/eerimoq/bincopy) | Intel HEX, S-record and binary files | MIT |
 
+The icons beside the words on buttons and menu items are Microsoft's [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), MIT, shipped with pyflashgui as files rather than a package.
+
 ## Uninstalling
 
 - **The Windows installer:** *Settings > Apps* (or *Add or remove programs*), or *Uninstall

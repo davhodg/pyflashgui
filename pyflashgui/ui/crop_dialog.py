@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.core.flasher import size_text
-from pyflashgui.ui import fonts
+from pyflashgui.ui import fonts, icons
 from pyflashgui.ui.read_dialog import parse_number
 
 ERASED_TIP = (
@@ -98,6 +98,7 @@ class CropDialog(QDialog):
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         self.buttons.button(QDialogButtonBox.Ok).setText("Crop")
+        icons.on_buttons(self.buttons)
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
 

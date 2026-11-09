@@ -11,10 +11,11 @@ description = "Graphical flash programming tool: Arm Cortex-M with any probe pyO
 # The page shown on PyPI: shorter than the README, which is written for
 # GitHub, and with every link absolute, since PyPI has no repository behind it.
 readme = "PYPI.md"
-# Every file says so in its SPDX line, and tests/test_headers.py keeps it that
-# way.
-license = "Apache-2.0"
-license-files = ["LICENSE", "NOTICE"]
+# Every source file says so in its SPDX line, and tests/test_headers.py keeps
+# it that way. The icons in pyflashgui/resources/icons are Microsoft's Fluent
+# UI System Icons, MIT, with the licence in LICENSES.
+license = "Apache-2.0 AND MIT"
+license-files = ["LICENSE", "NOTICE", "LICENSES/*.txt"]
 requires-python = ">=3.12"
 authors = [{ name = "davhodg" }]
 # What PyPI shows as tags, and searches on.
@@ -98,7 +99,7 @@ include = ["pyflashgui*"]
 # without anyone having to remember this. tests/test_packaging.py checks that
 # every non-Python file under pyflashgui/ is covered by a pattern here.
 [tool.setuptools.package-data]
-"pyflashgui.resources" = ["*"]
+"pyflashgui.resources" = ["*", "icons/*"]
 "pyflashgui.help" = ["*"]
 
 [tool.ruff]

@@ -27,7 +27,7 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPlainTextEdit, QVBoxLa
 from pyflashgui.backends import jlink_backend, pyocd_packs
 from pyflashgui.core.flasher import size_text
 from pyflashgui.core.memory_map import FLASH
-from pyflashgui.ui import folders, fonts
+from pyflashgui.ui import folders, fonts, icons
 from pyflashgui.ui.memory_view import ERASED_KEY
 
 #: How many warnings and errors the window keeps for the report.
@@ -219,14 +219,16 @@ class DiagnosticsDialog(QDialog):
         self.text.setFont(fonts.mono())
         self.text.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.text.setAccessibleName("Diagnostics report")
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
-        refresh = buttons.addButton("Refresh", QDialogButtonBox.ActionRole)
+        buttons = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
+        refresh = icons.beside(
+            buttons.addButton("Refresh", QDialogButtonBox.ActionRole), icons.RELOAD
+        )
         refresh.setToolTip("Make the report again, as things are now.")
         refresh.clicked.connect(self.refresh)
-        copy = buttons.addButton("Copy", QDialogButtonBox.ActionRole)
+        copy = icons.beside(buttons.addButton("Copy", QDialogButtonBox.ActionRole), icons.COPY)
         copy.setToolTip("Put the whole report on the clipboard, for a bug report.")
         copy.clicked.connect(self.copy_to_clipboard)
-        save = buttons.addButton("Save...", QDialogButtonBox.ActionRole)
+        save = icons.beside(buttons.addButton("Save...", QDialogButtonBox.ActionRole), icons.SAVE)
         save.setToolTip("Write the report to a text file.")
         save.clicked.connect(self.save)
         buttons.rejected.connect(self.reject)

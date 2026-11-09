@@ -35,7 +35,7 @@ from PySide6.QtWidgets import (
 
 from pyflashgui.core import workspaces
 from pyflashgui.core.context import Context
-from pyflashgui.ui import messages
+from pyflashgui.ui import icons, messages
 
 NEW_TIP = (
     "Start a workspace with nothing in it: the panes as they first open, no\n"
@@ -85,12 +85,14 @@ class WorkspaceMenu(QObject):
     def _build(self) -> None:
         """Rebuilt each time it opens, so a workspace made elsewhere is in it."""
         self.menu.clear()
-        self.new_action = self.menu.addAction("New...", self.new_empty)
+        self.new_action = icons.beside(self.menu.addAction("New...", self.new_empty), icons.NEW)
         self.new_action.setToolTip(NEW_TIP)
-        self.save_as_action = self.menu.addAction("Save as...", self._save_as)
+        self.save_as_action = icons.beside(
+            self.menu.addAction("Save as...", self._save_as), icons.SAVE_AS
+        )
         self.save_as_action.setToolTip(SAVE_AS_TIP)
 
-        switch = self.menu.addMenu("Switch to")
+        switch = icons.beside(self.menu.addMenu("Switch to"), icons.SWITCH)
         switch.setToolTipsVisible(True)
         switch.setToolTip(SWITCH_TIP)
         for name in workspaces.names():
@@ -100,10 +102,12 @@ class WorkspaceMenu(QObject):
             if name == self.ctx.workspace:
                 action.setToolTip("The one you are in.")
 
-        manage = self.menu.addAction("Manage...", self._manage)
+        manage = icons.beside(self.menu.addAction("Manage...", self._manage), icons.MANAGE)
         manage.setToolTip(MANAGE_TIP)
         self.menu.addSeparator()
-        self.folder_action = self.menu.addAction("Open folder", self.open_folder)
+        self.folder_action = icons.beside(
+            self.menu.addAction("Open folder", self.open_folder), icons.FOLDER
+        )
         self.folder_action.setToolTip(FOLDER_TIP)
 
     def install(self, file_menu: QMenu, before=None) -> None:
@@ -168,9 +172,9 @@ class ManageWorkspaces(QDialog):
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
         self.list.currentRowChanged.connect(lambda _row: self._update_buttons())
 
-        self.rename = QPushButton("Rename...")
+        self.rename = icons.beside(QPushButton("Rename..."), icons.RENAME)
         self.rename.clicked.connect(self._rename)
-        self.delete = QPushButton("Delete...")
+        self.delete = icons.beside(QPushButton("Delete..."), icons.DELETE)
         self.delete.clicked.connect(self._delete)
 
         buttons = QHBoxLayout()
@@ -178,7 +182,7 @@ class ManageWorkspaces(QDialog):
         buttons.addWidget(self.delete)
         buttons.addStretch()
 
-        closer = QDialogButtonBox(QDialogButtonBox.Close)
+        closer = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         closer.rejected.connect(self.reject)
 
         layout = QVBoxLayout(self)

@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from pyflashgui.core.flasher import size_text
 from pyflashgui.core.memory_map import FLASH, GENERIC, Region
-from pyflashgui.ui import fonts
+from pyflashgui.ui import fonts, icons
 
 OTHER = "Another range"
 NO_REGIONS = (
@@ -107,7 +107,8 @@ class ReadDialog(QDialog):
             form.addRow("", self.skip_setup)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Read")
+        icons.beside(self.buttons.button(QDialogButtonBox.Ok), icons.READ).setText("Read")
+        icons.on_buttons(self.buttons)
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
 

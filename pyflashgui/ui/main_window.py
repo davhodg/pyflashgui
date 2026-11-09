@@ -40,7 +40,7 @@ from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.library_log import LibraryLog
 from pyflashgui.core.memory_map import FLASH, RAM, Region
 from pyflashgui.core.pack_manager import PackManager
-from pyflashgui.ui import event_colours, folders, messages, theme
+from pyflashgui.ui import clear_menu, event_colours, folders, icons, messages, theme
 from pyflashgui.ui.confirm import Confirmations, Remembered
 from pyflashgui.ui.console_view import ConsoleView
 from pyflashgui.ui.diagnostics import RECENT_PROBLEMS
@@ -152,8 +152,7 @@ class MainWindow(QMainWindow):
         # is often the first of a thousand, and a log that drops its oldest
         # lines drops exactly that one. Clear, on the right-click, empties it.
         self.log.setMaximumBlockCount(0)
-        self.log.setContextMenuPolicy(Qt.CustomContextMenu)
-        self.log.customContextMenuRequested.connect(self._log_menu)
+        clear_menu.add(self.log)
         #: Every line said to the user arrives here with a level, and this is
         #: the only thing that writes to the pane. Warnings and errors open it
         #: if it has been closed; notes do not.
@@ -260,7 +259,7 @@ class MainWindow(QMainWindow):
         self.workspace_menu.install(file_menu)
         self.workspace_menu.switch_requested.connect(self._switch_workspace)
         file_menu.addSeparator()
-        quit_action = file_menu.addAction("Exit", self.close)
+        quit_action = icons.beside(file_menu.addAction("Exit", self.close), icons.EXIT)
         quit_action.setMenuRole(QAction.QuitRole)
         quit_action.setShortcut(QKeySequence.Quit)
 
@@ -294,7 +293,9 @@ class MainWindow(QMainWindow):
 
         tools_menu = self.menuBar().addMenu("&Tools")
         tools_menu.setToolTipsVisible(True)
-        self.packs_action = tools_menu.addAction("pyOCD device packs...", self._manage_packs)
+        self.packs_action = icons.beside(
+            tools_menu.addAction("pyOCD device packs...", self._manage_packs), icons.MANAGE
+        )
         self.packs_action.setToolTip(
             "Find a device that is not in the list of targets, and install the\n"
             "CMSIS-Pack that describes it. Only pyOCD uses packs: J-Link Commander\n"
@@ -305,11 +306,13 @@ class MainWindow(QMainWindow):
         # than a menu of its own on the bar, because most settings live where
         # they are used, and a menu called Settings would look like the place
         # for all of them.
-        self.settings_menu = QMenu("Settings", tools_menu)
+        self.settings_menu = icons.beside(QMenu("Settings", tools_menu), icons.SETTINGS)
         self.settings_menu.setToolTipsVisible(True)
         tools_menu.addMenu(self.settings_menu)
         self.theme_menu = theme.menu(self)
         self.settings_menu.addMenu(self.theme_menu)
+        # No icon: in the Windows 11 style one icon among the ticks here moves
+        # every item along to make room for both.
         commander = self.settings_menu.addAction(
             "J-Link Commander location...", self._choose_commander
         )
@@ -323,6 +326,11 @@ class MainWindow(QMainWindow):
         self.log_times_action.setChecked(self._log_times)
         self.log_times_action.setToolTip(LOG_TIMES_TIP)
         self.log_times_action.toggled.connect(self._set_log_times)
+        self.icons_action = self.settings_menu.addAction(icons.TITLE)
+        self.icons_action.setCheckable(True)
+        self.icons_action.setChecked(icons.shown())
+        self.icons_action.setToolTip(icons.TIP)
+        self.icons_action.toggled.connect(icons.set_shown)
         # Below the line: not how pyflashgui behaves, but how this copy of it
         # is set up on this machine. For a source folder and for pip: the
         # installer makes its own entries.
@@ -346,7 +354,7 @@ class MainWindow(QMainWindow):
                     self.shortcut_action = action
         # Together, because "put something back the way it was" is one thing
         # to go looking for.
-        self.reset_menu = tools_menu.addMenu("Reset")
+        self.reset_menu = icons.beside(tools_menu.addMenu("Reset"), icons.RESET)
         self.reset_menu.setToolTipsVisible(True)
         self.reset_menu.addAction(self.reset_layout_action)
         forget = self.reset_menu.addAction("Forget remembered folders", self._forget_folders)
@@ -476,6 +484,7 @@ class MainWindow(QMainWindow):
         for name in self._view_order():
             self.view_menu.addAction(self._pane_action(name))
         self.view_menu.addSeparator()
+        # No icons on these two: see the icons module about menus of ticks.
         self.view_menu.addAction("Dock all panes", self.panes.dock_all)
         self.view_menu.addAction(self.reset_layout_action)
 
@@ -951,7 +960,7 @@ class MainWindow(QMainWindow):
         own close button closes it: put away, and shown again with its entry."""
         menu = QMenu(self)
         others = [n for n in self._memory_panes() if n != name and self.panes.on_screen(n)]
-        menu.addAction("Close", lambda: self.panes.docks[name].close())
+        icons.beside(menu.addAction("Close", lambda: self.panes.docks[name].close()), icons.CLOSE)
         close_others = menu.addAction(
             "Close the other Memory panes", lambda: [self.panes.docks[n].close() for n in others]
         )
@@ -1063,15 +1072,7 @@ class MainWindow(QMainWindow):
 
     def log_menu(self):
         """Copy and Select All as usual, and Clear. Built apart from being shown."""
-        menu = self.log.createStandardContextMenu()
-        menu.addSeparator()
-        menu.addAction("Clear", self.log.clear)
-        return menu
-
-    def _log_menu(self, at) -> None:
-        menu = self.log_menu()
-        menu.exec(self.log.viewport().mapToGlobal(at))
-        menu.deleteLater()
+        return clear_menu.menu(self.log)
 
     def _dark_log(self) -> bool:
         """Which set of colours reads on the Event Log's own background."""

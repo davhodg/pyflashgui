@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
 )
 
 from pyflashgui.core.context import Context
-from pyflashgui.ui import folders, fonts
+from pyflashgui.ui import clear_menu, folders, fonts, icons
 from pyflashgui.ui.scripting import Flash, ScriptError, ScriptStoppedError
 
 BANNER = """pyflashgui console -- Python {version}
@@ -208,7 +208,7 @@ class ConsoleView(QWidget):
         self.running = False
         mono = fonts.mono()
 
-        self.output = QPlainTextEdit()
+        self.output = clear_menu.add(QPlainTextEdit())
         self.output.setReadOnly(True)
         self.output.setFont(mono)
         self.output.setMaximumBlockCount(MOST_LINES)
@@ -219,13 +219,13 @@ class ConsoleView(QWidget):
         self.input.setFont(mono)
         self.input.setAccessibleName("Python")
         self.input.entered.connect(self._on_enter)
-        self.run_button = QPushButton("Run script...")
+        self.run_button = icons.beside(QPushButton("Run script..."), icons.START)
         self.run_button.setToolTip(RUN_TIP)
         self.run_button.clicked.connect(self._run_script_dialog)
-        self.stop_button = QPushButton("Stop")
+        self.stop_button = icons.beside(QPushButton("Stop"), icons.STOP)
         self.stop_button.setToolTip(STOP_TIP)
         self.stop_button.clicked.connect(self.stop)
-        clear = QPushButton("Clear")
+        clear = icons.beside(QPushButton("Clear"), icons.CLEAR)
         clear.clicked.connect(self.output.clear)
 
         row = QHBoxLayout()

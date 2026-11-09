@@ -41,6 +41,8 @@ Each pane can be dragged to another edge of the window, floated, or closed, and 
 
 The style in use is shown greyed out at the bottom of the *Theme* menu, and in the menu's tooltip, and *Help > Diagnostics...* gives it with the theme.
 
+*Tools > Settings > Show icons* puts a standard icon beside the word on common buttons and menu items -- Connect, Erase, Save, Stop and the like -- to find them at a glance. It is on to start with; untick it for the words alone. The words are there either way, and the choice is kept for you on this computer. The icons are Microsoft's Fluent UI System Icons, shipped with pyflashgui, so they are the same on Windows and Linux, drawn in the theme's text colour.
+
 ## Workspaces
 
 A workspace is everything about one thing being worked on: the probe, the target, its speed, the list of files and the arrangement of the panes. There is always one, called *default*, and somebody with one board never needs another.

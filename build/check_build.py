@@ -38,6 +38,8 @@ REQUIRED_FILES = (
     "pyflashgui/resources/pyflashgui.ico",
     "pyflashgui/help/manual.md",
     "LICENSE",
+    "LICENSES/MIT.txt",
+    "pyflashgui/resources/icons/save_20_regular.svg",
     "NOTICE",
     "THIRD-PARTY-NOTICES.txt",
 )

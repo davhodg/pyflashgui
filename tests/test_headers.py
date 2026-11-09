@@ -85,4 +85,7 @@ def test_pyflashgui_code_is_apache_and_names_its_holder():
 def test_every_licence_named_is_shipped_and_declared():
     assert (ROOT / "LICENSE").is_file()
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert pyproject["project"]["license"] == "Apache-2.0"
+    named = pyproject["project"]["license"].split(" AND ")
+    assert named == ["Apache-2.0", "MIT"], "Apache-2.0 for pyflashgui, MIT for the icons"
+    for licence in named[1:]:
+        assert (ROOT / "LICENSES" / f"{licence}.txt").is_file(), licence

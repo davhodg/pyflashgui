@@ -110,6 +110,7 @@ DATA = [
     (str(PROJECT / "pyflashgui" / "resources"), "pyflashgui/resources"),
     (str(PROJECT / "pyflashgui" / "help"), "pyflashgui/help"),
     (str(PROJECT / "LICENSE"), "."),
+    (str(PROJECT / "LICENSES"), "LICENSES"),  # MIT, for the icons
     (str(PROJECT / "NOTICE"), "."),
     (str(PROJECT / "THIRD-PARTY-NOTICES.txt"), "."),
     (str(PROJECT / "README.md"), "."),

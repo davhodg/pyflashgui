@@ -281,3 +281,15 @@ def test_the_console_is_in_the_view_menu_and_opens_in_front(window):
     window._build_view_menu()
     {a.text(): a for a in window.view_menu.actions()}["Python Console"].trigger()
     assert dock.isFloating(), "in front again, as at first"
+
+
+def test_the_output_can_be_cleared_from_its_right_click(window):
+    from pyflashgui.ui import clear_menu
+
+    output = window.console.output
+    output.setPlainText(">>> 1 + 1\n2\n")
+    assert output.contextMenuPolicy() == Qt.CustomContextMenu, "the menu with Clear, not Qt's"
+    menu = clear_menu.menu(output)
+    clear = next(a for a in menu.actions() if a.text() == "Clear")
+    clear.trigger()
+    assert output.toPlainText() == ""

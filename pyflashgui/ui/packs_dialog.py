@@ -44,7 +44,7 @@ from PySide6.QtWidgets import (
 from pyflashgui.backends.pyocd_packs import Device, Pack
 from pyflashgui.core.context import Context
 from pyflashgui.core.pack_manager import PackManager
-from pyflashgui.ui import folders, messages
+from pyflashgui.ui import folders, icons, messages
 
 INTRODUCTION = (
     "pyOCD knows some devices by itself. The rest are described by CMSIS-Packs, which the "
@@ -156,12 +156,12 @@ class PacksDialog(QDialog):
         self.address = QLabel()
         self.address.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.address.setWordWrap(True)
-        self.copy_button = QPushButton("Copy address")
+        self.copy_button = icons.beside(QPushButton("Copy address"), icons.COPY)
         self.copy_button.setToolTip(COPY_TIP)
 
-        self.install_button = QPushButton("Install pack")
+        self.install_button = icons.beside(QPushButton("Install pack"), icons.DOWNLOAD)
         self.install_button.setToolTip(INSTALL_TIP)
-        self.use_button = QPushButton("Use as target")
+        self.use_button = icons.beside(QPushButton("Use as target"), icons.PICK)
         self.use_button.setToolTip(USE_TIP)
 
         self.packs = QTreeWidget()
@@ -169,13 +169,13 @@ class PacksDialog(QDialog):
         self.packs.setRootIsDecorated(False)
         self.packs.setSelectionMode(QAbstractItemView.SingleSelection)
         self.packs.setAccessibleName("Installed packs")
-        self.add_file_button = QPushButton("Add from file...")
+        self.add_file_button = icons.beside(QPushButton("Add from file..."), icons.OPEN)
         self.add_file_button.setToolTip(ADD_FILE_TIP)
-        self.remove_button = QPushButton("Remove...")
+        self.remove_button = icons.beside(QPushButton("Remove..."), icons.DELETE)
         self.remove_button.setToolTip(REMOVE_TIP)
 
         self.fetched = QLabel()
-        self.update_button = QPushButton(FETCH)
+        self.update_button = icons.beside(QPushButton(FETCH), icons.RELOAD)
         self.update_button.setToolTip(UPDATE_TIP)
 
         self.status = QLabel()
@@ -190,7 +190,7 @@ class PacksDialog(QDialog):
         self.cannot_stop.setWordWrap(True)
         self.cannot_stop.setVisible(False)
 
-        closer = QDialogButtonBox(QDialogButtonBox.Close)
+        closer = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         closer.rejected.connect(self.reject)
         # Enter in the search box searches, and must not also be Close.
         closer.button(QDialogButtonBox.Close).setAutoDefault(False)

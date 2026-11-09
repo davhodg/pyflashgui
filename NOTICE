@@ -5,6 +5,11 @@ Licensed under the Apache License, Version 2.0 (the "License"); you may not use
 this file except in compliance with the License. You may obtain a copy of the
 License in the LICENSE file, or at http://www.apache.org/licenses/LICENSE-2.0
 
+The icons beside the words on buttons and menu items (pyflashgui/resources/icons)
+are Microsoft's Fluent UI System Icons, https://github.com/microsoft/fluentui-system-icons,
+Copyright (c) 2020 Microsoft Corporation, used unmodified under the MIT License
+(LICENSES/MIT.txt).
+
 This product includes software developed by third parties, each used unmodified
 under its own licence and installed as a separate package:
 

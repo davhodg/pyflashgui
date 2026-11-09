@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 
 from pyflashgui.core.flasher import size_text
 from pyflashgui.core.memory_map import FLASH, Region
-from pyflashgui.ui import fonts
+from pyflashgui.ui import fonts, icons
 from pyflashgui.ui.read_dialog import parse_number
 
 SECTORS = (
@@ -87,7 +87,8 @@ class EraseDialog(QDialog):
         self.problem.setWordWrap(True)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Erase...")
+        icons.beside(self.buttons.button(QDialogButtonBox.Ok), icons.ERASE).setText("Erase...")
+        icons.on_buttons(self.buttons)
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)
 

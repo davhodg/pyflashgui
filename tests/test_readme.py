@@ -46,9 +46,13 @@ def test_the_python_badge_is_the_floor_the_project_declares(page):
 
 @PAGES
 def test_the_licence_badge_is_the_licence(page):
-    """The badge names pyflashgui's licence, which is one term. A second
-    one would need a decision about what the badge says."""
-    assert badge("license", page).replace("--", "-") == PROJECT["license"]
+    """The badge names pyflashgui's licence, which is the first term of the
+    expression. The MIT after it covers the icons shipped from Microsoft's
+    Fluent set -- more permissive, so leaving it off the badge understates
+    nothing anybody could rely on."""
+    main, *rest = PROJECT["license"].split(" AND ")
+    assert badge("license", page).replace("--", "-") == main
+    assert rest == ["MIT"], "a new licence term needs a decision about the badge"
 
 
 def test_the_ci_badge_is_the_live_one():

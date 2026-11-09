@@ -44,7 +44,7 @@ from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher, size_text
 from pyflashgui.core.images import Image, Segment
 from pyflashgui.core.memory_map import region_at
-from pyflashgui.ui import fonts
+from pyflashgui.ui import fonts, icons
 from pyflashgui.ui.crop_dialog import CropDialog
 from pyflashgui.ui.files_view import Entry, parse_address, save_entry
 
@@ -361,10 +361,10 @@ class MemoryView(QWidget):
         self.find.setAccessibleName("Find")
         self.find.setToolTip(FIND_TIP)
         self.find.returnPressed.connect(self.find_next)
-        self.previous_button = QPushButton("Previous")
+        self.previous_button = icons.beside(QPushButton("Previous"), icons.UP)
         self.previous_button.setToolTip("Find the one before. Shift+F3.")
         self.previous_button.clicked.connect(self.find_previous)
-        self.next_button = QPushButton("Next")
+        self.next_button = icons.beside(QPushButton("Next"), icons.DOWN)
         self.next_button.setToolTip("Find the next. F3.")
         self.next_button.clicked.connect(self.find_next)
         #: What going to an address or finding something came to, in
@@ -398,7 +398,7 @@ class MemoryView(QWidget):
         looking.addWidget(self.previous_button)
         looking.addWidget(self.next_button)
 
-        self.save_button = QPushButton("Save...")
+        self.save_button = icons.beside(QPushButton("Save..."), icons.SAVE)
         self.save_button.setToolTip(
             "Save what is shown here in a file: raw binary, Intel HEX or S-record.\n"
             "For what is in one piece, as everything read from a target is."
@@ -408,9 +408,9 @@ class MemoryView(QWidget):
         #: what compares: this with another entry of that list.
         self.compared = QLabel()
         self.compared.setWordWrap(True)
-        self.previous_difference = QPushButton("Previous difference")
+        self.previous_difference = icons.beside(QPushButton("Previous difference"), icons.UP)
         self.previous_difference.clicked.connect(lambda: self._to_difference(False))
-        self.next_difference = QPushButton("Next difference")
+        self.next_difference = icons.beside(QPushButton("Next difference"), icons.DOWN)
         self.next_difference.clicked.connect(lambda: self._to_difference(True))
         #: Where the difference last gone to starts, as an offset.
         self._difference_at: int | None = None

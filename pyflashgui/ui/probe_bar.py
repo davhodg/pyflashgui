@@ -28,7 +28,7 @@ from pyflashgui import backends
 from pyflashgui.backends.base import ProbeInfo, TargetInfo
 from pyflashgui.core.context import Context
 from pyflashgui.core.flasher import Flasher
-from pyflashgui.ui import fonts
+from pyflashgui.ui import fonts, icons
 
 BACKEND_KEY = "probe.backend"
 PROBE_KEY = "probe.id"
@@ -121,7 +121,7 @@ class ProbeBar(QToolBar):
         self.probe.setToolTip(PROBE_TIP)
         self.probe.setAccessibleName("Probe")
         self.probe.setMinimumWidth(fonts.width_for(self.probe, "M" * 22))
-        self.refresh = QPushButton("Find probes")
+        self.refresh = icons.beside(QPushButton("Find probes"), icons.SEARCH)
         self.refresh.setToolTip(
             "Look again for the probes that are plugged in: for one plugged in\n"
             "since pyflashgui started. Opening the list looks again by itself\n"
@@ -156,7 +156,7 @@ class ProbeBar(QToolBar):
         self.interface.setToolTip(INTERFACE_TIP)
         self.interface.setAccessibleName("Interface")
 
-        self.button = QPushButton("Connect")
+        self.button = icons.beside(QPushButton("Connect"), icons.CONNECT)
         self.button.setCheckable(True)
         self.button.setToolTip(CONNECT_TIP)
         #: Only where the backend can do otherwise: see _show_interfaces.
@@ -381,6 +381,7 @@ class ProbeBar(QToolBar):
         self._loading = True
         self.button.setChecked(on)
         self.button.setText("Disconnect" if on else "Connect")
+        icons.beside(self.button, icons.DISCONNECT if on else icons.CONNECT)
         self._loading = False
 
     def _on_connection(self, connected: bool) -> None:

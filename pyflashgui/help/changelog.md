@@ -9,6 +9,15 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+### Added
+
+- **Icons beside the words** on common buttons and menu items -- Connect, Find probes,
+  Program and verify, Erase, Read, Reset, Save, Stop and the like -- and on every dialog's
+  OK, Cancel and Close, to find them at a glance. The words stay. *Tools > Settings > Show
+  icons* turns them off. They are Microsoft's Fluent UI System Icons (MIT), shipped with
+  pyflashgui and drawn in the theme's text colour.
+- **Clear** on the right-click of the Python Console's output, as the Event Log has.
+
 ## [0.2.2] - 2026-11-08
 
 ### Added

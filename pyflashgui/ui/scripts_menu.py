@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtWidgets import QMenu, QWidget
 
-from pyflashgui.ui import folders, messages
+from pyflashgui.ui import folders, icons, messages
 
 if TYPE_CHECKING:
     from pyflashgui.core.context import Context
@@ -74,7 +74,9 @@ class ScriptsMenu(QObject):
         self.recent_menu.aboutToShow.connect(self._build_recent)
 
     def install(self, file_menu: QMenu) -> None:
-        self.run_action = file_menu.addAction("Run script...", self.run_dialog)
+        self.run_action = icons.beside(
+            file_menu.addAction("Run script...", self.run_dialog), icons.START
+        )
         self.run_action.setToolTip(RUN_TIP)
         recent = file_menu.addMenu(self.recent_menu)
         recent.setToolTip(RECENT_TIP)
