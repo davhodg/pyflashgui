@@ -4,8 +4,8 @@
 
 Beside, never instead: the word stays, and the icon helps somebody who reads
 little English find Save, Erase or Stop at a glance. Only actions whose
-meaning has a picture people already know get one. A picture made up for
-Crop would have to be learnt, which is the opposite of the point.
+meaning has a picture people already know get one: a picture made up for
+the occasion would have to be learnt, which is the opposite of the point.
 
 Not in a menu of ticks -- View, Tools > Settings -- either: the Windows 11
 style keeps a column for icons apart from the one for ticks, so one icon
@@ -48,6 +48,7 @@ CLOSE = "close"
 COMPARE = "compare"
 CONNECT = "connect"
 COPY = "copy"
+CROP = "crop"
 DELETE = "delete"
 DETACH = "detach"
 DIAGNOSTICS = "diagnostics"
@@ -102,6 +103,7 @@ FILE: dict[str, str] = {
     COMPARE: "column_double_compare_20_regular",  # two columns, side by side
     CONNECT: "plug_connected_20_regular",
     COPY: "copy_20_regular",
+    CROP: "crop_20_regular",
     DELETE: "delete_20_regular",
     DETACH: "window_new_20_regular",  # the arrow out to a window of its own
     DIAGNOSTICS: "pulse_20_regular",

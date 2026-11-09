@@ -419,7 +419,7 @@ class MemoryView(QWidget):
         differences.addWidget(self.previous_difference)
         differences.addWidget(self.next_difference)
 
-        self.crop_button = QPushButton("Crop...")
+        self.crop_button = icons.beside(QPushButton("Crop..."), icons.CROP)
         self.crop_button.setToolTip(CROP_TIP)
         self.crop_button.clicked.connect(self.crop)
 

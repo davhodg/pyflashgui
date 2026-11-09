@@ -97,7 +97,7 @@ class CropDialog(QDialog):
         form.addRow("Length:", self.length)
 
         self.buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.buttons.button(QDialogButtonBox.Ok).setText("Crop")
+        icons.beside(self.buttons.button(QDialogButtonBox.Ok), icons.CROP).setText("Crop")
         icons.on_buttons(self.buttons)
         self.buttons.accepted.connect(self._accept)
         self.buttons.rejected.connect(self.reject)

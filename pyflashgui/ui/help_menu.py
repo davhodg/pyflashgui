@@ -223,7 +223,7 @@ class ManualDialog(QDialog):
         self.contents_button = icons.beside(QPushButton("Contents"), icons.HOME)
         self.contents_button.clicked.connect(lambda: self.show_page(help_pages.MANUAL))
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         buttons.rejected.connect(self.reject)
         buttons.addButton(self.back_button, QDialogButtonBox.ActionRole)
         buttons.addButton(self.contents_button, QDialogButtonBox.ActionRole)
@@ -286,7 +286,7 @@ class LicenceDialog(QDialog):
             view.setFont(fonts.mono())
             view.setLineWrapMode(QPlainTextEdit.NoWrap)
             tabs.addTab(view, entry.title)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         buttons.rejected.connect(self.reject)
         buttons.accepted.connect(self.accept)
         layout = QVBoxLayout(self)
@@ -332,7 +332,7 @@ class AboutDialog(QDialog):
             f'<p>Apache License 2.0 &middot; <a href="{PROJECT_PAGE}">{PROJECT_PAGE}</a></p>'
         )
         link.setOpenExternalLinks(True)
-        buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
         buttons.rejected.connect(self.reject)
         layout = QVBoxLayout(self)
         for widget in (heading, details, link, buttons):

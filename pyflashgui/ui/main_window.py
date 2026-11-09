@@ -961,13 +961,20 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         others = [n for n in self._memory_panes() if n != name and self.panes.on_screen(n)]
         icons.beside(menu.addAction("Close", lambda: self.panes.docks[name].close()), icons.CLOSE)
-        close_others = menu.addAction(
-            "Close the other Memory panes", lambda: [self.panes.docks[n].close() for n in others]
+        close_others = icons.beside(
+            menu.addAction(
+                "Close the other Memory panes",
+                lambda: [self.panes.docks[n].close() for n in others],
+            ),
+            icons.CLOSE,
         )
         close_others.setEnabled(bool(others))
-        menu.addAction(
-            "Close all Memory panes",
-            lambda: [self.panes.docks[n].close() for n in [name, *others]],
+        icons.beside(
+            menu.addAction(
+                "Close all Memory panes",
+                lambda: [self.panes.docks[n].close() for n in [name, *others]],
+            ),
+            icons.CLOSE,
         )
         return menu
 
