@@ -6,11 +6,7 @@ body:
     id: what-happened
     attributes:
       label: What happened
-      description: What you did, what you expected, and what happened instead.
-      placeholder: |
-        Connected to an STM32F103 through an ST-Link and pressed Program with
-        one Intel HEX file ticked. Expected it to be written and verified; the
-        Event Log says the flash could not be erased.
+      description: What you did, what you expected to happen, and what happened instead. Quote any message pyflashgui showed word for word.
     validations:
       required: true
 
@@ -18,17 +14,15 @@ body:
     id: steps
     attributes:
       label: How to make it happen again
-      placeholder: |
-        1.
-        2.
-        3.
+      description: The steps from starting pyflashgui to the problem, one per line, in order. Say if it happens every time or only sometimes.
 
   - type: textarea
     id: diagnostics
     attributes:
       label: Diagnostics
       description: |
-        *Help > Diagnostics...* opens a report and copies it to the clipboard: the versions of pyflashgui, Python, PySide6, pyOCD and what came with them, the platform, the connection, the last operations and what pyOCD said about them. Paste it here. It names the probes' serial numbers, your workspace folder and the files in the Files pane; remove any of that if you would rather.
+        Paste the diagnostics report here. In pyflashgui, open *Help > Diagnostics...*, press **Copy**, and paste it into this box.
+        The report gives the versions of pyflashgui, Python, PySide6, pyOCD and what came with them, the platform, the connection, the last operations and what pyOCD said about them. It names the probes' serial numbers, your workspace folder and the files in the Files pane; remove any of that if you would rather.
         If pyflashgui will not start at all, say so, and paste whatever it printed instead.
       render: text
 
@@ -48,15 +42,13 @@ body:
     id: probe
     attributes:
       label: Probe
-      description: The debug probe, or the board it is built into. Its serial number is not needed.
-      placeholder: Raspberry Pi Debug Probe, the ST-Link on a Nucleo-F411RE, J-Link EDU Mini, XDS110
+      description: The make and model of the debug probe, or the name of the board it is built into. Its serial number is not needed.
 
   - type: input
     id: target
     attributes:
       label: Target
-      description: The name chosen under Target, and the device itself if that is something else.
-      placeholder: stm32f411re
+      description: The name chosen under Target, as it is spelt there, and the part number of the device itself if that is different.
 
   - type: dropdown
     id: installed

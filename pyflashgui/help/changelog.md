@@ -19,6 +19,11 @@ since the last version, and comes out in the next one.
 - **Clear** on the right-click of the Python Console's output, as the Event Log has.
 - **Report a bug...** in *Help > Diagnostics*: opens GitHub's bug form in the browser.
 
+### Changed
+
+- *Help > Diagnostics...* no longer copies the report to the clipboard as it opens: **Copy**
+  does, when it is pressed.
+
 ## [0.2.2] - 2026-11-08
 
 ### Added

@@ -474,12 +474,12 @@ class HelpMenu(QObject):
         self.manual.activateWindow()
 
     def _show_diagnostics(self) -> None:
-        """Report the state of the window in a window of its own, and copy it.
+        """Report the state of the window in a window of its own.
 
         It was written into the Event Log, where a report this long pushed
         everything else out of sight and could not be asked again without
-        making another. Still copied as it opens, as the bug report form
-        says it is.
+        making another. Not copied as it opens: the clipboard is the user's,
+        and Copy is beside the report for when they want it there.
         """
         if self.diagnostics is None:
             self.diagnostics = DiagnosticsDialog(
@@ -487,13 +487,12 @@ class HelpMenu(QObject):
             )
         else:
             self.diagnostics.refresh()
-        self.diagnostics.copy_to_clipboard()
         self.diagnostics.show()
         self.diagnostics.raise_()
         self.diagnostics.activateWindow()
         # As information, like every other line: written into the pane
         # directly it took the colour of whatever came before it.
-        self.window.events.information("Diagnostics report made, and copied to the clipboard.")
+        self.window.events.information("Diagnostics report made.")
 
     def _show_licences(self) -> None:
         LicenceDialog(self.window).exec()

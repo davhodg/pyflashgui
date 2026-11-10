@@ -92,13 +92,22 @@ def test_every_section_says_something(window):
         assert section_of(text, title), f"{title} says something, if only nothing"
 
 
-def test_it_opens_in_a_window_of_its_own_and_is_copied(app, window, tmp_path, monkeypatch):
+def test_it_opens_in_a_window_of_its_own_and_is_copied_on_asking(
+    app, window, tmp_path, monkeypatch
+):
+    from PySide6.QtWidgets import QPushButton
+
     from pyflashgui.ui import folders
 
+    QGuiApplication.clipboard().setText("what was on the clipboard before")
     window.help_menu._show_diagnostics()
     dialog = window.help_menu.diagnostics
     assert dialog.isVisible() and "Connection" in dialog.report()
-    assert QGuiApplication.clipboard().text() == dialog.report(), "as the bug report form says"
+    assert QGuiApplication.clipboard().text() == "what was on the clipboard before", (
+        "nothing copied unasked"
+    )
+    next(b for b in dialog.findChildren(QPushButton) if b.text() == "Copy").click()
+    assert QGuiApplication.clipboard().text() == dialog.report(), "only when Copy is pressed"
     assert "Recent operations" not in window.log.toPlainText(), "not through the Event Log"
 
     window.help_menu._show_diagnostics()
