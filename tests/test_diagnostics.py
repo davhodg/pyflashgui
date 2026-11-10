@@ -172,3 +172,25 @@ def test_each_line_is_named_after_its_library(name, library):
     from pyflashgui.core.library_log import library_of
 
     assert library_of(name) == library
+
+
+def test_report_a_bug_opens_the_bug_form(app, window, monkeypatch):
+    from pathlib import Path
+
+    from PySide6.QtGui import QDesktopServices
+    from PySide6.QtWidgets import QPushButton
+
+    from pyflashgui.core.updates import BUG_REPORT_PAGE
+    from pyflashgui.ui import icons
+
+    opened = []
+    monkeypatch.setattr(QDesktopServices, "openUrl", lambda url: opened.append(url.toString()))
+    window.help_menu._show_diagnostics()
+    dialog = window.help_menu.diagnostics
+    button = next(b for b in dialog.findChildren(QPushButton) if b.text() == "Report a bug...")
+    assert button.property(icons.PROPERTY) == icons.BUG
+    button.click()
+    assert opened == [BUG_REPORT_PAGE]
+    template = BUG_REPORT_PAGE.rsplit("template=", 1)[1]
+    assert (Path(__file__).parent.parent / ".github" / "ISSUE_TEMPLATE" / template).is_file()
+    dialog.close()

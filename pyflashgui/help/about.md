@@ -6,7 +6,9 @@
 
 **Help > Diagnostics...** opens a report in a window of its own, and copies it to the
 clipboard as it opens -- ready to paste into a bug report. **Refresh** makes it again,
-**Copy** copies it again and **Save...** writes it to a file. It gives:
+**Copy** copies it again and **Save...** writes it to a file. **Report a bug...** opens a
+new bug report on GitHub in your browser, with a *Diagnostics* box to paste the report
+into. It gives:
 
 - the versions of pyflashgui, Python and every package it runs on;
 - **the connection**: what is chosen under Using, Probe, Target and Speed, what is

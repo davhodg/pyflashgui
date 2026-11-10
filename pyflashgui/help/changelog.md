@@ -17,6 +17,7 @@ since the last version, and comes out in the next one.
   icons* turns them off. They are Microsoft's Fluent UI System Icons (MIT), shipped with
   pyflashgui and drawn in the theme's text colour.
 - **Clear** on the right-click of the Python Console's output, as the Event Log has.
+- **Report a bug...** in *Help > Diagnostics*: opens GitHub's bug form in the browser.
 
 ## [0.2.2] - 2026-11-08
 

@@ -21,12 +21,14 @@ import threading
 from collections.abc import Callable
 from pathlib import Path
 
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QUrl
+from PySide6.QtGui import QDesktopServices, QGuiApplication
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPlainTextEdit, QVBoxLayout, QWidget
 
 from pyflashgui.backends import jlink_backend, pyocd_packs
 from pyflashgui.core.flasher import size_text
 from pyflashgui.core.memory_map import FLASH
+from pyflashgui.core.updates import BUG_REPORT_PAGE
 from pyflashgui.ui import folders, fonts, icons
 from pyflashgui.ui.memory_view import ERASED_KEY
 
@@ -220,6 +222,14 @@ class DiagnosticsDialog(QDialog):
         self.text.setLineWrapMode(QPlainTextEdit.NoWrap)
         self.text.setAccessibleName("Diagnostics report")
         buttons = icons.on_buttons(QDialogButtonBox(QDialogButtonBox.Close))
+        report = icons.beside(
+            buttons.addButton("Report a bug...", QDialogButtonBox.ActionRole), icons.BUG
+        )
+        report.setToolTip(
+            "Open a new bug report on GitHub, in the browser. Copy puts this\n"
+            "report on the clipboard for its Diagnostics box."
+        )
+        report.clicked.connect(self.report_a_bug)
         refresh = icons.beside(
             buttons.addButton("Refresh", QDialogButtonBox.ActionRole), icons.RELOAD
         )
@@ -245,6 +255,10 @@ class DiagnosticsDialog(QDialog):
 
     def copy_to_clipboard(self) -> None:
         QGuiApplication.clipboard().setText(self.report())
+
+    def report_a_bug(self) -> None:
+        """GitHub's bug form, in the browser."""
+        QDesktopServices.openUrl(QUrl(BUG_REPORT_PAGE))
 
     def save(self) -> None:
         path = folders.save_file(

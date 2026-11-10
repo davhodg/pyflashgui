@@ -41,6 +41,7 @@ from pyflashgui import resources
 ADD = "add"
 ATTACH = "attach"
 BACK = "back"
+BUG = "bug"
 CANCEL = "cancel"
 CHECK = "check"
 CLEAR = "clear"
@@ -96,6 +97,7 @@ FILE: dict[str, str] = {
     ADD: "add_20_regular",
     ATTACH: "window_new_rotate_180_20_regular",  # the arrow back into the window
     BACK: "arrow_left_20_regular",
+    BUG: "bug_20_regular",
     CANCEL: "dismiss_circle_20_regular",
     CHECK: "checkmark_20_regular",
     CLEAR: "eraser_20_regular",  # not a cross: Close and Cancel have those
