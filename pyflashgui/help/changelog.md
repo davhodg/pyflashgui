@@ -9,6 +9,8 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+## [0.2.3] - 2026-11-12
+
 ### Added
 
 - **Icons beside the words** on common buttons and menu items -- Connect, Find probes,
@@ -217,7 +219,8 @@ since the last version, and comes out in the next one.
   for updates.
 - Launchers for a source folder on Windows and Linux, and the build of the Windows installer.
 
-[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/davhodg/pyflashgui/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/davhodg/pyflashgui/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/davhodg/pyflashgui/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/davhodg/pyflashgui/compare/v0.1.0...v0.2.0

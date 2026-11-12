@@ -2,5 +2,5 @@
 # SPDX-FileCopyrightText: 2026 davhodg
 """pyflashgui — a graphical flash programming tool."""
 
-__version__ = "0.2.2"
+__version__ = "0.2.3"
 APP_NAME = "pyflashgui"  # single place to change the display name
