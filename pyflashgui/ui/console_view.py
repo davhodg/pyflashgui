@@ -208,7 +208,7 @@ class ConsoleView(QWidget):
         self.running = False
         mono = fonts.mono()
 
-        self.output = clear_menu.add(QPlainTextEdit())
+        self.output = clear_menu.add(QPlainTextEdit(), ctx, "Console output")
         self.output.setReadOnly(True)
         self.output.setFont(mono)
         self.output.setMaximumBlockCount(MOST_LINES)
@@ -225,15 +225,14 @@ class ConsoleView(QWidget):
         self.stop_button = icons.beside(QPushButton("Stop"), icons.STOP)
         self.stop_button.setToolTip(STOP_TIP)
         self.stop_button.clicked.connect(self.stop)
-        clear = icons.beside(QPushButton("Clear"), icons.CLEAR)
-        clear.clicked.connect(self.output.clear)
+        # No Clear button: it is rarely wanted, and Clear all is on the
+        # output's right-click.
 
         row = QHBoxLayout()
         row.addWidget(self.prompt)
         row.addWidget(self.input, 1)
         row.addWidget(self.run_button)
         row.addWidget(self.stop_button)
-        row.addWidget(clear)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(2, 2, 2, 2)
         layout.addWidget(self.output)

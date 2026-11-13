@@ -237,6 +237,6 @@ def test_the_event_log_keeps_everything_until_cleared(app, window):
         window.events.post(f"line {n}", INFORMATION)
     app.processEvents()
     assert window.log.document().blockCount() >= 2500
-    clear = next(a for a in window.log_menu().actions() if a.text() == "Clear")
+    clear = next(a for a in window.log_menu().actions() if a.text() == "Clear all")
     clear.trigger()
     assert window.log.document().isEmpty()

@@ -9,6 +9,17 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+### Added
+
+- **Save all...** on the right-click of the Event Log and the Python Console's output,
+  after Select All: writes all of it to a text file.
+
+### Changed
+
+- The Python Console has no **Clear** button: *Clear all* on a right-click in its output
+  does the same. *Clear* on the right-click of the console and the Event Log is *Clear all*,
+  since it empties the whole pane, not what is selected as Copy beside it does.
+
 ## [0.2.3] - 2026-11-12
 
 ### Added

@@ -104,6 +104,8 @@ COMMANDER_SETTING = "jlink/commander"
 #: In QSettings, like the theme: how somebody likes to read the log, not
 #: something about a workspace.
 LOG_TIMES_KEY = "event_log/times"
+#: What the Event Log is called in Save all's dialog, and the start of the file name offered.
+LOG_NAME = "Event Log"
 LOG_TIMES_TIP = (
     "The time of day each Event Log line was written, to the second, in front\n"
     "of it: 14:03:27 Connected ... From the next line on; kept when lines are\n"
@@ -150,9 +152,8 @@ class MainWindow(QMainWindow):
         self.log.setReadOnly(True)
         # Everything is kept, however long the session: the line that matters
         # is often the first of a thousand, and a log that drops its oldest
-        # lines drops exactly that one. Clear, on the right-click, empties it.
+        # lines drops exactly that one. Clear all, on the right-click, empties it.
         self.log.setMaximumBlockCount(0)
-        clear_menu.add(self.log)
         #: Every line said to the user arrives here with a level, and this is
         #: the only thing that writes to the pane. Warnings and errors open it
         #: if it has been closed; notes do not.
@@ -169,6 +170,8 @@ class MainWindow(QMainWindow):
         self.library_log.install()
 
         self.ctx = Context(events=self.events)
+        # Once there is somewhere to save to: Save all is on it too.
+        clear_menu.add(self.log, self.ctx, LOG_NAME)
         #: Started with pythonw, which has no console, so a traceback from a
         #: Qt slot would otherwise go nowhere at all -- see the module.
         self.exceptions = ExceptionLogger(self.events.post)
@@ -1079,7 +1082,7 @@ class MainWindow(QMainWindow):
 
     def log_menu(self):
         """Copy and Select All as usual, and Clear. Built apart from being shown."""
-        return clear_menu.menu(self.log)
+        return clear_menu.menu(self.log, self.ctx, LOG_NAME)
 
     def _dark_log(self) -> bool:
         """Which set of colours reads on the Event Log's own background."""

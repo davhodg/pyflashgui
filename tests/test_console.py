@@ -288,8 +288,16 @@ def test_the_output_can_be_cleared_from_its_right_click(window):
 
     output = window.console.output
     output.setPlainText(">>> 1 + 1\n2\n")
-    assert output.contextMenuPolicy() == Qt.CustomContextMenu, "the menu with Clear, not Qt's"
+    assert output.contextMenuPolicy() == Qt.CustomContextMenu, "the menu with Clear all, not Qt's"
     menu = clear_menu.menu(output)
-    clear = next(a for a in menu.actions() if a.text() == "Clear")
+    clear = next(a for a in menu.actions() if a.text() == "Clear all")
     clear.trigger()
     assert output.toPlainText() == ""
+
+
+def test_there_is_no_clear_button_beside_run_and_stop(window):
+    """Rarely wanted, and on the output's right-click as Clear all."""
+    from PySide6.QtWidgets import QPushButton
+
+    named = {b.text() for b in window.console.findChildren(QPushButton)}
+    assert "Clear" not in named and {"Run script...", "Stop"} <= named
