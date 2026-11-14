@@ -19,6 +19,9 @@ since the last version, and comes out in the next one.
 - The Python Console has no **Clear** button: *Clear all* on a right-click in its output
   does the same. *Clear* on the right-click of the console and the Event Log is *Clear all*,
   since it empties the whole pane, not what is selected as Copy beside it does.
+- The manual's front page is its contents and nothing else. What was on it has pages of its
+  own -- *Getting started*, *The window* and *Workspaces* -- and *Uninstalling* is a page of
+  the manual rather than a section of the README.
 
 ## [0.2.3] - 2026-11-12
 

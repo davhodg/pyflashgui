@@ -9,14 +9,14 @@ The bar across the top of the window says what pyflashgui is connected through a
 | **Using** | What reaches the probe. *pyOCD* works with many probes and Cortex-M devices. *J-Link Commander* works with a J-Link and every device SEGGER's software knows. *Simulated* is a probe and a target that exist only in memory, for trying pyflashgui with no hardware. |
 | **Probe** | The debug probe, by its description and serial number. **Find probes** looks again for what is plugged in, and opening the list does too when no probe was found. |
 | **Target** | The device on the end of the probe. Type any part of its name to find it. |
-| **Speed** | How fast the probe clocks the debug port. *Default* leaves it to pyOCD, which uses 1 MHz, or to J-Link Commander, which lets the J-Link choose. The [Event Log](manual.md) says the speed on connecting. |
+| **Speed** | How fast the probe clocks the debug port. *Default* leaves it to pyOCD, which uses 1 MHz, or to J-Link Commander, which lets the J-Link choose. The [Event Log](window.md) says the speed on connecting. |
 | **Interface** | With J-Link Commander only: how the probe is wired to the device. |
 | **Stop when connecting** | Through pyOCD: whether connecting stops the target, ticked to begin with. Untick it to attach to the target as it is, running. |
 | **Connect** | Attaches the probe to the target, and becomes **Disconnect**. |
 
 The bar at the foot of the window says what is known of the target that is chosen: who makes it, its core where that is known, and how much flash and RAM it has.
 
-What is chosen is kept in the [workspace](manual.md): the target and the speed belong to the product being worked on, and the probe is remembered by its serial number, so a bench with two probes on it connects through the same one each time.
+What is chosen is kept in the [workspace](workspaces.md): the target and the speed belong to the product being worked on, and the probe is remembered by its serial number, so a bench with two probes on it connects through the same one each time.
 
 ## Connecting
 
@@ -24,7 +24,7 @@ What is chosen is kept in the [workspace](manual.md): the target and the speed b
 
 A reset that takes the debug connection with it -- an XMC4500 reset by its reset pin through a J-Link does -- is connected again by itself, leaving the target running, and the Event Log says so.
 
-If connecting fails, the [Event Log](manual.md) says what the probe reported. The usual causes are the target not being powered, the wrong target chosen, or a cable too long for the speed: try a lower **Speed**.
+If connecting fails, the [Event Log](window.md) says what the probe reported. The usual causes are the target not being powered, the wrong target chosen, or a cable too long for the speed: try a lower **Speed**.
 
 ## Targets
 
@@ -41,7 +41,7 @@ pyOCD has a few dozen targets built in. Every other Cortex-M device is described
 3. Select the device and press **Install pack**. The pack is downloaded from its maker; it holds the whole family the device belongs to, and can be over a hundred megabytes.
 4. Press **Use as target**, or close the dialog and choose the device in the bar.
 
-**A download cannot be stopped once it has started**, the list's or a pack's. The dialog can be closed while one runs: the [Event Log](manual.md) says when it has arrived, or why it did not. Both downloads need the internet; apart from *Help > Check for updates*, nothing else in pyflashgui does.
+**A download cannot be stopped once it has started**, the list's or a pack's. The dialog can be closed while one runs: the [Event Log](window.md) says when it has arrived, or why it did not. Both downloads need the internet; apart from *Help > Check for updates*, nothing else in pyflashgui does.
 
 Under the list is where the selected device's pack is downloaded from. The *From* column of the packs installed says the same for each of them.
 

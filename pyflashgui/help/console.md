@@ -14,7 +14,7 @@ It behaves like the `python` prompt: a block over several lines carries on with 
 |---|---|
 | `flash` | the probe and the target: see below |
 | `files` | the Files pane, with `files.entries` and `files.add_files([...])` |
-| `log(text)` | a line in the [Event Log](manual.md) |
+| `log(text)` | a line in the [Event Log](window.md) |
 | `wait(seconds)` | let the window run for that long: a script's `sleep` |
 | `window`, `ctx` | the main window, and the settings and folders of the workspace |
 | `ScriptError` | what `flash` raises when it could not do what it was asked |

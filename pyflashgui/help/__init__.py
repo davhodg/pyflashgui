@@ -39,11 +39,15 @@ MANUAL = "manual.md"
 #: would otherwise be found by a user.
 PAGES = (
     MANUAL,
+    "getting-started.md",
+    "window.md",
     "probe.md",
     "files.md",
     "memory-map.md",
     "memory.md",
     "console.md",
+    "workspaces.md",
+    "uninstalling.md",
     "about.md",
     "changelog.md",
 )

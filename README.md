@@ -95,6 +95,8 @@ Without it pyflashgui stops as it starts, naming the package that is missing.
 
 **Where your own files are kept** is the same whichever way it was installed: your workspaces and settings are in `%APPDATA%\pyflashgui` on Windows and `~/.config/pyflashgui` on Linux. Upgrading and uninstalling leave that folder alone.
 
+**Uninstalling**, for each of the three, is in the manual: [Uninstalling](pyflashgui/help/uninstalling.md), also under *Help > Documentation*.
+
 ## Probes
 
 Every probe is reached through [pyOCD](https://pyocd.io), which has a driver for each of the ways a probe talks over USB. Which probes work is therefore pyOCD's list:
@@ -139,19 +141,6 @@ A USB isolator between the PC and the probe breaks a ground loop between them. [
 | [bincopy](https://github.com/eerimoq/bincopy) | Intel HEX, S-record and binary files | MIT |
 
 The icons beside the words on buttons and menu items are Microsoft's [Fluent UI System Icons](https://github.com/microsoft/fluentui-system-icons), MIT, shipped with pyflashgui as files rather than a package.
-
-## Uninstalling
-
-- **The Windows installer:** *Settings > Apps* (or *Add or remove programs*), or *Uninstall
-  pyflashgui* in its Start menu folder. It takes away its shortcuts too.
-- **pip:** `pip uninstall pyflashgui`, and what *Tools > Settings* added, as for a clone.
-- **A Git clone:** delete the folder. If *Tools > Settings* was used to add a shortcut, take
-  that away as well: the shortcuts are
-  `%APPDATA%\Microsoft\Windows\Start Menu\Programs\pyflashgui.lnk` and `pyflashgui.lnk` on
-  the desktop (on Linux, `~/.local/share/applications/pyflashgui.desktop`).
-
-Your workspaces and settings are in `%APPDATA%\pyflashgui` (`~/.config/pyflashgui` on Linux),
-and no way of uninstalling touches them; delete that folder to remove them too.
 
 ## Contributing
 

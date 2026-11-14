@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: 2026 davhodg
-"""Regenerate the screenshot the README and the manual share: the main window
-on the simulated probe.
+"""Regenerate the screenshot the README and the PyPI page share: the main
+window on the simulated probe.
 
     python build/screenshots.py [out.png]
 
@@ -27,8 +27,8 @@ import time
 from pathlib import Path
 
 PROJECT = Path(__file__).resolve().parent.parent
-#: Beside the manual's pages, because the manual shows it too and a picture has
-#: to be package data to be in a wheel or an installer.
+#: Beside the manual's pages, where it has always been: the PyPI page of every
+#: release loads it from this path on GitHub, so it stays here.
 DEFAULT_OUT = PROJECT / "pyflashgui" / "help" / "main-window.png"
 SIZE = (1400, 900)
 FLASH = 0x0800_0000

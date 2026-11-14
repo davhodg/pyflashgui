@@ -86,7 +86,7 @@ are real but rarely platform specific. The installer is built only for a release
 tag, or start the workflow by hand from the Actions tab.
 
 `python build/screenshots.py` regenerates `pyflashgui/help/main-window.png`, the screenshot in the
-README, on PyPI and in the manual, from the simulated probe. Run it when what the main window
+README and on PyPI, from the simulated probe. Run it when what the main window
 shows has changed.
 
 ## Building the Windows installer
