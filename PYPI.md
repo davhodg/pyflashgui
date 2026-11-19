@@ -73,7 +73,6 @@ The [README](https://github.com/davhodg/pyflashgui#probes) says which probes nee
 
 - [Source, issues and releases](https://github.com/davhodg/pyflashgui)
 - [Standalone Windows installer](https://github.com/davhodg/pyflashgui/releases)
-- [Questions and ideas](https://github.com/davhodg/pyflashgui/discussions)
 - [Manual](https://github.com/davhodg/pyflashgui/blob/master/pyflashgui/help/manual.md)
 
 ## Safety notice and licence

@@ -1,0 +1,26 @@
+name: Question or idea
+description: Help using pyflashgui, or an idea not yet ready to be a feature request.
+labels: ["question"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Your question or idea
+      description: What you are trying to do, and what is unclear or what you have in mind.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you have tried
+      description: The manual page you looked at, what you did, and what happened.
+
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics
+      description: |
+        If it is about a probe or a target, paste the diagnostics report here. In pyflashgui, open *Help > Diagnostics...*, press **Copy**, and paste it into this box.
+        The report names the probes' serial numbers, your workspace folder and the files in the Files pane; remove any of that if you would rather.
+      render: text
