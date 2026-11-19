@@ -9,6 +9,8 @@ since the last version, and comes out in the next one.
 
 ## [Unreleased]
 
+## [0.2.4] - 2026-11-19
+
 ### Added
 
 - **Save all...** on the right-click of the Event Log and the Python Console's output,
@@ -233,7 +235,8 @@ since the last version, and comes out in the next one.
   for updates.
 - Launchers for a source folder on Windows and Linux, and the build of the Windows installer.
 
-[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.3...HEAD
+[Unreleased]: https://github.com/davhodg/pyflashgui/compare/v0.2.4...HEAD
+[0.2.4]: https://github.com/davhodg/pyflashgui/compare/v0.2.3...v0.2.4
 [0.2.3]: https://github.com/davhodg/pyflashgui/compare/v0.2.2...v0.2.3
 [0.2.2]: https://github.com/davhodg/pyflashgui/compare/v0.2.1...v0.2.2
 [0.2.1]: https://github.com/davhodg/pyflashgui/compare/v0.2.0...v0.2.1
